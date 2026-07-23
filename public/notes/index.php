@@ -398,11 +398,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <?php render_folder_nav($folders, $view, $csrf, $sectionInput); ?>
 
   <div class="listbar">
-    <select id="sortSel" title="Sort by" aria-label="Sort by">
-      <option value="recent">Sort: Recent</option>
-      <option value="name">Sort: Name</option>
-      <option value="date">Sort: Date</option>
-    </select>
     <button type="button" id="editBtn" class="nedit">Edit</button>
     <form method="post" action="" style="margin-left:auto">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -545,31 +540,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   }
 
-  // List: sort each group live, remembered in localStorage.
-  const sortSel = document.getElementById('sortSel');
-  if (sortSel) {
-    const applySort = (mode) => {
-      document.querySelectorAll('ul.nlist').forEach(ul => {
-        Array.from(ul.children).sort((a, b) => {
-          if (mode === 'name') {
-            return (a.dataset.title || '').localeCompare(b.dataset.title || '', undefined, { sensitivity: 'base' });
-          }
-          if (mode === 'date') {
-            const x = a.dataset.date || '', y = b.dataset.date || '';
-            if (x !== y) return !x ? 1 : (!y ? -1 : (x < y ? 1 : -1));   // newest date first, undated last
-          }
-          return (Number(b.dataset.updated) || 0) - (Number(a.dataset.updated) || 0);
-        }).forEach(li => ul.appendChild(li));
-      });
-    };
-    const saved = localStorage.getItem('notesSort') || 'recent';
-    sortSel.value = saved;
-    applySort(saved);
-    sortSel.addEventListener('change', () => {
-      localStorage.setItem('notesSort', sortSel.value);
-      applySort(sortSel.value);
-    });
-  }
 </script>
 </body>
 </html>
