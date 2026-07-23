@@ -88,7 +88,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $overdue ? 'overdue' : '' ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
-          <form method="post" action="" style="display:inline" onsubmit="return confirm('Delete this reminder?')">
+          <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
@@ -242,8 +242,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             break;
 
         case 'delete':
-            $id   = (string) ($_POST['id'] ?? '');
-            $list = array_filter($list, fn($r) => is_section($r) || $r['id'] !== $id);
+            $id = (string) ($_POST['id'] ?? '');
+            foreach ($list as $r) { if (!is_section($r) && ($r['id'] ?? '') === $id) { $_SESSION['undo_rem'] = $r; break; } }
+            $list = array_values(array_filter($list, fn($r) => is_section($r) || ($r['id'] ?? '') !== $id));
+            break;
+
+        case 'undo':
+            if (!empty($_SESSION['undo_rem'])) { $list[] = $_SESSION['undo_rem']; unset($_SESSION['undo_rem']); }
             break;
 
         case 'clear_done':
@@ -354,6 +359,8 @@ $sectionInput =
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
     form.add #editBtn { margin-left: auto; }   /* Edit + Add hug the right edge */
+    form.add #undoBtn { display: none; }       /* Undo appears next to Done in edit mode */
+    body.editing form.add #undoBtn { display: inline-block; }
     body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
@@ -480,7 +487,13 @@ $sectionInput =
     </select>
     <button type="button" id="doneBtn" class="editbtn">Show All</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
+    <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="submit">Add</button>
+  </form>
+  <form id="undoForm" method="post" action="" style="display:none">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="undo">
+    <input type="hidden" name="view" value="<?= e($view) ?>">
   </form>
 
   <?php if (!$items && !$sections): ?>
@@ -496,8 +509,7 @@ $sectionInput =
         <div class="section-head">
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= e($sname) ?></span>
-          <form method="post" action="" style="display:inline"
-                onsubmit="return confirm('Delete this section? Its reminders stay, just ungrouped.')">
+          <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="view" value="<?= e($view) ?>">
@@ -549,6 +561,7 @@ $sectionInput =
   };
   setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
+  document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
 
   // ----- "DONE?" toggle: reveal completed reminders (and the clear button) -----
   const doneBtn = document.getElementById('doneBtn');
