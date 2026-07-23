@@ -43,6 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    $undoFlag = '';   // set after a delete so the page shows the Undo button
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
         if ($name !== '') {
@@ -54,10 +55,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($habits as $h) { if (($h['id'] ?? '') === $id) { $_SESSION['undo_habit'] = $h; break; } }
         $habits = array_values(array_filter($habits, fn($h) => ($h['id'] ?? '') !== $id));
         save_habits($dataFile, $habits);
+        $undoFlag = '?undo=1';
     } elseif ($_POST['action'] === 'undo') {
         if (!empty($_SESSION['undo_habit'])) { $habits[] = $_SESSION['undo_habit']; unset($_SESSION['undo_habit']); save_habits($dataFile, $habits); }
     }
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . $undoFlag);
     exit;
 }
 
@@ -103,18 +105,18 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .bar #undoBtn { display: none; }
-    body.editing .bar #undoBtn { display: inline-block; }
+    body.can-undo .bar #undoBtn { display: inline-block; }   /* only right after a delete */
 
-    /* Grid: name column + 7 day columns */
-    .grid { display: grid; grid-template-columns: 92px repeat(7, minmax(34px, 1fr)); gap: 8px; align-items: center; }
+    /* Grid: name column + 7 day columns (fixed small squares, left-aligned) */
+    .grid { display: grid; grid-template-columns: 92px repeat(7, 34px); gap: 8px; align-items: center; justify-content: start; }
     .colhead { text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: #888; padding-bottom: 0.4rem; }
     .colhead.today { color: #fff; font-weight: 700; }
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     .corner { }
 
     .hname {
-      position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 10px;
-      padding: 0.7rem 0.6rem; min-height: 46px; display: flex; align-items: center; overflow: hidden;
+      position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
+      padding: 0.5rem 0.55rem; min-height: 34px; display: flex; align-items: center; overflow: hidden;
     }
     .hname .hlabel { color: #d9d2f0; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hname .del { display: none; margin-left: auto; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
@@ -122,8 +124,8 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     .hname .del:hover { border-color: #f66; color: #f66; }
 
     .cell {
-      aspect-ratio: 1 / 1; min-height: 40px; background: #1b1726; border: 1px solid #2c2540;
-      border-radius: 10px; cursor: pointer; padding: 0; transition: background 0.1s;
+      aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
+      border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
     }
     .cell.today { border-color: #eee; }
     .cell.done { background: #34d399; border-color: #34d399; }
@@ -197,10 +199,16 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
   const editBtn = document.getElementById('editBtn');
   const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
+    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('habitsEditing', on ? '1' : '0');
   };
   setEdit(localStorage.getItem('habitsEditing') === '1');
+  // Undo shows only immediately after a delete (server redirects back with ?undo=1).
+  if (new URLSearchParams(location.search).get('undo') === '1') {
+    document.body.classList.add('can-undo');
+    history.replaceState(null, '', location.pathname);
+  }
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
 
