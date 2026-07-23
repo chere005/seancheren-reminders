@@ -575,15 +575,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         });
         row.appendChild(cb);
       }
-      const tag = document.createElement('span');
-      tag.className = 'tag ' + it.kind;
-      tag.textContent = it.kind;
+      // Only notes get a marker ("N"). Reminders have the checkbox; events show nothing.
+      let tag = null;
+      if (it.kind === 'note') {
+        tag = document.createElement('span');
+        tag.className = 'tag note';
+        tag.textContent = 'N';
+      }
       const txt = document.createElement('span');
       txt.className = 'txt';
       txt.textContent = it.text + (overdue ? ' (overdue)' : '');
       const chev = document.createElement('span');
       chev.className = 'chev'; chev.textContent = '✎';
-      row.appendChild(tag); row.appendChild(txt); row.appendChild(chev);
+      if (tag) row.appendChild(tag);
+      row.appendChild(txt); row.appendChild(chev);
       row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date));
       dpList.appendChild(row);
     }
