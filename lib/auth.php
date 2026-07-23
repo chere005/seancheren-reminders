@@ -11,6 +11,7 @@
  */
 
 require_once __DIR__ . '/store.php';   // encrypted-at-rest storage helpers
+require_once __DIR__ . '/util.php';    // small shared helpers (time parsing, …)
 
 function app_config(): array
 {
