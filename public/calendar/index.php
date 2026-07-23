@@ -254,7 +254,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
     .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
     .cell .dot.reminder { background: #34d399; }
-    .cell .dot.reminder.overdue { background: #f57; }
+    .cell .dot.reminder.overdue { background: #f0a860; }
     .cell .dot.reminder.done { background: #555; }
     .cell .dot.note { background: #8b6ef0; }
     .cell .dot.event { background: #38bdf8; }
