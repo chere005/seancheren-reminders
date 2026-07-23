@@ -27,10 +27,11 @@ function cover_url(?int $id, string $size = 'M'): string
 }
 
 /** 5-star rating: filled up to $rating. Editable version is wired up in JS. */
-function stars_html(int $rating, bool $editable, string $bookId = ''): string
+function stars_html(int $rating, bool $editable, string $bookId = '', string $extraClass = ''): string
 {
-    $out = '<span class="stars' . ($editable ? ' editable' : '') . '"'
-         . ($editable ? ' data-book="' . e($bookId) . '"' : '')
+    $cls = 'stars' . ($editable ? ' editable' : '') . ($extraClass !== '' ? ' ' . $extraClass : '');
+    $out = '<span class="' . $cls . '"'
+         . ($bookId !== '' ? ' data-book="' . e($bookId) . '"' : '')
          . ' data-rating="' . $rating . '">';
     for ($i = 1; $i <= 5; $i++) {
         $out .= '<span class="star' . ($i <= $rating ? ' on' : '') . '" data-v="' . $i . '">&#9733;</span>';
@@ -118,8 +119,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 'cover'   => $cover > 0 ? $cover : null,
                 'key'     => mb_substr(trim((string) ($_POST['key'] ?? '')), 0, 60),
                 'rating'  => 0,
-                'read'    => $shelf === 'read',
-                'read_at' => $shelf === 'read' ? time() : null,
+                'read_at' => null,   // set when a rating is first given (a rating = "read")
                 'want'    => $shelf === 'want',
                 'past'    => false,
                 'created' => time(),
@@ -151,24 +151,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($action === 'set_rating') {
         $r     = max(0, min(5, (int) ($_POST['rating'] ?? 0)));
         $books = books_load($booksFile);
-        foreach ($books as &$b) { if (($b['id'] ?? '') === $bookId) { $b['rating'] = $r; break; } }
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) {
+                $wasRead = ((int) ($b['rating'] ?? 0)) > 0;
+                $b['rating'] = $r;
+                if ($r > 0 && !$wasRead) { $b['read_at'] = time(); }   // a rating marks it read
+                elseif ($r === 0)        { $b['read_at'] = null; }     // cleared -> no longer read
+                break;
+            }
+        }
         unset($b);
         books_save($booksFile, $books);
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'rating' => $r]);
         exit;
     }
-    if (in_array($action, ['set_read', 'set_want', 'set_past'], true)) {
-        $field = ['set_read' => 'read', 'set_want' => 'want', 'set_past' => 'past'][$action];
+    if (in_array($action, ['set_want', 'set_past'], true)) {
+        $field = ['set_want' => 'want', 'set_past' => 'past'][$action];
         $val   = !empty($_POST['value']);
         $books = books_load($booksFile);
-        foreach ($books as &$b) {
-            if (($b['id'] ?? '') === $bookId) {
-                $b[$field] = $val;
-                if ($field === 'read') { $b['read_at'] = $val ? time() : null; }
-                break;
-            }
-        }
+        foreach ($books as &$b) { if (($b['id'] ?? '') === $bookId) { $b[$field] = $val; break; } }
         unset($b);
         books_save($booksFile, $books);
         header('Content-Type: application/json');
@@ -366,6 +368,11 @@ function books_header(string $titleHtml): void
     .stars.editable { font-size: 1.5rem; letter-spacing: 3px; }
     .stars.editable .star { cursor: pointer; }
     .stars.editable .star:hover { color: #f7d879; }
+    /* Card stars: read-only until Edit mode, then tappable to set the rating (= read). */
+    .stars.cardrate .star { cursor: default; }
+    body.editing .stars.cardrate { font-size: 1.15rem; outline: 1px dashed #3a3a3a; border-radius: 5px; padding: 2px 4px; }
+    body.editing .stars.cardrate .star { cursor: pointer; }
+    body.editing .stars.cardrate .star:hover { color: #f7d879; }
 
     /* Read indicator (cards = disabled) */
     .readchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: #888; }
@@ -420,6 +427,7 @@ function books_header(string $titleHtml): void
     .bookhead .bh-flags .flagrow { display: flex; gap: 1rem; flex-wrap: wrap; }
     .bookhead .chk { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: #ccc; cursor: pointer; }
     .bookhead .chk input { width: 18px; height: 18px; accent-color: #34d399; cursor: pointer; }
+    .bookhead .flaghint { font-size: 0.72rem; color: #666; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
     ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; }
@@ -463,7 +471,7 @@ function books_header(string $titleHtml): void
       $readMonth = $readYear = $wantCount = 0;
       foreach ($books as $b) {
           if (!empty($b['want'])) { $wantCount++; }
-          if (empty($b['read']) || !empty($b['past'])) { continue; }   // "past" reads don't count here
+          if (((int) ($b['rating'] ?? 0)) <= 0 || !empty($b['past'])) { continue; }   // rated (=read) & not "past"
           $ra = (int) ($b['read_at'] ?? 0);
           if ($ra >= $monthStart) { $readMonth++; }
           if ($ra >= $yearStart)  { $readYear++; }
@@ -485,7 +493,7 @@ function books_header(string $titleHtml): void
 
   <?php
     $shown = $books;
-    if ($shelf === 'read') { $shown = array_values(array_filter($books, fn($b) => !empty($b['read']))); }
+    if ($shelf === 'read') { $shown = array_values(array_filter($books, fn($b) => ((int) ($b['rating'] ?? 0)) > 0 || !empty($b['past']))); }
     elseif ($shelf === 'want') { $shown = array_values(array_filter($books, fn($b) => !empty($b['want']))); }
   ?>
   <?php if (!$shown): ?>
@@ -509,8 +517,7 @@ function books_header(string $titleHtml): void
             <?php if (!empty($b['author'])): ?><span class="bauthor"><?= e($b['author']) ?></span><?php endif; ?>
           </a>
           <div class="cardmeta">
-            <?= stars_html((int) ($b['rating'] ?? 0), false) ?>
-            <label class="readchk"><input type="checkbox" disabled <?= !empty($b['read']) ? 'checked' : '' ?>>Read</label>
+            <?= stars_html((int) ($b['rating'] ?? 0), false, $b['id'], 'cardrate') ?>
           </div>
           <form method="post" action="">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -574,10 +581,10 @@ function books_header(string $titleHtml): void
       <div class="bh-stars"><?= stars_html((int) ($book['rating'] ?? 0), true, $book['id']) ?></div>
       <div class="bh-flags" data-book="<?= e($book['id']) ?>">
         <div class="flagrow">
-          <label class="chk"><input type="checkbox" id="readChk" <?= !empty($book['read']) ? 'checked' : '' ?>> Mark as read</label>
           <label class="chk"><input type="checkbox" id="pastChk" <?= !empty($book['past']) ? 'checked' : '' ?>> Past?</label>
+          <label class="chk"><input type="checkbox" id="wantChk" <?= !empty($book['want']) ? 'checked' : '' ?>> Want to read</label>
         </div>
-        <label class="chk"><input type="checkbox" id="wantChk" <?= !empty($book['want']) ? 'checked' : '' ?>> Want to read</label>
+        <div class="flaghint">Rate it above to mark it read.</div>
       </div>
     </div>
   </div>
@@ -677,35 +684,40 @@ function books_header(string $titleHtml): void
     a.addEventListener('click', e => { if (document.body.classList.contains('editing')) e.preventDefault(); });
   });
 
-  // ---- Editable star rating (book page) ----
-  const starWrap = document.querySelector('.stars.editable');
-  if (starWrap) {
-    const book = starWrap.dataset.book;
-    starWrap.querySelectorAll('.star').forEach(st => {
-      st.addEventListener('click', () => {
-        const v = +st.dataset.v;
-        const cur = +starWrap.dataset.rating;
+  // ---- Star rating (= "read"). Editable on the book page, and on the book
+  //      cards while Edit mode is on. ----
+  const CSRF = '<?= $csrf ?>';
+  const postRating = (book, val) => {
+    const body = new URLSearchParams({ csrf: CSRF, action: 'set_rating', book, rating: val });
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => {});
+  };
+  const wireStars = (wrap, requireEdit) => {
+    wrap.querySelectorAll('.star').forEach(st => {
+      st.addEventListener('click', (e) => {
+        if (requireEdit && !document.body.classList.contains('editing')) return;   // cards: only in Edit
+        e.preventDefault(); e.stopPropagation();
+        const v = +st.dataset.v, cur = +wrap.dataset.rating;
         const val = (v === cur) ? 0 : v;               // click the current rating to clear it
-        starWrap.dataset.rating = val;
-        starWrap.querySelectorAll('.star').forEach(s => s.classList.toggle('on', +s.dataset.v <= val));
-        const body = new URLSearchParams({ csrf: '<?= $csrf ?>', action: 'set_rating', book, rating: val });
-        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => {});
+        wrap.dataset.rating = val;
+        wrap.querySelectorAll('.star').forEach(s => s.classList.toggle('on', +s.dataset.v <= val));
+        postRating(wrap.dataset.book, val);
       });
     });
-  }
+  };
+  const pageStars = document.querySelector('.stars.editable');
+  if (pageStars) wireStars(pageStars, false);
+  document.querySelectorAll('.stars.cardrate').forEach(w => wireStars(w, true));
 
-  // ---- Read / Want-to-read flags (book page) ----
+  // ---- Past / Want-to-read flags (book page) ----
   const flags = document.querySelector('.bh-flags');
   if (flags) {
     const book = flags.dataset.book;
     const post = (action, value) => {
-      const body = new URLSearchParams({ csrf: '<?= $csrf ?>', action, book, value: value ? '1' : '' });
+      const body = new URLSearchParams({ csrf: CSRF, action, book, value: value ? '1' : '' });
       fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => {});
     };
-    const readChk = document.getElementById('readChk');
     const wantChk = document.getElementById('wantChk');
     const pastChk = document.getElementById('pastChk');
-    if (readChk) readChk.addEventListener('change', () => post('set_read', readChk.checked));
     if (wantChk) wantChk.addEventListener('change', () => post('set_want', wantChk.checked));
     if (pastChk) pastChk.addEventListener('change', () => post('set_past', pastChk.checked));
   }
