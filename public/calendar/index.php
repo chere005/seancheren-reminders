@@ -143,11 +143,12 @@ $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
-    if (empty($r['due']) || !empty($r['done'])) { continue; }   // done reminders are removed from the calendar
-    $eff = ($r['due'] < $todayYmd) ? $todayYmd : $r['due'];      // overdue rolls onto today; future stays put
+    if (empty($r['due'])) { continue; }
+    $done = !empty($r['done']);                                    // done are hidden until "Show All"
+    $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];   // overdue rolls onto today; done/future stay
     if (strpos($eff, $monthPrefix) === 0) {
         $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                          'done' => false, 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
+                          'done' => $done, 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
@@ -254,6 +255,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell .dot.reminder { background: #34d399; }
     .cell .dot.reminder.overdue { background: #f0a860; }
     .cell .dot.reminder.done { background: #555; }
+    body:not(.show-done) .cell .dot.reminder.done { display: none; }
     .cell .dot.note { background: #8b6ef0; }
     .cell .dot.event { background: #38bdf8; }
     .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
@@ -363,6 +365,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <div class="titlebar">
       <h1>Calendar</h1>
       <a class="widgetlink" href="/calendar/feed.php">Widget</a>
+      <button type="button" id="calShowAll" class="widgetlink" style="background:none;cursor:pointer;">Show All</button>
     </div>
     <nav>
       <span class="who"><?= e(current_user() ?? '') ?></span>
@@ -476,6 +479,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
 <?php render_tabbar('calendar'); ?>
 <script>
+  if (localStorage.getItem('calShowDone') === '1') document.body.classList.add('show-done');
   const modal    = document.getElementById('itemModal');
   const form     = document.getElementById('mForm');
   const mAction  = document.getElementById('mAction');
@@ -600,6 +604,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       return;
     }
     for (const it of items) {
+      if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Show All"
       const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
       const row = document.createElement('div');
       row.className = 'dp-item' + (it.done ? ' done' : '');
@@ -669,6 +674,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   // Start on the selected day (today, or ?day=).
   const INITIAL_DAY = '<?= e($selDay) ?>';
   if (INITIAL_DAY) selectDay(INITIAL_DAY);
+
+  document.getElementById('calShowAll').addEventListener('click', () => {
+    const on = document.body.classList.toggle('show-done');
+    localStorage.setItem('calShowDone', on ? '1' : '0');
+    if (selected) renderPanel(selected);
+  });
 
   document.getElementById('mCancel').addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
