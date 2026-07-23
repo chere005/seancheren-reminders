@@ -415,7 +415,11 @@ $sectionInput =
     }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
-    .section-group.dragging { opacity: 0.85; }
+    .section-group.dragging { opacity: 0.9; }
+    .section-group.dragging .section-head {
+      background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    }
+    .section-group.dragging .section-title { color: #34d399; }
     body.editing ul.rlist { min-height: 1.4rem; }
     body.editing ul.rlist:empty { border: 1px dashed #333; border-radius: 6px; margin: 0.25rem 0; }
 
@@ -538,10 +542,13 @@ $sectionInput =
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   const editBtn = document.getElementById('editBtn');
-  editBtn.addEventListener('click', () => {
-    const on = document.body.classList.toggle('editing');
+  const setEdit = (on) => {
+    document.body.classList.toggle('editing', on);
     editBtn.textContent = on ? 'Done' : 'Edit';
-  });
+    localStorage.setItem('remEditing', on ? '1' : '0');
+  };
+  setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
+  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
 
   // ----- "DONE?" toggle: reveal completed reminders (and the clear button) -----
   const doneBtn = document.getElementById('doneBtn');
