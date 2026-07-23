@@ -328,6 +328,11 @@ $sectionInput =
       display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem;
     }
     header h1 { font-size: 1.5rem; }
+    header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
+    .showall { background: none; color: #888; border: 1px solid #333; border-radius: 999px;
+      padding: 0.15rem 0.7rem; font-size: 0.78rem; cursor: pointer; }
+    .showall:hover { border-color: #888; color: #ccc; }
+    body.show-done .showall { color: #34d399; border-color: #34d399; font-weight: 700; }
     header .meta { font-size: 0.8rem; color: #888; }
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
     header a:hover { color: #fff; }
@@ -358,9 +363,10 @@ $sectionInput =
       border-radius: 6px; font-size: 1rem; cursor: pointer;
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
-    form.add #editBtn { margin-left: auto; }   /* Edit + Add hug the right edge */
-    form.add #undoBtn { display: none; }       /* Undo appears next to Done in edit mode */
+    form.add #editBtn { margin-left: auto; }              /* Edit + Add hug the right edge */
+    form.add #undoBtn { display: none; margin-left: auto; }
     body.editing form.add #undoBtn { display: inline-block; }
+    body.editing form.add #editBtn { margin-left: 0; }   /* Undo takes the auto-margin in edit mode */
     body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
@@ -399,6 +405,8 @@ $sectionInput =
       border-bottom: 1px solid #222;
     }
     li.done .text { color: #666; text-decoration: line-through; }
+    ul.rlist { display: flex; flex-direction: column; }
+    li.done { order: 1; }   /* when shown, completed items sink below the open ones */
     .text { flex: 1; font-size: 1rem; word-break: break-word; }
     .due {
       font-size: 0.75rem; color: #7a7; background: #142; padding: 0.15rem 0.5rem;
@@ -450,7 +458,10 @@ $sectionInput =
 <div class="wrap">
   <header>
     <div>
-      <h1>Reminders</h1>
+      <div class="titlebar">
+        <h1>Reminders</h1>
+        <button type="button" id="doneBtn" class="showall">Show All</button>
+      </div>
       <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
     </div>
     <nav>
@@ -480,14 +491,8 @@ $sectionInput =
         <?php endforeach; ?>
       </select>
     <?php endif; ?>
-    <select id="sortSel" title="Sort by" aria-label="Sort by">
-      <option value="manual">Sort: Manual</option>
-      <option value="date">Sort: Date</option>
-      <option value="name">Sort: Name</option>
-    </select>
-    <button type="button" id="doneBtn" class="editbtn">Show All</button>
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
+    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="submit">Add</button>
   </form>
   <form id="undoForm" method="post" action="" style="display:none">
@@ -554,48 +559,23 @@ $sectionInput =
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   const editBtn = document.getElementById('editBtn');
+  const doneBtn = document.getElementById('doneBtn');
+  const refreshShowDone = () => {
+    document.body.classList.toggle('show-done',
+      localStorage.getItem('remShowDone') === '1' || document.body.classList.contains('editing'));
+  };
   const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
     editBtn.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('remEditing', on ? '1' : '0');
+    refreshShowDone();                                   // editing always shows completed
   };
   setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
-
-  // ----- "DONE?" toggle: reveal completed reminders (and the clear button) -----
-  const doneBtn = document.getElementById('doneBtn');
-  if (localStorage.getItem('remShowDone') === '1') document.body.classList.add('show-done');
   doneBtn.addEventListener('click', () => {
-    const on = document.body.classList.toggle('show-done');
-    localStorage.setItem('remShowDone', on ? '1' : '0');
-  });
-
-  // ----- Sort menu (Manual = the saved drag order, via data-pos) -----
-  const sortSel = document.getElementById('sortSel');
-  const applySort = (mode) => {
-    document.querySelectorAll('ul.rlist').forEach(ul => {
-      Array.from(ul.children).sort((a, b) => {
-        if (mode === 'manual') return (Number(a.dataset.pos) || 0) - (Number(b.dataset.pos) || 0);
-        const ad = a.dataset.done === '1', bd = b.dataset.done === '1';
-        if (ad !== bd) return ad ? 1 : -1;
-        if (mode === 'name') {
-          const c = (a.dataset.text || '').localeCompare(b.dataset.text || '', undefined, { sensitivity: 'base' });
-          if (c) return c;
-        } else {
-          const x = a.dataset.due || '', y = b.dataset.due || '';
-          if (x !== y) return !x ? 1 : (!y ? -1 : (x < y ? -1 : 1));
-        }
-        return (Number(b.dataset.created) || 0) - (Number(a.dataset.created) || 0);
-      }).forEach(li => ul.appendChild(li));
-    });
-  };
-  const savedSort = localStorage.getItem('remSort') || 'manual';
-  sortSel.value = savedSort;
-  applySort(savedSort);
-  sortSel.addEventListener('change', () => {
-    localStorage.setItem('remSort', sortSel.value);
-    applySort(sortSel.value);
+    localStorage.setItem('remShowDone', localStorage.getItem('remShowDone') === '1' ? '0' : '1');
+    refreshShowDone();
   });
 
   // ----- Drag to reorder (pointer events => works with touch; edit mode only) -----
@@ -609,12 +589,10 @@ $sectionInput =
       ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
     });
     const sections = [...document.querySelectorAll('.section-group')].map(g => g.dataset.section);
-    order.forEach((o, i) => {                          // keep Manual order consistent after a drag
+    order.forEach((o, i) => {                          // keep the drag order stable
       const li = document.querySelector('li[data-id="' + o.id + '"]');
       if (li) li.dataset.pos = i;
     });
-    localStorage.setItem('remSort', 'manual');
-    sortSel.value = 'manual';
     const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
       order: JSON.stringify(order), sections: JSON.stringify(sections) });
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
