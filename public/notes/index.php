@@ -111,7 +111,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $id      = bin2hex(random_bytes(6));
             $notes[] = [
                 'id'      => $id,
-                'title'   => date('m/d/Y') . ' - Note',
+                'title'   => date('m/d/Y h:i a') . ' - Note',
                 'date'    => null,
                 'body'    => '',
                 'folder'  => $folder,
@@ -134,7 +134,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
             foreach ($notes as &$n) {
                 if (!is_section($n) && $n['id'] === $id) {
-                    $n['title']   = $title === '' ? (date('m/d/Y', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
+                    $n['title']   = $title === '' ? (date('m/d/Y h:i a', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
                     $n['date']    = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? $date : null;
                     $n['body']    = mb_substr($body, 0, 20000);
                     $n['folder']  = $folder;
@@ -440,7 +440,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <div class="backbar"><a href="<?= e($listUrl) ?>">&larr; All notes</a></div>
   <?php
     $hasDate     = !empty($current['date']);
-    $noteDefault = date('m/d/Y', (int) ($current['created'] ?? time())) . ' - Note';
+    $noteDefault = date('m/d/Y h:i a', (int) ($current['created'] ?? time())) . ' - Note';
   ?>
   <form class="editor" method="post" action="">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
