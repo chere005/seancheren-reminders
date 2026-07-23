@@ -1,0 +1,621 @@
+<?php
+// Locate the shared lib/ — local dev (../../lib) or NFSN (/home/protected/lib).
+$__libDir = null;
+foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+    if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
+}
+require_once $__libDir . '/auth.php';
+require_once $__libDir . '/tabbar.php';
+require_login('Calendar');   // same login as Reminders
+
+$cfg = app_config();
+
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(16));
+}
+
+function e(?string $s): string
+{
+    return htmlspecialchars((string) $s, ENT_QUOTES);
+}
+
+function load_json_list(string $file): array
+{
+    if (!is_file($file)) {
+        return [];
+    }
+    $data = json_decode((string) file_get_contents($file), true);
+    return is_array($data) ? $data : [];
+}
+
+function save_json_list(string $file, array $list): void
+{
+    $dir = dirname($file);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0700, true);
+    }
+    file_put_contents(
+        $file,
+        json_encode(array_values($list), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+}
+
+/** File + field names for each item kind. */
+function kind_spec(string $kind): ?array
+{
+    return [
+        'reminder' => ['base' => 'reminders', 'textField' => 'text',  'dateField' => 'due'],
+        'note'     => ['base' => 'notes',     'textField' => 'title', 'dateField' => 'date'],
+        'event'    => ['base' => 'events',    'textField' => 'text',  'dateField' => 'date'],
+    ][$kind] ?? null;
+}
+
+// --- Quick add / edit / delete from the calendar (POST -> redirect -> GET), CSRF protected ---
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
+    if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+        http_response_code(400);
+        exit('Bad request (invalid CSRF token).');
+    }
+    $action  = (string) $_POST['action'];
+    $date    = (string) ($_POST['date'] ?? '');
+    $dateOk  = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
+    $text    = trim((string) ($_POST['text'] ?? ''));
+    $kind    = (string) ($_POST['kind'] ?? '');
+    $id      = (string) ($_POST['id'] ?? '');
+    // Return to the item's day (so the bottom panel shows it), else the panel's day.
+    $dayParam = (string) ($_POST['day'] ?? '');
+    $retDay   = $dateOk ? $date : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dayParam) ? $dayParam : '');
+    $ym       = $retDay !== '' ? substr($retDay, 0, 7) : ((string) ($_POST['ym'] ?? date('Y-m')));
+
+    if ($action === 'add_event' && $text !== '') {
+        $file = user_data_file($cfg['data_dir'], 'events');
+        $list = load_json_list($file);
+        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
+                   'date' => $dateOk ? $date : null, 'created' => time()];
+        save_json_list($file, $list);
+    } elseif ($action === 'add_reminder' && $text !== '') {
+        $file = user_data_file($cfg['data_dir'], 'reminders');
+        $list = load_json_list($file);
+        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
+                   'due' => $dateOk ? $date : null, 'done' => false, 'created' => time()];
+        save_json_list($file, $list);
+    } elseif ($action === 'add_note' && $text !== '') {
+        $file = user_data_file($cfg['data_dir'], 'notes');
+        $list = load_json_list($file);
+        $list[] = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($text, 0, 200),
+                   'date' => $dateOk ? $date : null, 'body' => '', 'created' => time(), 'updated' => time()];
+        save_json_list($file, $list);
+    } elseif ($action === 'toggle_reminder' && $id !== '') {
+        $file = user_data_file($cfg['data_dir'], 'reminders');
+        $list = load_json_list($file);
+        foreach ($list as &$it) {
+            if (($it['id'] ?? '') === $id) { $it['done'] = empty($it['done']); break; }
+        }
+        unset($it);
+        save_json_list($file, $list);
+    } elseif ($action === 'edit_item' && ($spec = kind_spec($kind)) && $id !== '' && $text !== '') {
+        $file = user_data_file($cfg['data_dir'], $spec['base']);
+        $list = load_json_list($file);
+        foreach ($list as &$it) {
+            if (($it['id'] ?? '') === $id) {
+                $it[$spec['textField']] = mb_substr($text, 0, $kind === 'note' ? 200 : 500);
+                $it[$spec['dateField']] = $dateOk ? $date : null;
+                if ($kind === 'note') { $it['updated'] = time(); }
+                break;
+            }
+        }
+        unset($it);
+        save_json_list($file, $list);
+    } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== '') {
+        $file = user_data_file($cfg['data_dir'], $spec['base']);
+        $list = array_values(array_filter(load_json_list($file), fn($it) => ($it['id'] ?? '') !== $id));
+        save_json_list($file, $list);
+    }
+
+    $loc = _self_path() . '?ym=' . $ym;
+    if ($retDay !== '') { $loc .= '&day=' . $retDay; }
+    header('Location: ' . $loc);
+    exit;
+}
+
+// --- Which month are we viewing? (?ym=YYYY-MM, default: current) ---
+$ym = (string) ($_GET['ym'] ?? '');
+if (!preg_match('/^\d{4}-\d{2}$/', $ym)) {
+    $ym = date('Y-m');
+}
+[$year, $month] = array_map('intval', explode('-', $ym));
+
+$firstTs   = mktime(0, 0, 0, $month, 1, $year);
+$daysInMo  = (int) date('t', $firstTs);
+$leadBlank = (int) date('w', $firstTs);                 // 0=Sun .. 6=Sat
+$monthName = date('F Y', $firstTs);
+$todayYmd  = date('Y-m-d');
+$csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
+
+$prev = date('Y-m', mktime(0, 0, 0, $month - 1, 1, $year));
+$next = date('Y-m', mktime(0, 0, 0, $month + 1, 1, $year));
+
+// --- Sync: gather this user's dated reminders + notes for the visible month ---
+$monthPrefix = sprintf('%04d-%02d', $year, $month);
+$byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
+
+foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
+    if (!empty($r['due']) && strpos($r['due'], $monthPrefix) === 0) {
+        $byDay[$r['due']][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '', 'done' => !empty($r['done'])];
+    }
+}
+foreach (load_json_list(user_data_file($cfg['data_dir'], 'events')) as $ev) {
+    if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
+        $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '', 'done' => false];
+    }
+}
+foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes')) as $n) {
+    if (!empty($n['date']) && strpos($n['date'], $monthPrefix) === 0) {
+        $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note', 'done' => false];
+    }
+}
+ksort($byDay);
+
+// Which day starts selected? ?day= param, else today if this month, else none.
+$selDay = (string) ($_GET['day'] ?? '');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selDay) || strpos($selDay, $monthPrefix) !== 0) {
+    $selDay = (strpos($todayYmd, $monthPrefix) === 0) ? $todayYmd : '';
+}
+$itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+?><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Calendar</title>
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Calendar">
+  <link rel="apple-touch-icon" href="/reminders/icon-180.png">
+  <link rel="icon" href="/reminders/icon-192.png">
+  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, sans-serif; background: #111; color: #eee;
+      display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+    }
+    /* Top: the calendar */
+    .cal-top {
+      flex: 0 0 auto; max-height: 60vh; overflow-y: auto;
+      padding: 1.25rem 1rem 0.5rem;
+    }
+    .cal-top .wrap { max-width: 640px; margin: 0 auto; }
+    /* Bottom: the selected-day agenda */
+    .daypanel {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      border-top: 1px solid #2a2a2a; background: #141414;
+      padding: 0.9rem 1rem calc(84px + env(safe-area-inset-bottom, 0px));
+    }
+    .daypanel .wrap { max-width: 640px; margin: 0 auto; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;
+    }
+    header h1 { font-size: 1.35rem; }
+    header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
+    header nav a:hover { color: #fff; }
+    header nav .who {
+      color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d;
+      border-radius: 999px; padding: 0.15rem 0.6rem;
+    }
+
+    .monthnav {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
+    }
+    .monthnav a {
+      color: #eee; text-decoration: none; border: 1px solid #333; border-radius: 8px;
+      padding: 0.4rem 1.1rem; font-size: 1.3rem; line-height: 1; background: #1a1a1a;
+      user-select: none;
+    }
+    .monthnav a:hover { border-color: #34d399; color: #34d399; }
+    .monthnav a:active { background: #242424; }
+    .monthnav .label { font-size: 1.05rem; color: #ddd; font-weight: 600; }
+
+    .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .dow { margin-bottom: 4px; }
+    .dow span { text-align: center; font-size: 0.7rem; color: #666; padding: 0.25rem 0; }
+    .cell {
+      min-height: 46px; background: #171717; border: 1px solid #242424; border-radius: 6px;
+      padding: 4px 4px 3px; cursor: pointer; position: relative;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+    .cell:not(.blank):hover { border-color: #3a5a4d; background: #1b1f1d; }
+    .cell.blank { background: transparent; border-color: transparent; cursor: default; }
+    .cell .num { font-size: 0.82rem; color: #999; }
+    .cell.today { border-color: #34d399; }
+    .cell.today .num { color: #34d399; font-weight: 700; }
+    .cell.selected { border-color: #eee; background: #22262a; }
+    .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
+    .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .cell .dot.reminder { background: #34d399; }
+    .cell .dot.reminder.overdue { background: #f57; }
+    .cell .dot.reminder.done { background: #555; }
+    .cell .dot.note { background: #8b6ef0; }
+    .cell .dot.event { background: #38bdf8; }
+    .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
+    .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    .legend .dot.reminder { background: #34d399; }
+    .legend .dot.event { background: #38bdf8; }
+    .legend .dot.note { background: #8b6ef0; }
+
+    /* Day panel (bottom) */
+    .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+    .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; }
+    .dp-head .dp-add {
+      background: #34d399; color: #06251b; border: none; border-radius: 999px;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+    }
+    .dp-head .dp-add:hover { background: #52e0ac; }
+    .dp-head .dp-add[disabled] { opacity: 0.4; cursor: default; }
+    .dp-list { display: flex; flex-direction: column; gap: 0.4rem; }
+    .dp-item {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem;
+      background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: pointer;
+    }
+    .dp-item:hover { border-color: #444; }
+    .dp-item .tag {
+      font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
+      padding: 0.15rem 0.4rem; border-radius: 4px; white-space: nowrap;
+    }
+    .dp-item .tag.reminder { color: #34d399; background: #14332a; }
+    .dp-item .tag.event { color: #7dd3fc; background: #0c2a3a; }
+    .dp-item .tag.note { color: #b9a7f5; background: #241a3a; }
+    .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
+    .dp-item.done .txt { color: #666; text-decoration: line-through; }
+    .dp-item .chev { color: #555; font-size: 0.9rem; }
+    .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
+    .dp-none { color: #555; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
+
+    /* Quick-add modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 60;
+      display: none; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      width: 100%; max-width: 380px; padding: 1.25rem;
+    }
+    .modal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .modal h2 span { color: #34d399; }
+    .modal input[type=text] {
+      width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 1rem; margin-bottom: 0.85rem;
+    }
+    .modal input:focus { outline: none; border-color: #888; }
+    .modal .kind { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .modal .kind label {
+      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid #3a3a3a;
+      border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
+    }
+    .modal .kind input { display: none; }
+    .modal .kind input:checked + span { color: #34d399; font-weight: 700; }
+    .modal .kind label:has(input:checked) { border-color: #34d399; background: #14251f; }
+    .modal .daterow { margin-bottom: 1rem; }
+    .modal .adddate {
+      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
+      padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer;
+    }
+    .modal .adddate:hover { background: #14251f; }
+    .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
+    .modal .datewrap input[type=date] {
+      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
+    }
+    .modal .datewrap .cleardate {
+      background: none; border: 1px solid #3a3a3a; color: #999; border-radius: 6px;
+      padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
+    }
+    .modal .datewrap .cleardate:hover { border-color: #f66; color: #f66; }
+    .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+    .modal .buttons .del {
+      margin-right: auto; background: none; border: none; color: #666;
+      font-size: 0.85rem; cursor: pointer;
+    }
+    .modal .buttons .del:hover { color: #f66; }
+    .modal .buttons button {
+      padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
+      font-weight: 600; cursor: pointer;
+    }
+    .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
+    .modal .buttons .ok { background: #34d399; color: #06251b; }
+<?= tabbar_styles() ?>
+    body { padding-bottom: 0; }   /* panel handles the tab-bar clearance */
+  </style>
+</head>
+<body>
+<div class="cal-top">
+ <div class="wrap">
+  <header>
+    <h1>Calendar</h1>
+    <nav>
+      <span class="who"><?= e(current_user() ?? '') ?></span>
+      <a href="/reminders/?logout">Log out</a>
+    </nav>
+  </header>
+
+  <div class="monthnav">
+    <a href="?ym=<?= $prev ?>" title="Previous month">&#8592;</a>
+    <span class="label"><?= e($monthName) ?></span>
+    <a href="?ym=<?= $next ?>" title="Next month">&#8594;</a>
+  </div>
+
+  <div class="dow">
+    <?php foreach (['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] as $d): ?>
+      <span><?= $d ?></span>
+    <?php endforeach; ?>
+  </div>
+
+  <div class="grid">
+    <?php for ($i = 0; $i < $leadBlank; $i++): ?>
+      <div class="cell blank"></div>
+    <?php endfor; ?>
+
+    <?php for ($day = 1; $day <= $daysInMo; $day++): ?>
+      <?php
+        $ymd     = sprintf('%04d-%02d-%02d', $year, $month, $day);
+        $isToday = $ymd === $todayYmd;
+        $events  = $byDay[$ymd] ?? [];
+      ?>
+      <div class="cell<?= $isToday ? ' today' : '' ?>" data-date="<?= $ymd ?>" role="button" tabindex="0">
+        <div class="num"><?= $day ?></div>
+        <div class="dots">
+          <?php foreach ($events as $ev): ?>
+            <?php
+              $dcls = $ev['kind'];
+              if ($ev['kind'] === 'reminder') {
+                  $dcls .= $ev['done'] ? ' done' : ($ymd < $todayYmd ? ' overdue' : '');
+              }
+            ?>
+            <span class="dot <?= $dcls ?>"></span>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    <?php endfor; ?>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot reminder"></span>Reminders</span>
+    <span><span class="dot event"></span>Events</span>
+    <span><span class="dot note"></span>Notes</span>
+  </div>
+ </div>
+</div>
+
+<div class="daypanel">
+ <div class="wrap">
+  <div class="dp-head">
+    <span class="dp-date" id="dpDate">Select a day</span>
+    <button class="dp-add" id="dpAdd" disabled>+ Add</button>
+  </div>
+  <div class="dp-list" id="dpList">
+    <p class="dp-none">Tap a day above to see its items.</p>
+  </div>
+ </div>
+</div>
+
+<div class="modal-backdrop" id="itemModal">
+  <form class="modal" method="post" action="" id="mForm">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" id="mAction" value="add_reminder">
+    <input type="hidden" name="id" id="mId" value="">
+    <input type="hidden" name="kind" id="mKind" value="reminder">
+    <input type="hidden" name="ym" value="<?= e($ym) ?>">
+    <input type="hidden" name="day" id="mDay" value="">
+    <h2 id="mHeading">Add</h2>
+    <input type="text" name="text" id="mText" placeholder="What is it?" maxlength="500" required>
+    <div class="kind" id="mKindRow">
+      <label><input type="radio" name="kindchoice" value="event" checked><span>&#128197; Event</span></label>
+      <label><input type="radio" name="kindchoice" value="reminder"><span>&#9745; Reminder</span></label>
+      <label><input type="radio" name="kindchoice" value="note"><span>&#128221; Note</span></label>
+    </div>
+    <div class="daterow">
+      <button type="button" class="adddate" id="mAddDate">+ Add date</button>
+      <div class="datewrap" id="mDateWrap" hidden>
+        <input type="date" name="date" id="mDate" value="">
+        <button type="button" class="cleardate" id="mClearDate" title="Remove date">&times;</button>
+      </div>
+    </div>
+    <div class="buttons">
+      <button type="button" class="del" id="mDelete" hidden>Delete</button>
+      <button type="button" class="cancel" id="mCancel">Cancel</button>
+      <button type="submit" class="ok" id="mOk">Add</button>
+    </div>
+  </form>
+</div>
+
+<!-- Hidden form to check reminders off directly from the day panel -->
+<form id="toggleForm" method="post" action="" style="display:none">
+  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+  <input type="hidden" name="action" value="toggle_reminder">
+  <input type="hidden" name="id" id="tgId" value="">
+  <input type="hidden" name="ym" value="<?= e($ym) ?>">
+  <input type="hidden" name="day" id="tgDay" value="">
+</form>
+
+<?php render_tabbar('calendar'); ?>
+<script>
+  const modal    = document.getElementById('itemModal');
+  const form     = document.getElementById('mForm');
+  const mAction  = document.getElementById('mAction');
+  const mId      = document.getElementById('mId');
+  const mKind    = document.getElementById('mKind');
+  const mHeading = document.getElementById('mHeading');
+  const mText    = document.getElementById('mText');
+  const mKindRow = document.getElementById('mKindRow');
+  const mAddDate = document.getElementById('mAddDate');
+  const mDateWrap= document.getElementById('mDateWrap');
+  const mDate    = document.getElementById('mDate');
+  const mDelete  = document.getElementById('mDelete');
+  const mOk      = document.getElementById('mOk');
+
+  // Show/hide the optional date field.
+  const showDate = (val) => {
+    mDate.value = val || '';
+    mDateWrap.hidden = false;
+    mAddDate.hidden = true;
+  };
+  const hideDate = () => {           // "no date"
+    mDate.value = '';
+    mDateWrap.hidden = true;
+    mAddDate.hidden = false;
+  };
+  const TODAY = '<?= date('Y-m-d') ?>';
+  mAddDate.addEventListener('click', () => { showDate(TODAY); mDate.focus(); if (mDate.showPicker) try { mDate.showPicker(); } catch(_){} });
+  document.getElementById('mClearDate').addEventListener('click', hideDate);
+
+  const closeModal = () => modal.classList.remove('open');
+
+  // ADD mode — create a new reminder/note (date pre-filled to the selected day).
+  const openAdd = date => {
+    mHeading.textContent = 'New item';
+    mAction.value = 'add_event';           // finalized on submit from the kind choice
+    mId.value = '';
+    mDay.value = date || '';
+    mKindRow.hidden = false;
+    mDelete.hidden = true;
+    mOk.textContent = 'Add';
+    mText.value = '';
+    document.querySelector('input[name=kindchoice][value=event]').checked = true;
+    if (date) showDate(date); else hideDate();
+    modal.classList.add('open');
+    setTimeout(() => mText.focus(), 30);
+  };
+
+  // EDIT mode — from tapping an item in the day panel.
+  const openEdit = (id, kind, text, date) => {
+    mHeading.textContent = 'Edit ' + kind;
+    mAction.value = 'edit_item';
+    mId.value = id;
+    mKind.value = kind;
+    mDay.value = date || '';
+    mKindRow.hidden = true;                // kind is fixed when editing
+    mDelete.hidden = false;
+    mOk.textContent = 'Save';
+    mText.value = text;
+    if (date) showDate(date); else hideDate();
+    modal.classList.add('open');
+    setTimeout(() => mText.focus(), 30);
+  };
+
+  // Finalize the action for ADD (reminder vs note) right before submit.
+  form.addEventListener('submit', () => {
+    if (mAction.value !== 'edit_item') {
+      const kc = document.querySelector('input[name=kindchoice]:checked').value;
+      mAction.value = 'add_' + kc;   // add_event | add_reminder | add_note
+    }
+  });
+
+  // Hidden form used to check a reminder off straight from the day panel.
+  const toggleForm = document.getElementById('toggleForm');
+
+  // Delete submits with its own action.
+  mDelete.addEventListener('click', () => {
+    if (!confirm('Delete this item?')) return;
+    mAction.value = 'delete_item';
+    mText.removeAttribute('required');     // don't block submit on empty text
+    form.submit();
+  });
+
+  // ---- Split view: tap a day (top) -> list its items (bottom) ----
+  const ITEMS   = <?= $itemsJson ?: '{}' ?>;
+  const dpDate  = document.getElementById('dpDate');
+  const dpAdd   = document.getElementById('dpAdd');
+  const dpList  = document.getElementById('dpList');
+  const mDay    = document.getElementById('mDay');
+  let selected  = null;
+
+  const prettyDate = ymd => {
+    const d = new Date(ymd + 'T00:00:00');
+    return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+
+  const renderPanel = date => {
+    dpDate.textContent = prettyDate(date);
+    dpAdd.disabled = false;
+    const items = (ITEMS[date] || []);      // already ordered: reminders first, then notes
+    dpList.innerHTML = '';
+    if (!items.length) {
+      const p = document.createElement('p');
+      p.className = 'dp-empty';
+      p.textContent = 'No items on this day. Tap + Add to create one.';
+      dpList.appendChild(p);
+      return;
+    }
+    for (const it of items) {
+      const overdue = it.kind === 'reminder' && !it.done && date < TODAY;
+      const row = document.createElement('div');
+      row.className = 'dp-item' + (it.done ? ' done' : '');
+      // Reminders can be checked off right here.
+      if (it.kind === 'reminder') {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.className = 'dp-check'; cb.checked = !!it.done;
+        cb.title = it.done ? 'Mark not done' : 'Mark done';
+        cb.addEventListener('click', e => e.stopPropagation());   // don't open the editor
+        cb.addEventListener('change', () => {
+          document.getElementById('tgId').value = it.id;
+          document.getElementById('tgDay').value = date;
+          toggleForm.submit();
+        });
+        row.appendChild(cb);
+      }
+      const tag = document.createElement('span');
+      tag.className = 'tag ' + it.kind;
+      tag.textContent = it.kind;
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      txt.textContent = it.text + (overdue ? ' (overdue)' : '');
+      const chev = document.createElement('span');
+      chev.className = 'chev'; chev.textContent = '✎';
+      row.appendChild(tag); row.appendChild(txt); row.appendChild(chev);
+      row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date));
+      dpList.appendChild(row);
+    }
+  };
+
+  const selectDay = date => {
+    selected = date;
+    document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
+    const cell = document.querySelector('.cell[data-date="' + date + '"]');
+    if (cell) cell.classList.add('selected');
+    renderPanel(date);
+  };
+
+  document.querySelectorAll('.cell[data-date]').forEach(cell => {
+    cell.addEventListener('click', () => selectDay(cell.dataset.date));
+    cell.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDay(cell.dataset.date); }
+    });
+  });
+
+  // + Add in the panel -> create modal for the selected day.
+  dpAdd.addEventListener('click', () => { if (selected) openAdd(selected); });
+
+  // Start on the selected day (today, or ?day=).
+  const INITIAL_DAY = '<?= e($selDay) ?>';
+  if (INITIAL_DAY) selectDay(INITIAL_DAY);
+
+  document.getElementById('mCancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // Left/right arrow keys cycle months (when modal closed).
+  document.addEventListener('keydown', e => {
+    if (modal.classList.contains('open')) return;
+    if (e.key === 'ArrowLeft')  location.href = '?ym=<?= $prev ?>';
+    if (e.key === 'ArrowRight') location.href = '?ym=<?= $next ?>';
+  });
+</script>
+</body>
+</html>

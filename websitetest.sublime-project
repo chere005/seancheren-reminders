@@ -1,0 +1,27 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "websitetest (seancheren.com mirror)",
+      "folder_exclude_patterns": [".git", "node_modules"],
+      "file_exclude_patterns": ["*.swp", ".DS_Store"]
+    },
+    {
+      "path": "public",
+      "name": "public — web root (/home/public)"
+    },
+    {
+      "path": "lib",
+      "name": "lib — auth + secrets (/home/protected/lib)"
+    },
+    {
+      "path": "data",
+      "name": "data — reminders store (local)"
+    }
+  ],
+  "settings": {
+    "tab_size": 4,
+    "translate_tabs_to_spaces": false,
+    "rulers": [100]
+  }
+}
