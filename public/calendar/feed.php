@@ -82,7 +82,7 @@ $feedUrl = 'https://seancheren.com/calendar/feed.php?token=' . $token;
 $script = str_replace('__FEED_URL__', $feedUrl, <<<'JS'
 // seancheren calendar — Scriptable widget
 const FEED = "__FEED_URL__";
-const OPEN = "https://seancheren.com/calendar/";
+const OPEN = "https://seancheren.com/calendar/quick.php";
 const COLORS = { reminder: "#34d399", event: "#38bdf8", note: "#8b6ef0" };
 
 let data;
