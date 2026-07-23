@@ -43,7 +43,6 @@ function render_tabbar(string $active): void
         'calendar'  => ['href' => '/calendar/',  'ico' => '&#128197;', 'label' => 'Calendar'],
         'notes'     => ['href' => '/notes/',     'ico' => '&#128221;', 'label' => 'Notes'],
         'habits'    => ['href' => '/habits/',    'ico' => '&#128293;', 'label' => 'Habits'],
-        'books'     => ['href' => '/books/',     'ico' => '&#128218;', 'label' => 'Books'],
     ];
     echo '<nav class="tabbar"><div class="segmented">';
     foreach ($tabs as $key => $t) {
