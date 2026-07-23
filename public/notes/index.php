@@ -145,6 +145,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             }
             unset($n);
             save_notes($dataFile, $notes);
+            if (!empty($_POST['ajax'])) {
+                $saved = null;
+                foreach ($notes as $x) { if (!is_section($x) && ($x['id'] ?? '') === $id) { $saved = $x; break; } }
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true, 'title' => $saved['title'] ?? '',
+                                  'updated' => date('M j, g:ia', (int) ($saved['updated'] ?? time()))]);
+                exit;
+            }
             header('Location: ' . _self_path() . $vq . '&id=' . $id);
             exit;
 
@@ -464,8 +472,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     </div>
     <textarea name="body" placeholder="Write your note…"><?= e($current['body'] ?? '') ?></textarea>
     <div class="actions">
-      <button class="save" type="submit">Save</button>
-      <span class="meta">Last saved <?= e(date('M j, g:ia', (int) ($current['updated'] ?? time()))) ?></span>
+      <span class="meta" id="saveStatus">Saved</span>
       <button class="del" type="submit" name="action" value="delete"
               onclick="return confirm('Delete this note?')">Delete</button>
     </div>
@@ -498,6 +505,32 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     const DEF = titleInput.dataset.default || '';
     titleInput.addEventListener('focus', () => { if (titleInput.value === DEF) titleInput.select(); });
     titleInput.addEventListener('blur', () => { if (titleInput.value.trim() === '') titleInput.value = DEF; });
+  }
+
+  // Notes autosave — debounced, no Save button.
+  const noteForm = document.querySelector('form.editor');
+  if (noteForm) {
+    const status = document.getElementById('saveStatus');
+    let timer = null;
+    const doSave = () => {
+      if (status) status.textContent = 'Saving…';
+      const fd = new FormData(noteForm);
+      fd.set('action', 'save'); fd.set('ajax', '1');
+      fetch('', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+          if (status) status.textContent = 'Saved';
+          if (d && d.title && titleInput && document.activeElement !== titleInput) titleInput.value = d.title;
+        })
+        .catch(() => { if (status) status.textContent = 'Save failed'; });
+    };
+    const schedule = () => { if (status) status.textContent = 'Editing…'; clearTimeout(timer); timer = setTimeout(doSave, 800); };
+    noteForm.querySelectorAll('input, textarea, select').forEach(el => {
+      el.addEventListener('input', schedule);
+      el.addEventListener('change', schedule);
+    });
+    if (titleInput) titleInput.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); doSave(); } });
   }
 
   // List: edit mode reveals delete buttons (persisted across adds, like reminders).
