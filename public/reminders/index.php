@@ -63,11 +63,8 @@ function sort_by_date(array $rows): array
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
 function render_rows(array $rows, string $csrf, string $view, string $today, string $section = ''): void
 {
-    if (!$rows) {
-        return;
-    }
     static $pos = 0;   // running position across all groups = the manual order
-    echo '<ul class="rlist" data-section="' . e($section) . '">';
+    echo '<ul class="rlist" data-section="' . e($section) . '">';   // always emit (empty = drop target)
     foreach ($rows as $r) {
         $done    = !empty($r['done']);
         $overdue = !empty($r['due']) && !$done && $r['due'] < $today;
@@ -164,17 +161,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // Reorder / re-section reminders after a drag (AJAX). order = [{id, section}, …] top-to-bottom.
     if ($_POST['action'] === 'reorder') {
-        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
-        if (!is_array($order)) { $order = []; }
+        $order    = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        $secOrder = json_decode((string) ($_POST['sections'] ?? '[]'), true);
+        if (!is_array($order))    { $order = []; }
+        if (!is_array($secOrder)) { $secOrder = []; }
         $list = load_reminders($dataFile);
 
         $validSections = [];
-        $sectionsList  = [];
+        $secByName     = [];
         $byId          = [];
         foreach ($list as $it) {
-            if (is_section($it)) { $sectionsList[] = $it; $validSections[$it['name']] = true; }
+            if (is_section($it)) { $secByName[$it['name']] = $it; $validSections[$it['name']] = true; }
             else { $byId[$it['id']] = $it; }
         }
+
+        // Reorder section entries by the posted order; keep any not listed (e.g. hidden in a folder view).
+        $sectionsList = [];
+        foreach ($secOrder as $name) {
+            if (isset($secByName[$name])) { $sectionsList[] = $secByName[$name]; unset($secByName[$name]); }
+        }
+        foreach ($secByName as $e) { $sectionsList[] = $e; }
 
         $newReminders = [];
         $used = [];
@@ -347,6 +353,7 @@ $sectionInput =
       border-radius: 6px; font-size: 1rem; cursor: pointer;
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
+    form.add #editBtn { margin-left: auto; }   /* Edit + Add hug the right edge */
     body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
@@ -399,15 +406,18 @@ $sectionInput =
     .del:hover { border-color: #f66; color: #f66; }
 
     /* Edit mode: the X buttons + drag handles stay hidden until "Edit" is tapped. */
-    .drag-handle, .del, .section-del { display: none; }
+    .drag-handle, .sec-handle, .del, .section-del { display: none; }
     body.editing .del, body.editing .section-del { display: inline-block; }
-    body.editing .drag-handle { display: inline-flex; }
-    .drag-handle {
+    body.editing .drag-handle, body.editing .sec-handle { display: inline-flex; }
+    .drag-handle, .sec-handle {
       flex: 0 0 auto; align-items: center; justify-content: center; width: 1.4rem;
       color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none;
     }
-    .drag-handle:active { cursor: grabbing; color: #34d399; }
+    .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    .section-group.dragging { opacity: 0.85; }
+    body.editing ul.rlist { min-height: 1.4rem; }
+    body.editing ul.rlist:empty { border: 1px dashed #333; border-radius: 6px; margin: 0.25rem 0; }
 
     .empty { color: #666; text-align: center; padding: 2rem 0; }
     footer { margin-top: 1.5rem; display: flex; justify-content: flex-end; }
@@ -472,24 +482,29 @@ $sectionInput =
   <?php if (!$items && !$sections): ?>
     <p class="empty">Nothing yet. Add your first reminder above.</p>
   <?php else: ?>
-    <?php render_rows($ungrouped, $csrf, $view, $today); ?>
+   <div id="rlist-root">
+    <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
 
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; // hide empty sections inside a folder view ?>
-      <div class="section-head">
-        <span class="section-title"><?= e($sname) ?></span>
-        <form method="post" action="" style="display:inline"
-              onsubmit="return confirm('Delete this section? Its reminders stay, just ungrouped.')">
-          <input type="hidden" name="csrf" value="<?= $csrf ?>">
-          <input type="hidden" name="action" value="delete_section">
-          <input type="hidden" name="view" value="<?= e($view) ?>">
-          <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del" type="submit" title="Delete section">&times;</button>
-        </form>
+      <div class="section-group" data-section="<?= e($sname) ?>">
+        <div class="section-head">
+          <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
+          <span class="section-title"><?= e($sname) ?></span>
+          <form method="post" action="" style="display:inline"
+                onsubmit="return confirm('Delete this section? Its reminders stay, just ungrouped.')">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete_section">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="name" value="<?= e($sname) ?>">
+            <button class="section-del" type="submit" title="Delete section">&times;</button>
+          </form>
+        </div>
+        <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
       </div>
-      <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
     <?php endforeach; ?>
+   </div>
 
     <?php if ($doneCount): ?>
       <footer>
@@ -565,7 +580,7 @@ $sectionInput =
 
   // ----- Drag to reorder (pointer events => works with touch; edit mode only) -----
   const CSRF = '<?= $csrf ?>', VIEW = '<?= e($view) ?>';
-  let dragLi = null;
+  let dragLi = null, dragSection = null;
 
   const persistOrder = () => {
     const order = [];
@@ -573,46 +588,67 @@ $sectionInput =
       const section = ul.dataset.section || '';
       ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
     });
+    const sections = [...document.querySelectorAll('.section-group')].map(g => g.dataset.section);
     order.forEach((o, i) => {                          // keep Manual order consistent after a drag
       const li = document.querySelector('li[data-id="' + o.id + '"]');
       if (li) li.dataset.pos = i;
     });
     localStorage.setItem('remSort', 'manual');
     sortSel.value = 'manual';
-    const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW, order: JSON.stringify(order) });
+    const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
+      order: JSON.stringify(order), sections: JSON.stringify(sections) });
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
   };
 
   document.addEventListener('pointerdown', (e) => {
-    const handle = e.target.closest('.drag-handle');
-    if (!handle || !document.body.classList.contains('editing')) return;
-    dragLi = handle.closest('li[data-id]');
-    if (!dragLi) return;
-    e.preventDefault();
-    dragLi.classList.add('dragging');
-    handle.setPointerCapture(e.pointerId);
+    if (!document.body.classList.contains('editing')) return;
+    const secHandle = e.target.closest('.sec-handle');
+    const remHandle = e.target.closest('.drag-handle');
+    if (secHandle) {
+      dragSection = secHandle.closest('.section-group');
+      if (!dragSection) return;
+      e.preventDefault();
+      dragSection.classList.add('dragging');
+      secHandle.setPointerCapture(e.pointerId);
+    } else if (remHandle) {
+      dragLi = remHandle.closest('li[data-id]');
+      if (!dragLi) return;
+      e.preventDefault();
+      dragLi.classList.add('dragging');
+      remHandle.setPointerCapture(e.pointerId);
+    }
   });
 
   document.addEventListener('pointermove', (e) => {
-    if (!dragLi) return;
+    if (!dragLi && !dragSection) return;
     e.preventDefault();
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if (!under) return;
-    const overLi = under.closest('li[data-id]');
-    if (overLi && overLi !== dragLi) {
-      const rect  = overLi.getBoundingClientRect();
-      const after = e.clientY > rect.top + rect.height / 2;
-      overLi.parentNode.insertBefore(dragLi, after ? overLi.nextSibling : overLi);
+    if (dragLi) {
+      const overLi = under.closest('li[data-id]');
+      if (overLi && overLi !== dragLi) {
+        const rect  = overLi.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        overLi.parentNode.insertBefore(dragLi, after ? overLi.nextSibling : overLi);
+      } else {
+        const ul = under.closest('ul.rlist');
+        if (ul && ul !== dragLi.parentNode) ul.appendChild(dragLi);
+      }
     } else {
-      const ul = under.closest('ul.rlist');
-      if (ul && ul !== dragLi.parentNode) ul.appendChild(dragLi);
+      const overGroup = under.closest('.section-group');
+      if (overGroup && overGroup !== dragSection) {
+        const rect  = overGroup.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        overGroup.parentNode.insertBefore(dragSection, after ? overGroup.nextSibling : overGroup);
+      }
     }
   }, { passive: false });
 
   const endDrag = () => {
-    if (!dragLi) return;
-    dragLi.classList.remove('dragging');
-    dragLi = null;
+    if (dragLi) dragLi.classList.remove('dragging');
+    if (dragSection) dragSection.classList.remove('dragging');
+    if (!dragLi && !dragSection) return;
+    dragLi = null; dragSection = null;
     persistOrder();
   };
   document.addEventListener('pointerup', endDrag);
