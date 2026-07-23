@@ -41,7 +41,7 @@ function build_feed(string $dir, string $user): array {
     }
     foreach (loadlist(ufile($dir, $user, 'events')) as $e) {
         $d = (string) ($e['date'] ?? '');
-        if ($d >= $today && $d <= $until) { $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''), 'overdue' => false]; }
+        if ($d >= $today && $d <= $until) { $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''), 'time' => (string) ($e['time'] ?? ''), 'overdue' => false]; }
     }
     foreach (loadlist(ufile($dir, $user, 'notes')) as $n) {
         if (($n['type'] ?? '') === 'section') { continue; }
@@ -122,7 +122,8 @@ if (data.error) {
     dot.textColor = new Color(COLORS[it.kind] || "#888888");
     dot.font = Font.systemFont(9);
     row.addSpacer(6);
-    const label = row.addText(it.text || "");
+    const prefix = (it.kind === "event" && it.time) ? fmtTime(it.time) + "  " : "";
+    const label = row.addText(prefix + (it.text || ""));
     label.font = Font.systemFont(12);
     label.textColor = it.overdue ? new Color("#ff7755") : new Color("#eeeeee");
     label.lineLimit = 1;

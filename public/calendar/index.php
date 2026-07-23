@@ -60,6 +60,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $action  = (string) $_POST['action'];
     $date    = (string) ($_POST['date'] ?? '');
     $dateOk  = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
+    $time    = trim((string) ($_POST['time'] ?? ''));
+    $timeOk  = (bool) preg_match('/^\d{2}:\d{2}$/', $time);
     $text    = trim((string) ($_POST['text'] ?? ''));
     $kind    = (string) ($_POST['kind'] ?? '');
     $id      = (string) ($_POST['id'] ?? '');
@@ -72,7 +74,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $file = user_data_file($cfg['data_dir'], 'events');
         $list = load_json_list($file);
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
-                   'date' => $dateOk ? $date : null, 'created' => time()];
+                   'date' => $dateOk ? $date : null, 'time' => $timeOk ? $time : null, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
         $file = user_data_file($cfg['data_dir'], 'reminders');
@@ -101,7 +103,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (($it['id'] ?? '') === $id) {
                 $it[$spec['textField']] = mb_substr($text, 0, $kind === 'note' ? 200 : 500);
                 $it[$spec['dateField']] = $dateOk ? $date : null;
-                if ($kind === 'note') { $it['updated'] = time(); }
+                if ($kind === 'event') { $it['time'] = $timeOk ? $time : null; }
+                if ($kind === 'note')  { $it['updated'] = time(); }
                 break;
             }
         }
@@ -149,9 +152,12 @@ foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
                           'done' => !empty($r['done']), 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
     }
 }
-foreach (load_json_list(user_data_file($cfg['data_dir'], 'events')) as $ev) {
+$evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
+usort($evList, fn($a, $b) => ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99')));
+foreach ($evList as $ev) {
     if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
-        $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '', 'done' => false];
+        $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
+                                 'time' => $ev['time'] ?? '', 'done' => false];
     }
 }
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes')) as $n) {
@@ -283,6 +289,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
+    .dp-item .evtime { font-size: 0.75rem; color: #7dd3fc; font-weight: 600; white-space: nowrap; }
     .dp-item.done .txt { color: #666; text-decoration: line-through; }
     .dp-item .chev { color: #555; font-size: 0.9rem; }
     .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
@@ -314,6 +321,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .kind input:checked + span { color: #34d399; font-weight: 700; }
     .modal .kind label:has(input:checked) { border-color: #34d399; background: #14251f; }
     .modal .daterow { margin-bottom: 1rem; }
+    .modal .timerow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .modal .timerow .tlabel { font-size: 0.85rem; color: #aaa; }
+    .modal .timerow input[type=time] {
+      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
+    }
     .modal .adddate {
       background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
       padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer;
@@ -441,6 +454,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <button type="button" class="cleardate" id="mClearDate" title="Remove date">&times;</button>
       </div>
     </div>
+    <div class="timerow" id="mTimeRow" hidden>
+      <span class="tlabel">Time</span>
+      <input type="time" name="time" id="mTime" value="">
+      <button type="button" class="cleardate" id="mClearTime" title="Remove time">&times;</button>
+    </div>
     <div class="buttons">
       <button type="button" class="del" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
@@ -489,6 +507,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   mAddDate.addEventListener('click', () => { showDate(TODAY); mDate.focus(); if (mDate.showPicker) try { mDate.showPicker(); } catch(_){} });
   document.getElementById('mClearDate').addEventListener('click', hideDate);
 
+  // Time — events only.
+  const mTimeRow = document.getElementById('mTimeRow');
+  const mTime    = document.getElementById('mTime');
+  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; };
+  const hideTime = () => { mTime.value = ''; mTimeRow.hidden = true; };
+  document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
+  document.querySelectorAll('input[name=kindchoice]').forEach(r => {
+    r.addEventListener('change', () => { if (r.checked) (r.value === 'event' ? showTime(mTime.value) : hideTime()); });
+  });
+  const fmtTime = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM');
+  };
+
   const closeModal = () => modal.classList.remove('open');
 
   // ADD mode — create a new reminder/note (date pre-filled to the selected day).
@@ -502,13 +534,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mOk.textContent = 'Add';
     mText.value = '';
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
+    showTime('');
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
   };
 
   // EDIT mode — from tapping an item in the day panel.
-  const openEdit = (id, kind, text, date) => {
+  const openEdit = (id, kind, text, date, time) => {
     mHeading.textContent = 'Edit ' + kind;
     mAction.value = 'edit_item';
     mId.value = id;
@@ -518,6 +551,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
+    (kind === 'event') ? showTime(time) : hideTime();
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
@@ -597,6 +631,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       const chev = document.createElement('span');
       chev.className = 'chev'; chev.textContent = '✎';
       if (tag) row.appendChild(tag);
+      if (it.kind === 'event' && it.time) {    // events: show the time
+        const tm = document.createElement('span');
+        tm.className = 'evtime';
+        tm.textContent = fmtTime(it.time);
+        row.appendChild(tm);
+      }
       row.appendChild(txt);
       if (overdue && it.due) {                 // overdue reminder: show its original date in grey
         const od = document.createElement('span');
@@ -605,7 +645,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.appendChild(od);
       }
       row.appendChild(chev);
-      row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date));
+      row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date, it.time || ''));
       dpList.appendChild(row);
     }
   };
