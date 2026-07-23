@@ -146,7 +146,7 @@ foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
     $eff = (empty($r['done']) && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
     if (strpos($eff, $monthPrefix) === 0) {
         $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                          'done' => !empty($r['done']), 'rolled' => ($eff !== $r['due'])];
+                          'done' => !empty($r['done']), 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
     }
 }
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'events')) as $ev) {
@@ -282,6 +282,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .tag.note { color: #b9a7f5; background: #241a3a; }
     .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
+    .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
     .dp-item.done .txt { color: #666; text-decoration: line-through; }
     .dp-item .chev { color: #555; font-size: 0.9rem; }
     .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
@@ -592,11 +593,18 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       }
       const txt = document.createElement('span');
       txt.className = 'txt';
-      txt.textContent = it.text + (overdue ? ' (overdue)' : '');
+      txt.textContent = it.text;
       const chev = document.createElement('span');
       chev.className = 'chev'; chev.textContent = '✎';
       if (tag) row.appendChild(tag);
-      row.appendChild(txt); row.appendChild(chev);
+      row.appendChild(txt);
+      if (overdue && it.due) {                 // overdue reminder: show its original date in grey
+        const od = document.createElement('span');
+        od.className = 'origdate';
+        od.textContent = new Date(it.due + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
+        row.appendChild(od);
+      }
+      row.appendChild(chev);
       row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date));
       dpList.appendChild(row);
     }
