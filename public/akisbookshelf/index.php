@@ -37,11 +37,12 @@ function cover_url(?int $id, string $size = 'M'): string
     return $id ? "https://covers.openlibrary.org/b/id/{$id}-{$size}.jpg" : '';
 }
 
-/** Best cover URL for a book: by Open Library cover id, else by ISBN (Goodreads imports). */
+/** Best cover URL for a book: Open Library cover id, then an explicit URL, then by ISBN. */
 function book_cover(array $b, string $size = 'M'): string
 {
-    if (!empty($b['cover'])) { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
-    if (!empty($b['isbn']))  { return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode((string) $b['isbn']) . "-{$size}.jpg?default=false"; }
+    if (!empty($b['cover']))     { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
+    if (!empty($b['cover_url'])) { return (string) $b['cover_url']; }
+    if (!empty($b['isbn']))      { return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode((string) $b['isbn']) . "-{$size}.jpg?default=false"; }
     return '';
 }
 
