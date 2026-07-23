@@ -345,6 +345,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <h1>Calendar</h1>
     <nav>
       <span class="who"><?= e(current_user() ?? '') ?></span>
+      <a href="/calendar/feed.php">Widget</a>
       <a href="/reminders/?logout">Log out</a>
     </nav>
   </header>
