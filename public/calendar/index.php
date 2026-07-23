@@ -6,6 +6,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 }
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
+require_once $__libDir . '/chrome.php';
 require_login('Calendar');   // same login as Reminders
 
 $cfg = app_config();
@@ -352,6 +353,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
     .modal .buttons .ok { background: #34d399; color: #06251b; }
 <?= tabbar_styles() ?>
+<?= chrome_styles() ?>
     body { padding-bottom: 0; }   /* panel handles the tab-bar clearance */
   </style>
 </head>
@@ -359,15 +361,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <div class="cal-top">
  <div class="wrap">
   <header>
-    <div class="titlebar">
-      <h1>Calendar</h1>
-      <button type="button" id="calShowAll" class="widgetlink" style="background:none;cursor:pointer;">Show All</button>
+    <div class="hleft">
+      <?= back_button() ?>
+      <div class="titlebar">
+        <h1>Calendar</h1>
+        <button type="button" id="calShowAll" class="widgetlink" style="background:none;cursor:pointer;">Show All</button>
+      </div>
     </div>
-    <nav>
+    <div class="hright">
       <a class="widgetlink" href="/calendar/feed.php">Widget</a>
-      <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="/reminders/?logout">Log out</a>
-    </nav>
+      <?= render_user_menu() ?>
+    </div>
   </header>
 
   <div class="monthnav">
@@ -723,5 +727,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     if (e.key === 'ArrowRight') location.href = '?ym=<?= $next ?>';
   });
 </script>
+<?= chrome_script() ?>
 </body>
 </html>
