@@ -158,9 +158,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
         case 'delete':
             $id    = (string) ($_POST['id'] ?? '');
+            foreach ($notes as $x) { if (!is_section($x) && ($x['id'] ?? '') === $id) { $_SESSION['undo_note'] = $x; break; } }
             $notes = array_values(array_filter($notes, fn($n) => is_section($n) || $n['id'] !== $id));
             save_notes($dataFile, $notes);
-            header('Location: ' . _self_path() . $vq);   // back to the list
+            header('Location: ' . _self_path() . $vq . '&undo=1');   // back to the list
+            exit;
+
+        case 'undo':
+            if (!empty($_SESSION['undo_note'])) {
+                $notes[] = $_SESSION['undo_note'];
+                unset($_SESSION['undo_note']);
+                save_notes($dataFile, $notes);
+            }
+            header('Location: ' . _self_path() . $vq);
             exit;
     }
 
@@ -229,7 +239,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
             <?php if ($date !== ''): ?><span class="ndate"><?= e($date) ?></span><?php endif; ?>
             <span class="nchev">&rsaquo;</span>
           </a>
-          <form method="post" action="" class="ndel" onsubmit="return confirm('Delete this note?')">
+          <form method="post" action="" class="ndel">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
@@ -316,6 +326,12 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     }
     .listbar .nedit:hover { border-color: #888; color: #fff; }
     body.editing .listbar .nedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .listbar .undo {
+      padding: 0.5rem 0.9rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
+      border-radius: 6px; font-size: 0.95rem; cursor: pointer; display: none;
+    }
+    .listbar .undo:hover { border-color: #888; color: #fff; }
+    body.can-undo .listbar .undo { display: inline-block; }   /* only right after a delete */
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
@@ -399,6 +415,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
 
   <div class="listbar">
     <button type="button" id="editBtn" class="nedit">Edit</button>
+    <button type="button" id="undoBtn" class="undo">Undo</button>
     <form method="post" action="" style="margin-left:auto">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add">
@@ -407,6 +424,11 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <button class="newnote" type="submit">+ New note</button>
     </form>
   </div>
+  <form id="undoForm" method="post" action="" style="display:none">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="undo">
+    <input type="hidden" name="view" value="<?= e($view) ?>">
+  </form>
 
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ New note</strong> to start.</p>
@@ -468,8 +490,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <textarea name="body" placeholder="Write your note…"><?= e($current['body'] ?? '') ?></textarea>
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
-      <button class="del" type="submit" name="action" value="delete"
-              onclick="return confirm('Delete this note?')">Delete</button>
+      <button class="del" type="submit" name="action" value="delete">Delete</button>
     </div>
   </form>
 <?php endif; ?>
@@ -533,11 +554,21 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   if (editBtn) {
     const setEdit = (on) => {
       document.body.classList.toggle('editing', on);
+      if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
       editBtn.textContent = on ? 'Done' : 'Edit';
       localStorage.setItem('notesEditing', on ? '1' : '0');
     };
     setEdit(localStorage.getItem('notesEditing') === '1');
     editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
+  }
+
+  // Undo appears only immediately after a delete (server redirects back with ?undo=1).
+  const undoBtn = document.getElementById('undoBtn');
+  if (undoBtn) undoBtn.addEventListener('click', () => document.getElementById('undoForm').submit());
+  if (new URLSearchParams(location.search).get('undo') === '1') {
+    document.body.classList.add('can-undo');
+    const u = new URL(location.href); u.searchParams.delete('undo');
+    history.replaceState(null, '', u);
   }
 
 </script>
