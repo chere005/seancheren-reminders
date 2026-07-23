@@ -26,6 +26,18 @@ function cover_url(?int $id, string $size = 'M'): string
     return $id ? "https://covers.openlibrary.org/b/id/{$id}-{$size}.jpg" : '';
 }
 
+/** 5-star rating: filled up to $rating. Editable version is wired up in JS. */
+function stars_html(int $rating, bool $editable, string $bookId = ''): string
+{
+    $out = '<span class="stars' . ($editable ? ' editable' : '') . '"'
+         . ($editable ? ' data-book="' . e($bookId) . '"' : '')
+         . ' data-rating="' . $rating . '">';
+    for ($i = 1; $i <= 5; $i++) {
+        $out .= '<span class="star' . ($i <= $rating ? ' on' : '') . '" data-v="' . $i . '">&#9733;</span>';
+    }
+    return $out . '</span>';
+}
+
 /** GET a URL with a short timeout (curl, then a file_get_contents fallback). */
 function http_get(string $url): string
 {
@@ -85,10 +97,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         http_response_code(400);
         exit('Bad request (invalid CSRF token).');
     }
-    $action  = (string) $_POST['action'];
-    $bookId  = (string) ($_POST['book'] ?? '');
-    $listUrl = _self_path();
-    $bookUrl = $listUrl . '?book=' . urlencode($bookId);
+    $action   = (string) $_POST['action'];
+    $bookId   = (string) ($_POST['book'] ?? '');
+    $shelf    = (string) ($_POST['shelf'] ?? 'library');
+    if (!in_array($shelf, ['library', 'read', 'want'], true)) { $shelf = 'library'; }
+    $listUrl  = _self_path();
+    $shelfUrl = $listUrl . '?shelf=' . urlencode($shelf);
+    $bookUrl  = $listUrl . '?book=' . urlencode($bookId);
 
     // ----- Book cards -----
     if ($action === 'add_book') {
@@ -102,11 +117,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 'author'  => mb_substr(trim((string) ($_POST['author'] ?? '')), 0, 200),
                 'cover'   => $cover > 0 ? $cover : null,
                 'key'     => mb_substr(trim((string) ($_POST['key'] ?? '')), 0, 60),
+                'rating'  => 0,
+                'read'    => $shelf === 'read',
+                'read_at' => $shelf === 'read' ? time() : null,
+                'want'    => $shelf === 'want',
+                'past'    => false,
                 'created' => time(),
             ];
             books_save($booksFile, $books);
         }
-        header('Location: ' . $listUrl);
+        header('Location: ' . $shelfUrl);
         exit;
     }
     if ($action === 'delete_book') {
@@ -114,7 +134,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($books as $b) { if (($b['id'] ?? '') === $bookId) { $_SESSION['undo_book'] = $b; break; } }
         $books = array_values(array_filter($books, fn($b) => ($b['id'] ?? '') !== $bookId));
         books_save($booksFile, $books);
-        header('Location: ' . $listUrl . '?undo=1');
+        header('Location: ' . $shelfUrl . '&undo=1');
         exit;
     }
     if ($action === 'undo_book') {
@@ -124,7 +144,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             unset($_SESSION['undo_book']);
             books_save($booksFile, $books);
         }
-        header('Location: ' . $listUrl);
+        header('Location: ' . $shelfUrl);
+        exit;
+    }
+    // Rating + shelf flags (AJAX from the book page).
+    if ($action === 'set_rating') {
+        $r     = max(0, min(5, (int) ($_POST['rating'] ?? 0)));
+        $books = books_load($booksFile);
+        foreach ($books as &$b) { if (($b['id'] ?? '') === $bookId) { $b['rating'] = $r; break; } }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'rating' => $r]);
+        exit;
+    }
+    if (in_array($action, ['set_read', 'set_want', 'set_past'], true)) {
+        $field = ['set_read' => 'read', 'set_want' => 'want', 'set_past' => 'past'][$action];
+        $val   = !empty($_POST['value']);
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) {
+                $b[$field] = $val;
+                if ($field === 'read') { $b['read_at'] = $val ? time() : null; }
+                break;
+            }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'value' => $val]);
         exit;
     }
 
@@ -191,8 +239,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 }
 
 // --- Which view? ---
-$books  = books_load($booksFile);
-$csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
+$books = books_load($booksFile);
+$csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
+
+$shelf = (string) ($_GET['shelf'] ?? 'library');
+if (!in_array($shelf, ['library', 'read', 'want', 'data'], true)) { $shelf = 'library'; }
 
 $bookId = (string) ($_GET['book'] ?? '');
 $book   = null;
@@ -203,6 +254,23 @@ $bookNotes = $book ? (bnotes_load($notesFile)[$bookId] ?? []) : [];
 $curNote   = null;
 if ($book && $noteId !== '') {
     foreach ($bookNotes as $n) { if (($n['id'] ?? '') === $noteId) { $curNote = $n; break; } }
+}
+
+/** Consistent header: ‹ back (top-left) + title, and a username dropdown on the right. */
+function books_header(string $titleHtml): void
+{
+    ?>
+    <header>
+      <div class="hleft">
+        <button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>
+        <div class="htitle"><?= $titleHtml ?></div>
+      </div>
+      <div class="usermenu">
+        <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
+        <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+      </div>
+    </header>
+    <?php
 }
 ?><!DOCTYPE html>
 <html lang="en">
@@ -222,17 +290,45 @@ if ($book && $noteId !== '') {
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
     .wrap { max-width: 760px; margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
-    header h1 { font-size: 1.5rem; }
-    header nav { display: flex; align-items: center; gap: 0.5rem; }
-    header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
-    header nav a:hover { color: #fff; }
-    header nav .who { color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 1.1rem; }
+    .hleft { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+    .backbtn {
+      flex: 0 0 auto; background: #1a1a1a; border: 1px solid #333; color: #ccc; cursor: pointer;
+      width: 34px; height: 34px; border-radius: 8px; font-size: 1.5rem; line-height: 1; padding: 0 0 0.15rem;
+    }
+    .backbtn:hover { border-color: #888; color: #fff; }
+    .htitle h1 { font-size: 1.5rem; }
+    .htitle .ht-sub { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
+
+    /* Username dropdown */
+    .usermenu { position: relative; flex: 0 0 auto; }
+    .usermenu .who {
+      color: #34d399; font-size: 0.8rem; background: none; border: 1px solid #2a4a3d;
+      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer;
+    }
+    .usermenu .who:hover { border-color: #34d399; }
+    .usermenu .menu {
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+      background: #1c1c1c; border: 1px solid #333; border-radius: 8px; min-width: 120px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
+    }
+    .usermenu .menu a { display: block; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
+    .usermenu .menu a:hover { background: #2a2a2a; }
+
+    /* Shelf tab bar (Library / Read / Want To Read) */
+    .shelfbar { display: flex; background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 3px; margin-bottom: 1.1rem; }
+    .shelfbar a {
+      flex: 1; text-align: center; padding: 0.5rem 0.3rem; text-decoration: none; color: #888;
+      font-size: 0.85rem; font-weight: 600; border-radius: 8px;
+    }
+    .shelfbar a:hover { color: #ccc; }
+    .shelfbar a.active { background: #2a2a2a; color: #34d399; }
+    @media (max-width: 380px) { .shelfbar a { font-size: 0.76rem; } }
 
     /* Top bar */
-    .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1.25rem; }
     .bar .addbook {
-      margin-left: auto; padding: 0.55rem 1rem; background: #34d399; color: #06251b; border: none;
+      padding: 0.55rem 1rem; background: #34d399; color: #06251b; border: none;
       border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .bar .addbook:hover { background: #52e0ac; }
@@ -242,7 +338,7 @@ if ($book && $noteId !== '') {
     }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .bar #undoBtn { display: none; }
+    .bar #undoBtn { display: none; margin-right: auto; }
     body.can-undo .bar #undoBtn { display: inline-block; }
 
     /* Book cards grid */
@@ -261,6 +357,20 @@ if ($book && $noteId !== '') {
     .coverbox img { position: relative; width: 100%; height: 100%; object-fit: cover; }
     .booklink .btitle { margin-top: 0.5rem; font-size: 0.92rem; font-weight: 600; line-height: 1.25; }
     .booklink .bauthor { margin-top: 0.15rem; font-size: 0.78rem; color: #999; }
+    .cardmeta { display: flex; align-items: center; justify-content: space-between; margin-top: 0.35rem; gap: 0.4rem; }
+
+    /* Stars */
+    .stars { font-size: 0.95rem; letter-spacing: 1px; line-height: 1; white-space: nowrap; }
+    .stars .star { color: #3a3a3a; }
+    .stars .star.on { color: #f0b429; }
+    .stars.editable { font-size: 1.5rem; letter-spacing: 3px; }
+    .stars.editable .star { cursor: pointer; }
+    .stars.editable .star:hover { color: #f7d879; }
+
+    /* Read indicator (cards = disabled) */
+    .readchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: #888; }
+    .readchk input { width: 15px; height: 15px; accent-color: #34d399; }
+
     .bookcard .bdel {
       position: absolute; top: 6px; right: 6px; display: none; z-index: 2;
       background: rgba(0,0,0,0.7); border: 1px solid #666; color: #fff; border-radius: 6px;
@@ -271,6 +381,13 @@ if ($book && $noteId !== '') {
 
     .empty { color: #666; text-align: center; padding: 2.5rem 0; }
     .empty strong { color: #34d399; }
+
+    /* Data tab */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+    .stat { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1.4rem 1rem; text-align: center; }
+    .stat .num { font-size: 2.4rem; font-weight: 800; color: #34d399; line-height: 1; }
+    .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: #999; }
+    .stat .lbl span { display: block; font-size: 0.72rem; color: #666; margin-top: 0.15rem; }
 
     /* Search modal */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 60; display: none; align-items: flex-start; justify-content: center; padding: 1.2rem 1rem; }
@@ -293,14 +410,16 @@ if ($book && $noteId !== '') {
     .rrow .rauthor { font-size: 0.8rem; color: #999; margin-top: 0.1rem; }
     .rrow .radd { flex: 0 0 auto; background: #14332a; color: #34d399; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 700; }
 
-    /* ---- Book notes list ---- */
-    .backbar { margin-bottom: 1rem; }
-    .backbar a { color: #34d399; text-decoration: none; font-size: 0.9rem; }
-    .backbar a:hover { text-decoration: underline; }
-    .bookhead { display: flex; gap: 0.9rem; align-items: center; margin-bottom: 1.25rem; }
-    .bookhead .coverbox { width: 60px; flex: 0 0 auto; }
+    /* ---- Book page (notes) ---- */
+    .bookhead { display: flex; gap: 0.9rem; align-items: flex-start; margin-bottom: 1.25rem; }
+    .bookhead .coverbox { width: 84px; flex: 0 0 auto; }
     .bookhead .bh-title { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
     .bookhead .bh-author { font-size: 0.85rem; color: #999; margin-top: 0.2rem; }
+    .bookhead .bh-stars { margin-top: 0.5rem; }
+    .bookhead .bh-flags { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; }
+    .bookhead .bh-flags .flagrow { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .bookhead .chk { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: #ccc; cursor: pointer; }
+    .bookhead .chk input { width: 18px; height: 18px; accent-color: #34d399; cursor: pointer; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
     ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; }
@@ -328,25 +447,56 @@ if ($book && $noteId !== '') {
 <div class="wrap">
 <?php if (!$book): ?>
   <!-- ===================== BOOKS LIST ===================== -->
-  <header>
-    <h1>Books</h1>
-    <nav>
-      <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="/reminders/?logout">Log out</a>
-    </nav>
-  </header>
+  <?php books_header('<h1>Books</h1>'); ?>
+
+  <div class="shelfbar">
+    <a class="<?= $shelf === 'library' ? 'active' : '' ?>" href="?shelf=library">Library</a>
+    <a class="<?= $shelf === 'read' ? 'active' : '' ?>" href="?shelf=read">Read</a>
+    <a class="<?= $shelf === 'want' ? 'active' : '' ?>" href="?shelf=want">Want To Read</a>
+    <a class="<?= $shelf === 'data' ? 'active' : '' ?>" href="?shelf=data">Data</a>
+  </div>
+
+  <?php if ($shelf === 'data'): ?>
+    <?php
+      $monthStart = mktime(0, 0, 0, (int) date('n'), 1, (int) date('Y'));
+      $yearStart  = mktime(0, 0, 0, 1, 1, (int) date('Y'));
+      $readMonth = $readYear = $wantCount = 0;
+      foreach ($books as $b) {
+          if (!empty($b['want'])) { $wantCount++; }
+          if (empty($b['read']) || !empty($b['past'])) { continue; }   // "past" reads don't count here
+          $ra = (int) ($b['read_at'] ?? 0);
+          if ($ra >= $monthStart) { $readMonth++; }
+          if ($ra >= $yearStart)  { $readYear++; }
+      }
+    ?>
+    <div class="stats">
+      <div class="stat"><div class="num"><?= $readMonth ?></div><div class="lbl">Read this month<span><?= date('F Y') ?></span></div></div>
+      <div class="stat"><div class="num"><?= $readYear ?></div><div class="lbl">Read this year<span><?= date('Y') ?></span></div></div>
+      <div class="stat"><div class="num"><?= $wantCount ?></div><div class="lbl">Want to read</div></div>
+      <div class="stat"><div class="num"><?= count($books) ?></div><div class="lbl">Books in library</div></div>
+    </div>
+  <?php else: ?>
 
   <div class="bar">
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
+    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="addBookBtn" class="addbook">+ Add book</button>
   </div>
 
-  <?php if (!$books): ?>
-    <p class="empty">No books yet. Tap <strong>+ Add book</strong> to search and pick a cover.</p>
+  <?php
+    $shown = $books;
+    if ($shelf === 'read') { $shown = array_values(array_filter($books, fn($b) => !empty($b['read']))); }
+    elseif ($shelf === 'want') { $shown = array_values(array_filter($books, fn($b) => !empty($b['want']))); }
+  ?>
+  <?php if (!$shown): ?>
+    <p class="empty">
+      <?php if ($shelf === 'read'): ?>No books marked read yet.
+      <?php elseif ($shelf === 'want'): ?>Nothing on your Want&nbsp;To&nbsp;Read shelf yet.
+      <?php else: ?>No books yet. Tap <strong>+ Add book</strong> to search and pick a cover.<?php endif; ?>
+    </p>
   <?php else: ?>
     <div class="shelf">
-      <?php foreach ($books as $b): ?>
+      <?php foreach ($shown as $b): ?>
         <div class="bookcard" data-id="<?= e($b['id']) ?>">
           <a class="booklink" href="?book=<?= urlencode($b['id']) ?>">
             <span class="coverbox">
@@ -358,10 +508,15 @@ if ($book && $noteId !== '') {
             <span class="btitle"><?= e($b['title'] ?? 'Untitled') ?></span>
             <?php if (!empty($b['author'])): ?><span class="bauthor"><?= e($b['author']) ?></span><?php endif; ?>
           </a>
+          <div class="cardmeta">
+            <?= stars_html((int) ($b['rating'] ?? 0), false) ?>
+            <label class="readchk"><input type="checkbox" disabled <?= !empty($b['read']) ? 'checked' : '' ?>>Read</label>
+          </div>
           <form method="post" action="">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_book">
             <input type="hidden" name="book" value="<?= e($b['id']) ?>">
+            <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
             <button class="bdel" type="submit" title="Remove book">&times;</button>
           </form>
         </div>
@@ -372,12 +527,14 @@ if ($book && $noteId !== '') {
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="undo_book">
+    <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
   </form>
 
   <!-- Hidden form that actually adds the chosen search result -->
   <form id="addForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="add_book">
+    <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
     <input type="hidden" name="title"  id="afTitle">
     <input type="hidden" name="author" id="afAuthor">
     <input type="hidden" name="cover"  id="afCover">
@@ -399,10 +556,11 @@ if ($book && $noteId !== '') {
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
 <?php elseif ($book && $curNote === null): ?>
-  <!-- ===================== BOOK NOTES LIST ===================== -->
-  <div class="backbar"><a href="<?= e(_self_path()) ?>">&larr; All books</a></div>
+  <!-- ===================== BOOK PAGE (rating + notes) ===================== -->
+  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
   <div class="bookhead">
     <span class="coverbox">
       <span class="ph"><?= e($book['title'] ?? '') ?></span>
@@ -413,13 +571,21 @@ if ($book && $noteId !== '') {
     <div>
       <div class="bh-title"><?= e($book['title'] ?? 'Untitled') ?></div>
       <?php if (!empty($book['author'])): ?><div class="bh-author"><?= e($book['author']) ?></div><?php endif; ?>
+      <div class="bh-stars"><?= stars_html((int) ($book['rating'] ?? 0), true, $book['id']) ?></div>
+      <div class="bh-flags" data-book="<?= e($book['id']) ?>">
+        <div class="flagrow">
+          <label class="chk"><input type="checkbox" id="readChk" <?= !empty($book['read']) ? 'checked' : '' ?>> Mark as read</label>
+          <label class="chk"><input type="checkbox" id="pastChk" <?= !empty($book['past']) ? 'checked' : '' ?>> Past?</label>
+        </div>
+        <label class="chk"><input type="checkbox" id="wantChk" <?= !empty($book['want']) ? 'checked' : '' ?>> Want to read</label>
+      </div>
     </div>
   </div>
 
   <div class="bar">
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
-    <form method="post" action="" style="margin-left:auto">
+    <button type="button" id="editBtn" class="editbtn">Edit</button>
+    <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_note">
       <input type="hidden" name="book" value="<?= e($book['id']) ?>">
@@ -459,7 +625,7 @@ if ($book && $noteId !== '') {
 <?php else: ?>
   <!-- ===================== BOOK NOTE EDITOR ===================== -->
   <?php $noteDefault = date('m/d/Y h:i a', (int) ($curNote['created'] ?? time())) . ' - Note'; ?>
-  <div class="backbar"><a href="?book=<?= urlencode($book['id']) ?>">&larr; <?= e($book['title'] ?? 'Book') ?></a></div>
+  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
   <form class="editor" method="post" action="">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="save_note">
@@ -477,6 +643,14 @@ if ($book && $noteId !== '') {
 </div>
 <?php render_tabbar('books'); ?>
 <script>
+  // ---- Username dropdown ----
+  const userBtn = document.getElementById('userBtn');
+  const userMenu = document.getElementById('userMenu');
+  if (userBtn && userMenu) {
+    userBtn.addEventListener('click', (e) => { e.stopPropagation(); userMenu.hidden = !userMenu.hidden; });
+    document.addEventListener('click', (e) => { if (!userMenu.hidden && !userMenu.contains(e.target)) userMenu.hidden = true; });
+  }
+
   // ---- Undo appears only right after a delete (server redirects with ?undo=1) ----
   const undoBtn = document.getElementById('undoBtn');
   if (undoBtn) undoBtn.addEventListener('click', () => document.getElementById('undoForm').submit());
@@ -502,6 +676,39 @@ if ($book && $noteId !== '') {
   document.querySelectorAll('.booklink').forEach(a => {
     a.addEventListener('click', e => { if (document.body.classList.contains('editing')) e.preventDefault(); });
   });
+
+  // ---- Editable star rating (book page) ----
+  const starWrap = document.querySelector('.stars.editable');
+  if (starWrap) {
+    const book = starWrap.dataset.book;
+    starWrap.querySelectorAll('.star').forEach(st => {
+      st.addEventListener('click', () => {
+        const v = +st.dataset.v;
+        const cur = +starWrap.dataset.rating;
+        const val = (v === cur) ? 0 : v;               // click the current rating to clear it
+        starWrap.dataset.rating = val;
+        starWrap.querySelectorAll('.star').forEach(s => s.classList.toggle('on', +s.dataset.v <= val));
+        const body = new URLSearchParams({ csrf: '<?= $csrf ?>', action: 'set_rating', book, rating: val });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => {});
+      });
+    });
+  }
+
+  // ---- Read / Want-to-read flags (book page) ----
+  const flags = document.querySelector('.bh-flags');
+  if (flags) {
+    const book = flags.dataset.book;
+    const post = (action, value) => {
+      const body = new URLSearchParams({ csrf: '<?= $csrf ?>', action, book, value: value ? '1' : '' });
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => {});
+    };
+    const readChk = document.getElementById('readChk');
+    const wantChk = document.getElementById('wantChk');
+    const pastChk = document.getElementById('pastChk');
+    if (readChk) readChk.addEventListener('change', () => post('set_read', readChk.checked));
+    if (wantChk) wantChk.addEventListener('change', () => post('set_want', wantChk.checked));
+    if (pastChk) pastChk.addEventListener('change', () => post('set_past', pastChk.checked));
+  }
 
   // ---- Search modal (books list only) ----
   const modal = document.getElementById('searchModal');
