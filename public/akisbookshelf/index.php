@@ -5,8 +5,19 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
-require_once $__libDir . '/tabbar.php';
-require_login('Books');
+require_login("Aki's Bookshelf");
+// Standalone, private app — only aki may use it. The site login session is
+// shared, so we don't destroy it; we just refuse others and offer a log out.
+if (current_user() !== 'aki') {
+    http_response_code(403);
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+       . '<title>Aki\'s Bookshelf</title>'
+       . '<body style="font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:2rem;margin:0">'
+       . '<div><p style="font-size:1.15rem;margin:0 0 1rem">This bookshelf is aki\'s.</p>'
+       . '<p style="margin:0"><a href="?logout" style="color:#34d399">Log out</a> and sign in as aki.</p></div></body>';
+    exit;
+}
 
 $cfg       = app_config();
 $booksFile = user_data_file($cfg['data_dir'], 'books');       // array of book cards
@@ -24,6 +35,14 @@ function bnotes_save(string $f, array $m): void { store_write($f, $m); }
 function cover_url(?int $id, string $size = 'M'): string
 {
     return $id ? "https://covers.openlibrary.org/b/id/{$id}-{$size}.jpg" : '';
+}
+
+/** Best cover URL for a book: by Open Library cover id, else by ISBN (Goodreads imports). */
+function book_cover(array $b, string $size = 'M'): string
+{
+    if (!empty($b['cover'])) { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
+    if (!empty($b['isbn']))  { return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode((string) $b['isbn']) . "-{$size}.jpg?default=false"; }
+    return '';
 }
 
 /** 5-star rating: filled up to $rating. Editable version is wired up in JS. */
@@ -177,6 +196,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         echo json_encode(['ok' => true, 'value' => $val]);
         exit;
     }
+    if ($action === 'add_to_folder' || $action === 'remove_from_folder') {
+        $fname = trim((string) ($_POST['folder'] ?? ''));
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) {
+                $fl = array_values(array_filter(array_map('strval', $b['folders'] ?? []), fn($x) => $x !== ''));
+                if ($action === 'add_to_folder') {
+                    if ($fname !== '' && !in_array($fname, $fl, true)) { $fl[] = mb_substr($fname, 0, 60); }
+                } else {
+                    $fl = array_values(array_filter($fl, fn($x) => $x !== $fname));
+                }
+                $b['folders'] = $fl;
+                break;
+            }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Location: ' . $bookUrl);
+        exit;
+    }
 
     // ----- Per-book notes (completely separate from the Notes tab) -----
     $map   = bnotes_load($notesFile);
@@ -258,6 +297,18 @@ if ($book && $noteId !== '') {
     foreach ($bookNotes as $n) { if (($n['id'] ?? '') === $noteId) { $curNote = $n; break; } }
 }
 
+// Folders (a book's Goodreads shelves become folders inside Library).
+$folder     = (string) ($_GET['folder'] ?? '');
+$allFolders = [];
+foreach ($books as $b) {
+    foreach (($b['folders'] ?? []) as $fn) {
+        $fn = (string) $fn;
+        if ($fn !== '' && !in_array($fn, $allFolders, true)) { $allFolders[] = $fn; }
+    }
+}
+natcasesort($allFolders);
+$allFolders = array_values($allFolders);
+
 /** Consistent header: ‹ back (top-left) + title, and a username dropdown on the right. */
 function books_header(string $titleHtml): void
 {
@@ -279,12 +330,12 @@ function books_header(string $titleHtml): void
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Books</title>
+  <title>Aki&#39;s Bookshelf</title>
   <meta name="theme-color" content="#111111">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Books">
+  <meta name="apple-mobile-web-app-title" content="Aki&#39;s Bookshelf">
   <link rel="apple-touch-icon" href="/reminders/icon-180.png">
   <link rel="icon" href="/reminders/icon-192.png">
   <link rel="manifest" href="/reminders/manifest.webmanifest">
@@ -317,15 +368,24 @@ function books_header(string $titleHtml): void
     .usermenu .menu a { display: block; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
     .usermenu .menu a:hover { background: #2a2a2a; }
 
-    /* Shelf tab bar (Library / Read / Want To Read) */
-    .shelfbar { display: flex; background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 3px; margin-bottom: 1.1rem; }
+    /* Bottom main menu bar (standalone app): Library / Read / Want To Read / Data */
+    body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+    .shelfbar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: #161616; border-top: 1px solid #2a2a2a;
+      padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .shelfbar .inner {
+      display: flex; gap: 3px; width: 100%; max-width: 480px; margin: 0 auto;
+      background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 3px;
+    }
     .shelfbar a {
-      flex: 1; text-align: center; padding: 0.5rem 0.3rem; text-decoration: none; color: #888;
-      font-size: 0.85rem; font-weight: 600; border-radius: 8px;
+      flex: 1; text-align: center; padding: 0.55rem 0.3rem; text-decoration: none; color: #888;
+      font-size: 0.82rem; font-weight: 600; border-radius: 8px;
     }
     .shelfbar a:hover { color: #ccc; }
     .shelfbar a.active { background: #2a2a2a; color: #34d399; }
-    @media (max-width: 380px) { .shelfbar a { font-size: 0.76rem; } }
+    @media (max-width: 400px) { .shelfbar a { font-size: 0.7rem; } }
 
     /* Top bar */
     .bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1.25rem; }
@@ -396,6 +456,31 @@ function books_header(string $titleHtml): void
     .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: #999; }
     .stat .lbl span { display: block; font-size: 0.72rem; color: #666; margin-top: 0.15rem; }
 
+    /* Folders (Goodreads shelves) inside Library */
+    .folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+    .foldertile {
+      display: flex; flex-direction: column; justify-content: center; gap: 0.2rem;
+      aspect-ratio: 3 / 2; padding: 0.9rem; text-decoration: none; color: #eee;
+      background: #17140f; border: 1px solid #3a3320; border-radius: 10px;
+    }
+    .foldertile:hover { border-color: #f0b429; }
+    .foldertile .ficon { font-size: 1.6rem; }
+    .foldertile .fname { font-weight: 700; font-size: 0.95rem; word-break: break-word; }
+    .foldertile .fcount { font-size: 0.75rem; color: #999; }
+    .folderback { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
+    .folderback a { color: #34d399; text-decoration: none; font-size: 0.9rem; }
+    .folderback .folder-h { font-weight: 700; color: #f0b429; }
+
+    .bh-folders { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 1.25rem; }
+    .bh-folders .flabel { font-size: 0.78rem; color: #777; }
+    .bh-folders .ftag { display: inline-flex; align-items: center; gap: 0.3rem; background: #17140f; border: 1px solid #3a3320; color: #f0b429; border-radius: 999px; padding: 0.2rem 0.6rem; font-size: 0.82rem; }
+    .bh-folders .ftag-x { background: none; border: none; color: #a08a3a; cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 0; }
+    .bh-folders .ftag-x:hover { color: #f66; }
+    .bh-folders .addfolder { margin: 0; }
+    .bh-folders .addfolder input { width: 110px; padding: 0.25rem 0.6rem; background: #1a1a1a; border: 1px dashed #3a3320; border-radius: 999px; color: #f0b429; font-size: 0.82rem; }
+    .bh-folders .addfolder input::placeholder { color: #a08a3a; }
+    .bh-folders .addfolder input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+
     /* Search modal */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 60; display: none; align-items: flex-start; justify-content: center; padding: 1.2rem 1rem; }
     .modal-backdrop.open { display: flex; }
@@ -448,21 +533,13 @@ function books_header(string $titleHtml): void
     .editor .meta { font-size: 0.72rem; color: #666; }
     .editor button.del { margin-left: auto; background: none; border: none; color: #666; font-size: 0.8rem; cursor: pointer; }
     .editor button.del:hover { color: #f66; }
-<?= tabbar_styles() ?>
   </style>
 </head>
 <body>
 <div class="wrap">
 <?php if (!$book): ?>
   <!-- ===================== BOOKS LIST ===================== -->
-  <?php books_header('<h1>Books</h1>'); ?>
-
-  <div class="shelfbar">
-    <a class="<?= $shelf === 'library' ? 'active' : '' ?>" href="?shelf=library">Library</a>
-    <a class="<?= $shelf === 'read' ? 'active' : '' ?>" href="?shelf=read">Read</a>
-    <a class="<?= $shelf === 'want' ? 'active' : '' ?>" href="?shelf=want">Want To Read</a>
-    <a class="<?= $shelf === 'data' ? 'active' : '' ?>" href="?shelf=data">Data</a>
-  </div>
+  <?php books_header('<h1>Aki&rsquo;s Bookshelf</h1>'); ?>
 
   <?php if ($shelf === 'data'): ?>
     <?php
@@ -492,25 +569,50 @@ function books_header(string $titleHtml): void
   </div>
 
   <?php
-    $shown = $books;
-    if ($shelf === 'read') { $shown = array_values(array_filter($books, fn($b) => ((int) ($b['rating'] ?? 0)) > 0 || !empty($b['past']))); }
-    elseif ($shelf === 'want') { $shown = array_values(array_filter($books, fn($b) => !empty($b['want']))); }
+    $inFolder  = ($shelf === 'library' && $folder !== '' && in_array($folder, $allFolders, true));
+    $showTiles = ($shelf === 'library' && !$inFolder);
+    if ($shelf === 'read') {
+        $shown = array_values(array_filter($books, fn($b) => ((int) ($b['rating'] ?? 0)) > 0 || !empty($b['past'])));
+    } elseif ($shelf === 'want') {
+        $shown = array_values(array_filter($books, fn($b) => !empty($b['want'])));
+    } elseif ($inFolder) {
+        $shown = array_values(array_filter($books, fn($b) => in_array($folder, $b['folders'] ?? [], true)));
+    } else {
+        $shown = array_values(array_filter($books, fn($b) => empty($b['folders'])));   // Library top level: loose books only
+    }
   ?>
-  <?php if (!$shown): ?>
+  <?php if ($inFolder): ?>
+    <div class="folderback"><a href="?shelf=library">&larr; Library</a><span class="folder-h">&#128193; <?= e($folder) ?></span></div>
+  <?php endif; ?>
+  <?php if ($showTiles && $allFolders): ?>
+    <div class="folders">
+      <?php foreach ($allFolders as $fn): ?>
+        <?php $fcnt = count(array_filter($books, fn($b) => in_array($fn, $b['folders'] ?? [], true))); ?>
+        <a class="foldertile" href="?shelf=library&amp;folder=<?= urlencode($fn) ?>">
+          <span class="ficon">&#128193;</span>
+          <span class="fname"><?= e($fn) ?></span>
+          <span class="fcount"><?= $fcnt ?> book<?= $fcnt === 1 ? '' : 's' ?></span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+  <?php if (!$shown && !($showTiles && $allFolders)): ?>
     <p class="empty">
-      <?php if ($shelf === 'read'): ?>No books marked read yet.
+      <?php if ($shelf === 'read'): ?>No books rated yet — rate a book to mark it read.
       <?php elseif ($shelf === 'want'): ?>Nothing on your Want&nbsp;To&nbsp;Read shelf yet.
+      <?php elseif ($inFolder): ?>No books in this folder.
       <?php else: ?>No books yet. Tap <strong>+ Add book</strong> to search and pick a cover.<?php endif; ?>
     </p>
-  <?php else: ?>
+  <?php endif; ?>
+  <?php if ($shown): ?>
     <div class="shelf">
       <?php foreach ($shown as $b): ?>
         <div class="bookcard" data-id="<?= e($b['id']) ?>">
           <a class="booklink" href="?book=<?= urlencode($b['id']) ?>">
             <span class="coverbox">
               <span class="ph"><?= e($b['title'] ?? '') ?></span>
-              <?php if (!empty($b['cover'])): ?>
-                <img src="<?= e(cover_url((int) $b['cover'], 'M')) ?>" alt="" loading="lazy" onerror="this.remove()">
+              <?php $cu = book_cover($b, 'M'); if ($cu !== ''): ?>
+                <img src="<?= e($cu) ?>" alt="" loading="lazy" onerror="this.remove()">
               <?php endif; ?>
             </span>
             <span class="btitle"><?= e($b['title'] ?? 'Untitled') ?></span>
@@ -571,8 +673,8 @@ function books_header(string $titleHtml): void
   <div class="bookhead">
     <span class="coverbox">
       <span class="ph"><?= e($book['title'] ?? '') ?></span>
-      <?php if (!empty($book['cover'])): ?>
-        <img src="<?= e(cover_url((int) $book['cover'], 'M')) ?>" alt="" onerror="this.remove()">
+      <?php $cu = book_cover($book, 'M'); if ($cu !== ''): ?>
+        <img src="<?= e($cu) ?>" alt="" onerror="this.remove()">
       <?php endif; ?>
     </span>
     <div>
@@ -587,6 +689,28 @@ function books_header(string $titleHtml): void
         <div class="flaghint">Rate it above to mark it read.</div>
       </div>
     </div>
+  </div>
+
+  <div class="bh-folders">
+    <span class="flabel">Folders:</span>
+    <?php foreach (($book['folders'] ?? []) as $fn): ?>
+      <span class="ftag"><?= e($fn) ?>
+        <form method="post" action="" style="display:inline;margin:0">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="remove_from_folder">
+          <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+          <input type="hidden" name="folder" value="<?= e($fn) ?>">
+          <button type="submit" class="ftag-x" title="Remove from folder">&times;</button>
+        </form>
+      </span>
+    <?php endforeach; ?>
+    <form method="post" action="" class="addfolder" onsubmit="return this.folder.value.trim()!==''">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="add_to_folder">
+      <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+      <input type="text" name="folder" placeholder="+ folder" maxlength="60" autocomplete="off" list="folderlist">
+    </form>
+    <datalist id="folderlist"><?php foreach ($allFolders as $fn): ?><option value="<?= e($fn) ?>"></option><?php endforeach; ?></datalist>
   </div>
 
   <div class="bar">
@@ -648,7 +772,14 @@ function books_header(string $titleHtml): void
   </form>
 <?php endif; ?>
 </div>
-<?php render_tabbar('books'); ?>
+<nav class="shelfbar">
+  <div class="inner">
+    <a href="?shelf=library" class="<?= (!$book && $shelf === 'library') ? 'active' : '' ?>">Library</a>
+    <a href="?shelf=read" class="<?= (!$book && $shelf === 'read') ? 'active' : '' ?>">Read</a>
+    <a href="?shelf=want" class="<?= (!$book && $shelf === 'want') ? 'active' : '' ?>">Want To Read</a>
+    <a href="?shelf=data" class="<?= (!$book && $shelf === 'data') ? 'active' : '' ?>">Data</a>
+  </div>
+</nav>
 <script>
   // ---- Username dropdown ----
   const userBtn = document.getElementById('userBtn');
