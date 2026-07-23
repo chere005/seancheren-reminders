@@ -332,7 +332,6 @@ $sectionInput =
       flex: 1 1 100%; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 1rem;
     }
-    form.add button[type=submit] { margin-left: auto; }   /* Add sits at the row's right edge */
     form.add input[type=date] {
       padding: 0.6rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
@@ -349,6 +348,10 @@ $sectionInput =
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
     body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
+    body:not(.show-done) li.done { display: none; }
+    body:not(.show-done) footer { display: none; }
     form.add .adddate {
       background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
       padding: 0 0.8rem; height: 100%; min-height: 2.4rem; font-size: 0.9rem; cursor: pointer;
@@ -461,8 +464,9 @@ $sectionInput =
       <option value="date">Sort: Date</option>
       <option value="name">Sort: Name</option>
     </select>
-    <button type="submit">Add</button>
+    <button type="button" id="doneBtn" class="editbtn">DONE?</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
+    <button type="submit">Add</button>
   </form>
 
   <?php if (!$items && !$sections): ?>
@@ -522,6 +526,14 @@ $sectionInput =
   editBtn.addEventListener('click', () => {
     const on = document.body.classList.toggle('editing');
     editBtn.textContent = on ? 'Done' : 'Edit';
+  });
+
+  // ----- "DONE?" toggle: reveal completed reminders (and the clear button) -----
+  const doneBtn = document.getElementById('doneBtn');
+  if (localStorage.getItem('remShowDone') === '1') document.body.classList.add('show-done');
+  doneBtn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('show-done');
+    localStorage.setItem('remShowDone', on ? '1' : '0');
   });
 
   // ----- Sort menu (Manual = the saved drag order, via data-pos) -----
