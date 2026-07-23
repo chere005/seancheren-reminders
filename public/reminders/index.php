@@ -474,7 +474,7 @@ $sectionInput =
       <option value="date">Sort: Date</option>
       <option value="name">Sort: Name</option>
     </select>
-    <button type="button" id="doneBtn" class="editbtn">DONE?</button>
+    <button type="button" id="doneBtn" class="editbtn">Show All</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="submit">Add</button>
   </form>
