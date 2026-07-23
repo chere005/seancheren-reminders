@@ -141,8 +141,12 @@ $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
-    if (!empty($r['due']) && strpos($r['due'], $monthPrefix) === 0) {
-        $byDay[$r['due']][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '', 'done' => !empty($r['done'])];
+    if (empty($r['due'])) { continue; }
+    // Open reminders from a past date roll forward onto today; done + future stay on their date.
+    $eff = (empty($r['done']) && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
+    if (strpos($eff, $monthPrefix) === 0) {
+        $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
+                          'done' => !empty($r['done']), 'rolled' => ($eff !== $r['due'])];
     }
 }
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'events')) as $ev) {
@@ -375,7 +379,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             <?php
               $dcls = $ev['kind'];
               if ($ev['kind'] === 'reminder') {
-                  $dcls .= $ev['done'] ? ' done' : ($ymd < $todayYmd ? ' overdue' : '');
+                  $dcls .= $ev['done'] ? ' done' : (($ymd < $todayYmd || !empty($ev['rolled'])) ? ' overdue' : '');
               }
             ?>
             <span class="dot <?= $dcls ?>"></span>
@@ -554,7 +558,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       return;
     }
     for (const it of items) {
-      const overdue = it.kind === 'reminder' && !it.done && date < TODAY;
+      const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
       const row = document.createElement('div');
       row.className = 'dp-item' + (it.done ? ' done' : '');
       // Reminders can be checked off right here.
