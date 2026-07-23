@@ -20,11 +20,7 @@ $dataDir = rtrim($cfg['data_dir'], '/');
 
 function safe_user(string $u): string { return preg_replace('/[^A-Za-z0-9_-]/', '_', $u); }
 function ufile(string $dir, string $user, string $base): string { return "$dir/{$base}-" . safe_user($user) . ".json"; }
-function loadlist(string $f): array {
-    if (!is_file($f)) { return []; }
-    $d = json_decode((string) file_get_contents($f), true);
-    return is_array($d) ? $d : [];
-}
+function loadlist(string $f): array { return store_read($f); }
 
 /** Upcoming reminders (open, overdue rolled to today) + events + dated notes, next 21 days. */
 function build_feed(string $dir, string $user): array {
@@ -59,7 +55,7 @@ if (isset($_GET['token'])) {
     $token = (string) $_GET['token'];
     $owner = null;
     foreach (glob("$dataDir/token-*.json") as $f) {
-        $t = json_decode((string) file_get_contents($f), true);
+        $t = store_read($f);
         if (!empty($t['token']) && hash_equals((string) $t['token'], $token)) {
             $owner = preg_replace('/^token-(.*)\.json$/', '$1', basename($f));
             break;
@@ -78,7 +74,7 @@ $t         = loadlist($tokenFile);
 if (empty($t['token'])) {
     if (!is_dir($dataDir)) { mkdir($dataDir, 0700, true); }
     $t = ['token' => bin2hex(random_bytes(16))];
-    file_put_contents($tokenFile, json_encode($t), LOCK_EX);
+    store_write($tokenFile, $t);
 }
 $token   = $t['token'];
 $feedUrl = 'https://seancheren.com/calendar/feed.php?token=' . $token;
