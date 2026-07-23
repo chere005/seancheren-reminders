@@ -208,6 +208,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $list        = load_reminders($dataFile);
     $sectionSet  = [];
     foreach ($list as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
+    $undoFlag = '';   // set after a delete so the page shows the Undo button
 
     switch ($_POST['action']) {
         case 'add':
@@ -245,6 +246,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $id = (string) ($_POST['id'] ?? '');
             foreach ($list as $r) { if (!is_section($r) && ($r['id'] ?? '') === $id) { $_SESSION['undo_rem'] = $r; break; } }
             $list = array_values(array_filter($list, fn($r) => is_section($r) || ($r['id'] ?? '') !== $id));
+            $undoFlag = '&undo=1';
             break;
 
         case 'undo':
@@ -261,7 +263,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
 
     save_reminders($dataFile, $list);
-    header('Location: ' . $backUrl);
+    header('Location: ' . $backUrl . $undoFlag);
     exit;
 }
 
@@ -365,8 +367,8 @@ $sectionInput =
     form.add .editbtn:hover { border-color: #888; color: #fff; }
     form.add #editBtn { margin-left: auto; }              /* Edit + Add hug the right edge */
     form.add #undoBtn { display: none; margin-left: auto; }
-    body.editing form.add #undoBtn { display: inline-block; }
-    body.editing form.add #editBtn { margin-left: 0; }   /* Undo takes the auto-margin in edit mode */
+    body.can-undo form.add #undoBtn { display: inline-block; }
+    body.can-undo form.add #editBtn { margin-left: 0; }   /* Undo takes the auto-margin right after a delete */
     body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
@@ -566,11 +568,18 @@ $sectionInput =
   };
   const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
+    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('remEditing', on ? '1' : '0');
     refreshShowDone();                                   // editing always shows completed
   };
   setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
+  // Undo shows only immediately after a delete (server redirects back with ?undo=1).
+  if (new URLSearchParams(location.search).get('undo') === '1') {
+    document.body.classList.add('can-undo');
+    const u = new URL(location.href); u.searchParams.delete('undo');
+    history.replaceState(null, '', u);
+  }
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
   doneBtn.addEventListener('click', () => {
