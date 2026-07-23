@@ -130,7 +130,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $id      = bin2hex(random_bytes(6));
             $notes[] = [
                 'id'      => $id,
-                'title'   => 'Untitled note',
+                'title'   => date('m/d/Y') . ' - Note',
                 'date'    => null,
                 'body'    => '',
                 'folder'  => $folder,
@@ -153,7 +153,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
             foreach ($notes as &$n) {
                 if (!is_section($n) && $n['id'] === $id) {
-                    $n['title']   = $title === '' ? 'Untitled note' : mb_substr($title, 0, 200);
+                    $n['title']   = $title === '' ? (date('m/d/Y', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
                     $n['date']    = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? $date : null;
                     $n['body']    = mb_substr($body, 0, 20000);
                     $n['folder']  = $folder;
@@ -427,7 +427,10 @@ function render_note_rows(array $rows, string $view): void
 <?php else: ?>
   <!-- ===== EDITOR VIEW ===== -->
   <div class="backbar"><a href="<?= e($listUrl) ?>">&larr; All notes</a></div>
-  <?php $hasDate = !empty($current['date']); ?>
+  <?php
+    $hasDate     = !empty($current['date']);
+    $noteDefault = date('m/d/Y', (int) ($current['created'] ?? time())) . ' - Note';
+  ?>
   <form class="editor" method="post" action="">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="save">
@@ -435,7 +438,7 @@ function render_note_rows(array $rows, string $view): void
     <input type="hidden" name="id" value="<?= e($current['id']) ?>">
     <div class="row">
       <input type="text" name="title" placeholder="Title" maxlength="200"
-             value="<?= e($current['title'] ?? '') ?>" required>
+             value="<?= e($current['title'] ?? '') ?>" data-default="<?= e($noteDefault) ?>" required>
       <button type="button" class="adddate" id="addDateBtn" <?= $hasDate ? 'hidden' : '' ?>>+ Add date</button>
       <span class="datewrap" id="dateWrap" <?= $hasDate ? '' : 'hidden' ?>>
         <input type="date" name="date" id="dateInput" title="Optional date"
@@ -484,6 +487,14 @@ function render_note_rows(array $rows, string $view): void
     document.getElementById('clearDateBtn').addEventListener('click', () => {
       input.value = ''; wrap.hidden = true; addBtn.hidden = false;
     });
+  }
+
+  // Editor: the default title acts like a placeholder — clears when you type, returns if left blank.
+  const titleInput = document.querySelector('.editor input[name=title]');
+  if (titleInput) {
+    const DEF = titleInput.dataset.default || '';
+    titleInput.addEventListener('focus', () => { if (titleInput.value === DEF) titleInput.select(); });
+    titleInput.addEventListener('blur', () => { if (titleInput.value.trim() === '') titleInput.value = DEF; });
   }
 
   // List: sort each group live, remembered in localStorage.
