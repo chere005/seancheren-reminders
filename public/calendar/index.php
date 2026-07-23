@@ -206,6 +206,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;
     }
     header h1 { font-size: 1.35rem; }
+    header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
+    header .widgetlink {
+      color: #38bdf8; text-decoration: none; font-size: 0.78rem;
+      border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
+    }
+    header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
@@ -342,10 +348,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <div class="cal-top">
  <div class="wrap">
   <header>
-    <h1>Calendar</h1>
+    <div class="titlebar">
+      <h1>Calendar</h1>
+      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
+    </div>
     <nav>
       <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="/calendar/feed.php">Widget</a>
       <a href="/reminders/?logout">Log out</a>
     </nav>
   </header>
