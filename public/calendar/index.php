@@ -125,12 +125,11 @@ $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
-    if (empty($r['due'])) { continue; }
-    // Open reminders from a past date roll forward onto today; done + future stay on their date.
-    $eff = (empty($r['done']) && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
+    if (empty($r['due']) || !empty($r['done'])) { continue; }   // done reminders are removed from the calendar
+    $eff = ($r['due'] < $todayYmd) ? $todayYmd : $r['due'];      // overdue rolls onto today; future stays put
     if (strpos($eff, $monthPrefix) === 0) {
         $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                          'done' => !empty($r['done']), 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
+                          'done' => false, 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
