@@ -6,6 +6,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 }
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
+require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
 require_login('Notes');
 
@@ -397,16 +398,17 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .foldernav .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
     .foldernav .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= tabbar_styles() ?>
+<?= chrome_styles() ?>
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Notes</h1>
-    <nav>
-      <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="/reminders/?logout">Log out</a>
-    </nav>
+    <div class="hleft">
+      <?= back_button() ?>
+      <h1>Notes</h1>
+    </div>
+    <?= render_user_menu() ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -572,5 +574,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   }
 
 </script>
+<?= chrome_script() ?>
 </body>
 </html>

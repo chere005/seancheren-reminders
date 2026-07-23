@@ -6,6 +6,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 }
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
+require_once $__libDir . '/chrome.php';
 require_login('Habits');
 
 $cfg      = app_config();
@@ -134,16 +135,17 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
     .empty { color: #666; text-align: center; padding: 2rem 0; }
 <?= tabbar_styles() ?>
+<?= chrome_styles() ?>
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Habits</h1>
-    <nav>
-      <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="/reminders/?logout">Log out</a>
-    </nav>
+    <div class="hleft">
+      <?= back_button() ?>
+      <h1>Habits</h1>
+    </div>
+    <?= render_user_menu() ?>
   </header>
 
   <div class="bar">
@@ -224,5 +226,6 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     });
   });
 </script>
+<?= chrome_script() ?>
 </body>
 </html>

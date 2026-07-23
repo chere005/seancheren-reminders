@@ -6,6 +6,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 }
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
+require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
 require_login('Reminders');
 
@@ -454,22 +455,23 @@ $sectionInput =
     .foldernav .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
     .foldernav .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= tabbar_styles() ?>
+<?= chrome_styles() ?>
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <div class="titlebar">
-        <h1>Reminders</h1>
-        <button type="button" id="doneBtn" class="showall">Show All</button>
+    <div class="hleft">
+      <?= back_button() ?>
+      <div>
+        <div class="titlebar">
+          <h1>Reminders</h1>
+          <button type="button" id="doneBtn" class="showall">Show All</button>
+        </div>
+        <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
-      <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
     </div>
-    <nav>
-      <span class="who"><?= e(current_user() ?? '') ?></span>
-      <a href="?logout">Log out</a>
-    </nav>
+    <?= render_user_menu() ?>
   </header>
 
   <?php render_folder_nav($folders, $view, $csrf, $sectionInput); ?>
@@ -661,5 +663,6 @@ $sectionInput =
   document.addEventListener('pointerup', endDrag);
   document.addEventListener('pointercancel', endDrag);
 </script>
+<?= chrome_script() ?>
 </body>
 </html>
