@@ -65,11 +65,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                    'due' => $dateOk ? $date : null, 'done' => false, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_note' && $text !== '') {
-        $file = user_data_file($cfg['data_dir'], 'notes');
-        $list = load_json_list($file);
-        $list[] = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($text, 0, 200),
+        $file  = user_data_file($cfg['data_dir'], 'notes');
+        $list  = load_json_list($file);
+        $newId = bin2hex(random_bytes(6));
+        $list[] = ['id' => $newId, 'title' => mb_substr($text, 0, 200),
                    'date' => $dateOk ? $date : null, 'body' => '', 'created' => time(), 'updated' => time()];
         save_json_list($file, $list);
+        header('Location: /notes/?id=' . $newId);   // jump straight to the note editor
+        exit;
     } elseif ($action === 'toggle_reminder' && $id !== '') {
         $file = user_data_file($cfg['data_dir'], 'reminders');
         $list = load_json_list($file);
@@ -200,6 +203,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
+    header #calShowAll { color: #888; border-color: #333; }
+    header #calShowAll:hover { border-color: #888; color: #ccc; }
     body.show-done header #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -356,10 +361,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <header>
     <div class="titlebar">
       <h1>Calendar</h1>
-      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
       <button type="button" id="calShowAll" class="widgetlink" style="background:none;cursor:pointer;">Show All</button>
     </div>
     <nav>
+      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
       <span class="who"><?= e(current_user() ?? '') ?></span>
       <a href="/reminders/?logout">Log out</a>
     </nav>
@@ -661,7 +666,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         document.getElementById('delItemForm').submit();
       });
       row.appendChild(del);
-      row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date, it.time || ''));
+      row.addEventListener('click', () => {
+        if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
+        openEdit(it.id, it.kind, it.text, date, it.time || '');
+      });
       dpList.appendChild(row);
     }
   };
