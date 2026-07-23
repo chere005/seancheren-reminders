@@ -1,0 +1,12 @@
+# Secrets & credentials — never commit
+lib/config.php
+
+# Local reminder data
+data/
+
+# Stray editor/OS cruft
+*.swp
+.DS_Store
+
+# Sublime per-user session state (keep the .sublime-project, ignore the workspace)
+*.sublime-workspace

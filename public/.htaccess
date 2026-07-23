@@ -1,0 +1,6 @@
+# Secure session cookie flags
+php_flag session.cookie_httponly on
+php_value session.cookie_samesite Strict
+
+# Don't expose server info
+ServerSignature Off
