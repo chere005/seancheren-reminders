@@ -13,29 +13,14 @@ const CHAT_MAX_MESSAGES = 500;   // keep the last N in the record
 const CHAT_MAX_TEXT     = 1000;
 const CHAT_MAX_NAME      = 40;
 
-function load_chat(string $file): array
-{
-    if (!is_file($file)) {
-        return [];
-    }
-    $data = json_decode((string) file_get_contents($file), true);
-    return is_array($data) ? $data : [];
-}
+function load_chat(string $file): array { return store_read($file); }
 
 function save_chat(string $file, array $msgs): void
 {
-    $dir = dirname($file);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0700, true);
-    }
     if (count($msgs) > CHAT_MAX_MESSAGES) {
         $msgs = array_slice($msgs, -CHAT_MAX_MESSAGES);
     }
-    file_put_contents(
-        $file,
-        json_encode(array_values($msgs), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
+    store_write($file, array_values($msgs));
 }
 
 function e(?string $s): string

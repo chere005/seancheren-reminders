@@ -10,6 +10,8 @@
  * After this returns, the visitor is authenticated and app_config() is available.
  */
 
+require_once __DIR__ . '/store.php';   // encrypted-at-rest storage helpers
+
 function app_config(): array
 {
     static $config = null;

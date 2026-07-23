@@ -38,27 +38,8 @@ function is_section(array $it): bool
     return ($it['type'] ?? '') === 'section';
 }
 
-function load_reminders(string $file): array
-{
-    if (!is_file($file)) {
-        return [];
-    }
-    $data = json_decode((string) file_get_contents($file), true);
-    return is_array($data) ? $data : [];
-}
-
-function save_reminders(string $file, array $list): void
-{
-    $dir = dirname($file);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0700, true);
-    }
-    file_put_contents(
-        $file,
-        json_encode(array_values($list), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
-}
+function load_reminders(string $file): array { return store_read($file); }
+function save_reminders(string $file, array $list): void { store_write($file, array_values($list)); }
 
 /** Default order for a group: open first, then by due date (nulls last), then newest. */
 function sort_by_date(array $rows): array

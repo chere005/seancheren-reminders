@@ -19,27 +19,8 @@ function e(?string $s): string
     return htmlspecialchars((string) $s, ENT_QUOTES);
 }
 
-function load_json_list(string $file): array
-{
-    if (!is_file($file)) {
-        return [];
-    }
-    $data = json_decode((string) file_get_contents($file), true);
-    return is_array($data) ? $data : [];
-}
-
-function save_json_list(string $file, array $list): void
-{
-    $dir = dirname($file);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0700, true);
-    }
-    file_put_contents(
-        $file,
-        json_encode(array_values($list), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
-}
+function load_json_list(string $file): array { return store_read($file); }
+function save_json_list(string $file, array $list): void { store_write($file, array_values($list)); }
 
 /** File + field names for each item kind. */
 function kind_spec(string $kind): ?array

@@ -10,10 +10,7 @@ const FOLDER_DEFAULT = 'General';
 function folders_load(string $dir): array
 {
     $file = user_data_file($dir, 'folders');
-    $data = is_file($file) ? json_decode((string) file_get_contents($file), true) : [];
-    if (!is_array($data)) {
-        $data = [];
-    }
+    $data = store_read($file);
     foreach (['reminders', 'notes'] as $type) {
         if (empty($data[$type]) || !is_array($data[$type])) {
             $data[$type] = [FOLDER_DEFAULT];
@@ -28,11 +25,7 @@ function folders_load(string $dir): array
 function folders_save(string $dir, array $data): void
 {
     $file = user_data_file($dir, 'folders');
-    $d    = dirname($file);
-    if (!is_dir($d)) {
-        mkdir($d, 0700, true);
-    }
-    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    store_write($file, $data);
 }
 
 /** Clean a user-supplied folder name; returns '' if invalid. */

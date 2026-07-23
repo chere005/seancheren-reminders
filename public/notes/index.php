@@ -37,27 +37,8 @@ function is_section(array $it): bool
     return ($it['type'] ?? '') === 'section';
 }
 
-function load_notes(string $file): array
-{
-    if (!is_file($file)) {
-        return [];
-    }
-    $data = json_decode((string) file_get_contents($file), true);
-    return is_array($data) ? $data : [];
-}
-
-function save_notes(string $file, array $notes): void
-{
-    $dir = dirname($file);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0700, true);
-    }
-    file_put_contents(
-        $file,
-        json_encode(array_values($notes), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
-}
+function load_notes(string $file): array { return store_read($file); }
+function save_notes(string $file, array $notes): void { store_write($file, array_values($notes)); }
 
 // --- Handle mutations (POST -> redirect -> GET) ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
