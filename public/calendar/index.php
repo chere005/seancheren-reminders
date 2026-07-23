@@ -200,6 +200,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
+    body.show-done header #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
@@ -248,8 +249,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .legend .dot.note { background: #8b6ef0; }
 
     /* Day panel (bottom) */
-    .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
-    .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; }
+    .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+    .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; flex: 1; }
+    .dp-head .dp-edit { background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
+    .dp-head .dp-edit:hover { border-color: #888; color: #fff; }
+    body.editing .dp-head .dp-edit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
+    body.editing .dp-item .dp-del { display: inline-block; }
+    .dp-item .dp-del:hover { border-color: #f66; color: #f66; }
     .dp-head .dp-add {
       background: #34d399; color: #06251b; border: none; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; font-weight: 700; cursor: pointer;
@@ -408,6 +417,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
+    <button class="dp-edit" id="dpEdit" type="button">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
@@ -458,6 +468,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <input type="hidden" name="id" id="tgId" value="">
   <input type="hidden" name="ym" value="<?= e($ym) ?>">
   <input type="hidden" name="day" id="tgDay" value="">
+</form>
+
+<!-- Hidden form to quick-delete an item from the day panel (Edit mode) -->
+<form id="delItemForm" method="post" action="" style="display:none">
+  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+  <input type="hidden" name="action" value="delete_item">
+  <input type="hidden" name="kind" id="diKind" value="">
+  <input type="hidden" name="id" id="diId" value="">
+  <input type="hidden" name="ym" value="<?= e($ym) ?>">
+  <input type="hidden" name="day" id="diDay" value="">
 </form>
 
 <?php render_tabbar('calendar'); ?>
@@ -631,6 +651,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.appendChild(od);
       }
       row.appendChild(chev);
+      const del = document.createElement('button');
+      del.className = 'dp-del'; del.textContent = '×'; del.title = 'Delete';
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        document.getElementById('diKind').value = it.kind;
+        document.getElementById('diId').value = it.id;
+        document.getElementById('diDay').value = date;
+        document.getElementById('delItemForm').submit();
+      });
+      row.appendChild(del);
       row.addEventListener('click', () => openEdit(it.id, it.kind, it.text, date, it.time || ''));
       dpList.appendChild(row);
     }
@@ -662,6 +692,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     const on = document.body.classList.toggle('show-done');
     localStorage.setItem('calShowDone', on ? '1' : '0');
     if (selected) renderPanel(selected);
+  });
+
+  // Day-panel Edit mode: reveal × to quick-delete items.
+  const dpEdit = document.getElementById('dpEdit');
+  if (localStorage.getItem('calEditing') === '1') document.body.classList.add('editing');
+  dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
+  dpEdit.addEventListener('click', () => {
+    const on = document.body.classList.toggle('editing');
+    dpEdit.textContent = on ? 'Done' : 'Edit';
+    localStorage.setItem('calEditing', on ? '1' : '0');
   });
 
   document.getElementById('mCancel').addEventListener('click', closeModal);
