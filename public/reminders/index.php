@@ -79,22 +79,26 @@ function sort_by_date(array $rows): array
     return $rows;
 }
 
-/** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive the live sort. */
-function render_rows(array $rows, string $csrf, string $view, string $today): void
+/** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
+function render_rows(array $rows, string $csrf, string $view, string $today, string $section = ''): void
 {
     if (!$rows) {
         return;
     }
-    echo '<ul class="rlist">';
+    static $pos = 0;   // running position across all groups = the manual order
+    echo '<ul class="rlist" data-section="' . e($section) . '">';
     foreach ($rows as $r) {
         $done    = !empty($r['done']);
         $overdue = !empty($r['due']) && !$done && $r['due'] < $today;
         ?>
         <li class="<?= $done ? 'done' : '' ?>"
+            data-id="<?= e($r['id']) ?>"
+            data-pos="<?= $pos++ ?>"
             data-done="<?= $done ? '1' : '0' ?>"
             data-due="<?= e($r['due'] ?? '') ?>"
             data-text="<?= e($r['text'] ?? '') ?>"
             data-created="<?= (int) ($r['created'] ?? 0) ?>">
+          <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="toggle">
@@ -177,6 +181,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // Reorder / re-section reminders after a drag (AJAX). order = [{id, section}, …] top-to-bottom.
+    if ($_POST['action'] === 'reorder') {
+        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        if (!is_array($order)) { $order = []; }
+        $list = load_reminders($dataFile);
+
+        $validSections = [];
+        $sectionsList  = [];
+        $byId          = [];
+        foreach ($list as $it) {
+            if (is_section($it)) { $sectionsList[] = $it; $validSections[$it['name']] = true; }
+            else { $byId[$it['id']] = $it; }
+        }
+
+        $newReminders = [];
+        $used = [];
+        foreach ($order as $o) {
+            $id = (string) ($o['id'] ?? '');
+            if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
+            $sec = (string) ($o['section'] ?? '');
+            if ($sec !== '' && !isset($validSections[$sec])) { $sec = ''; }
+            $item            = $byId[$id];
+            $item['section'] = $sec;
+            $newReminders[]  = $item;
+            $used[$id]       = true;
+        }
+        // Preserve reminders not in the posted order (e.g. other folders).
+        foreach ($list as $it) {
+            if (!is_section($it) && !isset($used[$it['id']])) { $newReminders[] = $it; }
+        }
+
+        save_reminders($dataFile, array_merge($sectionsList, $newReminders));
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     $list        = load_reminders($dataFile);
     $sectionSet  = [];
     foreach ($list as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
@@ -247,7 +288,8 @@ if ($view !== 'All') {
     $items = array_values(array_filter($items, fn($r) => ($r['folder'] ?? FOLDER_DEFAULT) === $view));
 }
 
-// Split into ungrouped + per-section, each in default (date) order for the no-JS render.
+// Split into ungrouped + per-section. Stored array order = the manual (drag) order;
+// the JS sort menu can re-sort by date/name on top of it.
 $ungrouped = [];
 $grouped   = [];
 foreach ($items as $r) {
@@ -255,8 +297,6 @@ foreach ($items as $r) {
     if ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
     else { $ungrouped[] = $r; }
 }
-$ungrouped = sort_by_date($ungrouped);
-foreach ($grouped as $k => $g) { $grouped[$k] = sort_by_date($g); }
 
 $openCount = count(array_filter($items, fn($r) => empty($r['done'])));
 $doneCount = count($items) - $openCount;
@@ -322,6 +362,12 @@ $sectionInput =
       border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;
     }
     form.add button[type=submit]:hover { background: #fff; }
+    form.add .editbtn {
+      padding: 0.6rem 1rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
+      border-radius: 6px; font-size: 1rem; cursor: pointer;
+    }
+    form.add .editbtn:hover { border-color: #888; color: #fff; }
+    body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     form.add .adddate {
       background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
       padding: 0 0.8rem; height: 100%; min-height: 2.4rem; font-size: 0.9rem; cursor: pointer;
@@ -367,6 +413,18 @@ $sectionInput =
     }
     .check:hover { border-color: #7a7; color: #7a7; }
     .del:hover { border-color: #f66; color: #f66; }
+
+    /* Edit mode: the X buttons + drag handles stay hidden until "Edit" is tapped. */
+    .drag-handle, .del, .section-del { display: none; }
+    body.editing .del, body.editing .section-del { display: inline-block; }
+    body.editing .drag-handle { display: inline-flex; }
+    .drag-handle {
+      flex: 0 0 auto; align-items: center; justify-content: center; width: 1.4rem;
+      color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none;
+    }
+    .drag-handle:active { cursor: grabbing; color: #34d399; }
+    li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+
     .empty { color: #666; text-align: center; padding: 2rem 0; }
     footer { margin-top: 1.5rem; display: flex; justify-content: flex-end; }
     footer button {
@@ -418,10 +476,12 @@ $sectionInput =
       </select>
     <?php endif; ?>
     <select id="sortSel" title="Sort by" aria-label="Sort by">
+      <option value="manual">Sort: Manual</option>
       <option value="date">Sort: Date</option>
       <option value="name">Sort: Name</option>
     </select>
     <button type="submit">Add</button>
+    <button type="button" id="editBtn" class="editbtn">Edit</button>
   </form>
 
   <?php if (!$items && !$sections): ?>
@@ -443,7 +503,7 @@ $sectionInput =
           <button class="section-del" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php render_rows($rows, $csrf, $view, $today); ?>
+      <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
     <?php endforeach; ?>
 
     <?php if ($doneCount): ?>
@@ -476,11 +536,19 @@ $sectionInput =
     dueInput.value = ''; wrap.hidden = true; addBtn.hidden = false;
   });
 
-  // Sort menu: reorder each list live (per group), remembered in localStorage.
+  // ----- Edit mode: reveal the X delete buttons + drag handles -----
+  const editBtn = document.getElementById('editBtn');
+  editBtn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('editing');
+    editBtn.textContent = on ? 'Done' : 'Edit';
+  });
+
+  // ----- Sort menu (Manual = the saved drag order, via data-pos) -----
   const sortSel = document.getElementById('sortSel');
   const applySort = (mode) => {
     document.querySelectorAll('ul.rlist').forEach(ul => {
       Array.from(ul.children).sort((a, b) => {
+        if (mode === 'manual') return (Number(a.dataset.pos) || 0) - (Number(b.dataset.pos) || 0);
         const ad = a.dataset.done === '1', bd = b.dataset.done === '1';
         if (ad !== bd) return ad ? 1 : -1;
         if (mode === 'name') {
@@ -494,13 +562,68 @@ $sectionInput =
       }).forEach(li => ul.appendChild(li));
     });
   };
-  const savedSort = localStorage.getItem('remSort') || 'date';
+  const savedSort = localStorage.getItem('remSort') || 'manual';
   sortSel.value = savedSort;
   applySort(savedSort);
   sortSel.addEventListener('change', () => {
     localStorage.setItem('remSort', sortSel.value);
     applySort(sortSel.value);
   });
+
+  // ----- Drag to reorder (pointer events => works with touch; edit mode only) -----
+  const CSRF = '<?= $csrf ?>', VIEW = '<?= e($view) ?>';
+  let dragLi = null;
+
+  const persistOrder = () => {
+    const order = [];
+    document.querySelectorAll('ul.rlist').forEach(ul => {
+      const section = ul.dataset.section || '';
+      ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
+    });
+    order.forEach((o, i) => {                          // keep Manual order consistent after a drag
+      const li = document.querySelector('li[data-id="' + o.id + '"]');
+      if (li) li.dataset.pos = i;
+    });
+    localStorage.setItem('remSort', 'manual');
+    sortSel.value = 'manual';
+    const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW, order: JSON.stringify(order) });
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+  };
+
+  document.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle || !document.body.classList.contains('editing')) return;
+    dragLi = handle.closest('li[data-id]');
+    if (!dragLi) return;
+    e.preventDefault();
+    dragLi.classList.add('dragging');
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!dragLi) return;
+    e.preventDefault();
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (!under) return;
+    const overLi = under.closest('li[data-id]');
+    if (overLi && overLi !== dragLi) {
+      const rect  = overLi.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      overLi.parentNode.insertBefore(dragLi, after ? overLi.nextSibling : overLi);
+    } else {
+      const ul = under.closest('ul.rlist');
+      if (ul && ul !== dragLi.parentNode) ul.appendChild(dragLi);
+    }
+  }, { passive: false });
+
+  const endDrag = () => {
+    if (!dragLi) return;
+    dragLi.classList.remove('dragging');
+    dragLi = null;
+    persistOrder();
+  };
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
 </script>
 </body>
 </html>
