@@ -208,7 +208,7 @@ if (!$editing) {
 }
 
 /** Echo a list of note rows (nothing if empty). */
-function render_note_rows(array $rows, string $view): void
+function render_note_rows(array $rows, string $view, string $csrf): void
 {
     if (!$rows) { return; }
     echo '<ul class="nlist">';
@@ -221,6 +221,13 @@ function render_note_rows(array $rows, string $view): void
             <?php if ($date !== ''): ?><span class="ndate"><?= e($date) ?></span><?php endif; ?>
             <span class="nchev">&rsaquo;</span>
           </a>
+          <form method="post" action="" class="ndel" onsubmit="return confirm('Delete this note?')">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="id" value="<?= e($n['id']) ?>">
+            <button class="del" type="submit" title="Delete note">&times;</button>
+          </form>
         </li>
         <?php
     }
@@ -281,12 +288,26 @@ function render_note_rows(array $rows, string $view): void
     .section-del:hover { border-color: #f66; color: #f66; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
-    ul.nlist li { border-bottom: 1px solid #222; }
+    ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; }
     .noteitem {
-      display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem;
+      flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem;
       text-decoration: none; color: #eee;
     }
     .noteitem:hover { background: #171717; }
+    /* Edit mode: delete buttons hidden until "Edit" */
+    .ndel .del, .section-del { display: none; }
+    body.editing .ndel .del, body.editing .section-del { display: inline-block; }
+    .ndel .del {
+      background: none; border: 1px solid #444; color: #ccc; cursor: pointer; margin-left: 0.5rem;
+      border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
+    }
+    .ndel .del:hover { border-color: #f66; color: #f66; }
+    .listbar .nedit {
+      padding: 0.5rem 0.9rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
+      border-radius: 6px; font-size: 0.95rem; cursor: pointer;
+    }
+    .listbar .nedit:hover { border-color: #888; color: #fff; }
+    body.editing .listbar .nedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
@@ -374,6 +395,7 @@ function render_note_rows(array $rows, string $view): void
       <option value="name">Sort: Name</option>
       <option value="date">Sort: Date</option>
     </select>
+    <button type="button" id="editBtn" class="nedit">Edit</button>
     <form method="post" action="" style="margin-left:auto">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add">
@@ -386,7 +408,7 @@ function render_note_rows(array $rows, string $view): void
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ New note</strong> to start.</p>
   <?php else: ?>
-    <?php render_note_rows($ungrouped, $view); ?>
+    <?php render_note_rows($ungrouped, $view, $csrf); ?>
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; ?>
@@ -401,7 +423,7 @@ function render_note_rows(array $rows, string $view): void
           <button class="section-del" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php render_note_rows($rows, $view); ?>
+      <?php render_note_rows($rows, $view, $csrf); ?>
     <?php endforeach; ?>
   <?php endif; ?>
 
@@ -476,6 +498,18 @@ function render_note_rows(array $rows, string $view): void
     const DEF = titleInput.dataset.default || '';
     titleInput.addEventListener('focus', () => { if (titleInput.value === DEF) titleInput.select(); });
     titleInput.addEventListener('blur', () => { if (titleInput.value.trim() === '') titleInput.value = DEF; });
+  }
+
+  // List: edit mode reveals delete buttons (persisted across adds, like reminders).
+  const editBtn = document.getElementById('editBtn');
+  if (editBtn) {
+    const setEdit = (on) => {
+      document.body.classList.toggle('editing', on);
+      editBtn.textContent = on ? 'Done' : 'Edit';
+      localStorage.setItem('notesEditing', on ? '1' : '0');
+    };
+    setEdit(localStorage.getItem('notesEditing') === '1');
+    editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   }
 
   // List: sort each group live, remembered in localStorage.
