@@ -232,6 +232,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         echo json_encode(['ok' => true, 'value' => $val]);
         exit;
     }
+    if ($action === 'set_cover') {
+        $u = trim((string) ($_POST['cover_url'] ?? ''));
+        if ($u !== '' && !preg_match('#^https?://#i', $u)) { $u = ''; }   // http(s) only
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) {
+                $b['cover_url'] = $u !== '' ? mb_substr($u, 0, 600) : null;
+                $b['cover']     = null;   // a manual URL overrides any resolved cover id
+                break;
+            }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Location: ' . $bookUrl);
+        exit;
+    }
     if ($action === 'add_to_folder' || $action === 'remove_from_folder') {
         $fname = trim((string) ($_POST['folder'] ?? ''));
         $books = books_load($booksFile);
@@ -455,6 +471,10 @@ function books_header(string $titleHtml): void
     .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: #eee; text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
     .sortmenu a:hover { background: #2a2a2a; }
     .sortmenu a.on { color: #34d399; font-weight: 700; }
+    .setcoverwrap { margin-right: auto; }   /* Set cover sits off to the left */
+    .setcoverform { display: flex; gap: 0.5rem; margin: -0.6rem 0 1.25rem; }
+    .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 0.9rem; }
+    .setcoverform input[type=url]:focus { outline: none; border-color: #888; }
 
     /* Book cards grid */
     .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
@@ -790,6 +810,9 @@ function books_header(string $titleHtml): void
   </div>
 
   <div class="bar">
+    <div class="setcoverwrap">
+      <button type="button" id="setCoverBtn" class="editbtn">Set cover</button>
+    </div>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <form method="post" action="" style="margin:0">
@@ -799,6 +822,13 @@ function books_header(string $titleHtml): void
       <button class="addbook" type="submit">+ New note</button>
     </form>
   </div>
+  <form class="setcoverform" id="setCoverForm" method="post" action="" <?= empty($book['cover_url']) ? 'hidden' : '' ?>>
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="set_cover">
+    <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+    <input type="url" name="cover_url" placeholder="Paste a cover image URL (Amazon, publisher, Archive.org…)" value="<?= e($book['cover_url'] ?? '') ?>">
+    <button type="submit" class="addbook">Save</button>
+  </form>
 
   <?php if (!$bookNotes): ?>
     <p class="empty">No notes for this book yet. Tap <strong>+ New note</strong> to start.</p>
@@ -871,6 +901,16 @@ function books_header(string $titleHtml): void
   if (sortBtn && sortMenu) {
     sortBtn.addEventListener('click', (e) => { e.stopPropagation(); sortMenu.hidden = !sortMenu.hidden; });
     document.addEventListener('click', (e) => { if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.hidden = true; });
+  }
+
+  // ---- Set cover (paste an image URL) ----
+  const setCoverBtn = document.getElementById('setCoverBtn');
+  const setCoverForm = document.getElementById('setCoverForm');
+  if (setCoverBtn && setCoverForm) {
+    setCoverBtn.addEventListener('click', () => {
+      setCoverForm.hidden = !setCoverForm.hidden;
+      if (!setCoverForm.hidden) { const i = setCoverForm.querySelector('input[type=url]'); if (i) i.focus(); }
+    });
   }
 
   // ---- Undo appears only right after a delete (server redirects with ?undo=1) ----
