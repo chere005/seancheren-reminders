@@ -46,6 +46,41 @@ function book_cover(array $b, string $size = 'M'): string
     return '';
 }
 
+/** Build a sort/filter URL preserving the current shelf + folder. */
+function sf_url(string $base, string $sort, string $min): string
+{
+    return $base . '&sort=' . $sort . '&min=' . rawurlencode($min);
+}
+
+/** Echo one book card. Covers load eagerly so the whole shelf fills on open. */
+function render_book_card(array $b, string $csrf, string $shelf): void
+{
+    ?>
+    <div class="bookcard" data-id="<?= e($b['id']) ?>">
+      <a class="booklink" href="?book=<?= urlencode($b['id']) ?>">
+        <span class="coverbox">
+          <span class="ph"><?= e($b['title'] ?? '') ?></span>
+          <?php $cu = book_cover($b, 'M'); if ($cu !== ''): ?>
+            <img src="<?= e($cu) ?>" alt="" loading="eager" onerror="this.remove()">
+          <?php endif; ?>
+        </span>
+        <span class="btitle"><?= e($b['title'] ?? 'Untitled') ?></span>
+        <?php if (!empty($b['author'])): ?><span class="bauthor"><?= e($b['author']) ?></span><?php endif; ?>
+      </a>
+      <div class="cardmeta">
+        <?= stars_html((int) ($b['rating'] ?? 0), false, $b['id'], 'cardrate') ?>
+      </div>
+      <form method="post" action="">
+        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+        <input type="hidden" name="action" value="delete_book">
+        <input type="hidden" name="book" value="<?= e($b['id']) ?>">
+        <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
+        <button class="bdel" type="submit" title="Remove book">&times;</button>
+      </form>
+    </div>
+    <?php
+}
+
 /** 5-star rating: filled up to $rating. Editable version is wired up in JS. */
 function stars_html(int $rating, bool $editable, string $bookId = '', string $extraClass = ''): string
 {
@@ -310,6 +345,12 @@ foreach ($books as $b) {
 natcasesort($allFolders);
 $allFolders = array_values($allFolders);
 
+// Sort + rating filter (applies to the shelf/folder being viewed).
+$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added'], true) ? (string) $_GET['sort'] : 'stars';
+$curMin  = (string) ($_GET['min'] ?? '');
+if (!in_array($curMin, ['', '5', '4', '3', '2', '1', 'unrated'], true)) { $curMin = ''; }
+$sfBase  = '?shelf=' . urlencode($shelf) . (($shelf === 'library' && $folder !== '') ? '&folder=' . urlencode($folder) : '');
+
 /** Consistent header: ‹ back (top-left) + title, and a username dropdown on the right. */
 function books_header(string $titleHtml): void
 {
@@ -401,8 +442,19 @@ function books_header(string $titleHtml): void
     }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .bar #undoBtn { display: none; margin-right: auto; }
+    .bar #undoBtn { display: none; }
     body.can-undo .bar #undoBtn { display: inline-block; }
+    .listbar .sortwrap { position: relative; margin-right: auto; }   /* sort/filter off to the left */
+    #sortBtn { white-space: nowrap; }
+    .sortmenu {
+      position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; min-width: 190px;
+      background: #1c1c1c; border: 1px solid #333; border-radius: 8px; padding: 0.3rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    }
+    .sortmenu .smhead { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: #777; padding: 0.45rem 0.6rem 0.2rem; }
+    .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: #eee; text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
+    .sortmenu a:hover { background: #2a2a2a; }
+    .sortmenu a.on { color: #34d399; font-weight: 700; }
 
     /* Book cards grid */
     .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
@@ -452,7 +504,8 @@ function books_header(string $titleHtml): void
 
     /* Data tab */
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
-    .stat { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1.4rem 1rem; text-align: center; }
+    .stat { display: block; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1.4rem 1rem; text-align: center; text-decoration: none; color: inherit; cursor: pointer; }
+    a.stat:hover { border-color: #34d399; }
     .stat .num { font-size: 2.4rem; font-weight: 800; color: #34d399; line-height: 1; }
     .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: #999; }
     .stat .lbl span { display: block; font-size: 0.72rem; color: #666; margin-top: 0.15rem; }
@@ -546,24 +599,55 @@ function books_header(string $titleHtml): void
     <?php
       $monthStart = mktime(0, 0, 0, (int) date('n'), 1, (int) date('Y'));
       $yearStart  = mktime(0, 0, 0, 1, 1, (int) date('Y'));
-      $readMonth = $readYear = $wantCount = 0;
-      foreach ($books as $b) {
-          if (!empty($b['want'])) { $wantCount++; }
-          if (((int) ($b['rating'] ?? 0)) <= 0 || !empty($b['past'])) { continue; }   // rated (=read) & not "past"
-          $ra = (int) ($b['read_at'] ?? 0);
-          if ($ra >= $monthStart) { $readMonth++; }
-          if ($ra >= $yearStart)  { $readYear++; }
-      }
+      $isRead = fn($b) => ((int) ($b['rating'] ?? 0)) > 0 && empty($b['past']);   // rated & not "past"
+      $metricBooks = [
+          'month'   => array_values(array_filter($books, fn($b) => $isRead($b) && (int) ($b['read_at'] ?? 0) >= $monthStart)),
+          'year'    => array_values(array_filter($books, fn($b) => $isRead($b) && (int) ($b['read_at'] ?? 0) >= $yearStart)),
+          'want'    => array_values(array_filter($books, fn($b) => !empty($b['want']))),
+          'library' => $books,
+      ];
+      $metricLabels = ['month' => 'Read this month', 'year' => 'Read this year', 'want' => 'Want to read', 'library' => 'Books in library'];
+      $metric = (string) ($_GET['metric'] ?? '');
+      if (!isset($metricBooks[$metric])) { $metric = ''; }
     ?>
-    <div class="stats">
-      <div class="stat"><div class="num"><?= $readMonth ?></div><div class="lbl">Read this month<span><?= date('F Y') ?></span></div></div>
-      <div class="stat"><div class="num"><?= $readYear ?></div><div class="lbl">Read this year<span><?= date('Y') ?></span></div></div>
-      <div class="stat"><div class="num"><?= $wantCount ?></div><div class="lbl">Want to read</div></div>
-      <div class="stat"><div class="num"><?= count($books) ?></div><div class="lbl">Books in library</div></div>
-    </div>
+    <?php if ($metric !== ''): ?>
+      <div class="folderback"><a href="?shelf=data">&larr; Data</a><span class="folder-h"><?= e($metricLabels[$metric]) ?> &middot; <?= count($metricBooks[$metric]) ?></span></div>
+      <?php
+        $mb = $metricBooks[$metric];
+        usort($mb, fn($a, $b) => ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0)) ?: strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')));
+      ?>
+      <?php if (!$mb): ?>
+        <p class="empty">No books here yet.</p>
+      <?php else: ?>
+        <div class="shelf"><?php foreach ($mb as $b) { render_book_card($b, $csrf, 'data'); } ?></div>
+      <?php endif; ?>
+    <?php else: ?>
+      <div class="stats">
+        <a class="stat" href="?shelf=data&amp;metric=month"><div class="num"><?= count($metricBooks['month']) ?></div><div class="lbl">Read this month<span><?= date('F Y') ?></span></div></a>
+        <a class="stat" href="?shelf=data&amp;metric=year"><div class="num"><?= count($metricBooks['year']) ?></div><div class="lbl">Read this year<span><?= date('Y') ?></span></div></a>
+        <a class="stat" href="?shelf=data&amp;metric=want"><div class="num"><?= count($metricBooks['want']) ?></div><div class="lbl">Want to read</div></a>
+        <a class="stat" href="?shelf=data&amp;metric=library"><div class="num"><?= count($metricBooks['library']) ?></div><div class="lbl">Books in library</div></a>
+      </div>
+    <?php endif; ?>
   <?php else: ?>
 
-  <div class="bar">
+  <div class="bar listbar">
+    <div class="sortwrap">
+      <button type="button" id="sortBtn" class="editbtn">&#8645; Sort / Filter</button>
+      <div class="sortmenu" id="sortMenu" hidden>
+        <div class="smhead">Sort by</div>
+        <a href="<?= e(sf_url($sfBase, 'stars', $curMin)) ?>" class="<?= $curSort === 'stars' ? 'on' : '' ?>">&#9733; Stars</a>
+        <a href="<?= e(sf_url($sfBase, 'title', $curMin)) ?>" class="<?= $curSort === 'title' ? 'on' : '' ?>">Title</a>
+        <a href="<?= e(sf_url($sfBase, 'author', $curMin)) ?>" class="<?= $curSort === 'author' ? 'on' : '' ?>">Author</a>
+        <a href="<?= e(sf_url($sfBase, 'added', $curMin)) ?>" class="<?= $curSort === 'added' ? 'on' : '' ?>">Date added</a>
+        <div class="smhead">Show</div>
+        <a href="<?= e(sf_url($sfBase, $curSort, '')) ?>" class="<?= $curMin === '' ? 'on' : '' ?>">All ratings</a>
+        <a href="<?= e(sf_url($sfBase, $curSort, '5')) ?>" class="<?= $curMin === '5' ? 'on' : '' ?>">&#9733;&#9733;&#9733;&#9733;&#9733; only</a>
+        <a href="<?= e(sf_url($sfBase, $curSort, '4')) ?>" class="<?= $curMin === '4' ? 'on' : '' ?>">&#9733;&#9733;&#9733;&#9733; &amp; up</a>
+        <a href="<?= e(sf_url($sfBase, $curSort, '3')) ?>" class="<?= $curMin === '3' ? 'on' : '' ?>">&#9733;&#9733;&#9733; &amp; up</a>
+        <a href="<?= e(sf_url($sfBase, $curSort, 'unrated')) ?>" class="<?= $curMin === 'unrated' ? 'on' : '' ?>">Unrated</a>
+      </div>
+    </div>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="addBookBtn" class="addbook">+ Add book</button>
@@ -581,6 +665,20 @@ function books_header(string $titleHtml): void
     } else {
         $shown = array_values(array_filter($books, fn($b) => empty($b['folders'])));   // Library top level: loose books only
     }
+    // Rating filter
+    if ($curMin === 'unrated') {
+        $shown = array_values(array_filter($shown, fn($b) => ((int) ($b['rating'] ?? 0)) === 0));
+    } elseif ($curMin !== '') {
+        $shown = array_values(array_filter($shown, fn($b) => ((int) ($b['rating'] ?? 0)) >= (int) $curMin));
+    }
+    // Sort (default: stars, high -> low)
+    usort($shown, function ($a, $b) use ($curSort) {
+        if ($curSort === 'title')  { return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
+        if ($curSort === 'author') { $c = strcasecmp((string) ($a['author'] ?? ''), (string) ($b['author'] ?? '')); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
+        if ($curSort === 'added')  { return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0)); }
+        $r = ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0));
+        return $r !== 0 ? $r : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+    });
   ?>
   <?php if ($inFolder): ?>
     <div class="folderback"><a href="?shelf=library">&larr; Library</a><span class="folder-h">&#128193; <?= e($folder) ?></span></div>
@@ -607,30 +705,7 @@ function books_header(string $titleHtml): void
   <?php endif; ?>
   <?php if ($shown): ?>
     <div class="shelf">
-      <?php foreach ($shown as $b): ?>
-        <div class="bookcard" data-id="<?= e($b['id']) ?>">
-          <a class="booklink" href="?book=<?= urlencode($b['id']) ?>">
-            <span class="coverbox">
-              <span class="ph"><?= e($b['title'] ?? '') ?></span>
-              <?php $cu = book_cover($b, 'M'); if ($cu !== ''): ?>
-                <img src="<?= e($cu) ?>" alt="" loading="lazy" onerror="this.remove()">
-              <?php endif; ?>
-            </span>
-            <span class="btitle"><?= e($b['title'] ?? 'Untitled') ?></span>
-            <?php if (!empty($b['author'])): ?><span class="bauthor"><?= e($b['author']) ?></span><?php endif; ?>
-          </a>
-          <div class="cardmeta">
-            <?= stars_html((int) ($b['rating'] ?? 0), false, $b['id'], 'cardrate') ?>
-          </div>
-          <form method="post" action="">
-            <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_book">
-            <input type="hidden" name="book" value="<?= e($b['id']) ?>">
-            <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
-            <button class="bdel" type="submit" title="Remove book">&times;</button>
-          </form>
-        </div>
-      <?php endforeach; ?>
+      <?php foreach ($shown as $b) { render_book_card($b, $csrf, $shelf); } ?>
     </div>
   <?php endif; ?>
 
@@ -788,6 +863,14 @@ function books_header(string $titleHtml): void
   if (userBtn && userMenu) {
     userBtn.addEventListener('click', (e) => { e.stopPropagation(); userMenu.hidden = !userMenu.hidden; });
     document.addEventListener('click', (e) => { if (!userMenu.hidden && !userMenu.contains(e.target)) userMenu.hidden = true; });
+  }
+
+  // ---- Sort / Filter dropdown ----
+  const sortBtn = document.getElementById('sortBtn');
+  const sortMenu = document.getElementById('sortMenu');
+  if (sortBtn && sortMenu) {
+    sortBtn.addEventListener('click', (e) => { e.stopPropagation(); sortMenu.hidden = !sortMenu.hidden; });
+    document.addEventListener('click', (e) => { if (!sortMenu.hidden && !sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.hidden = true; });
   }
 
   // ---- Undo appears only right after a delete (server redirects with ?undo=1) ----
