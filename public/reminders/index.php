@@ -13,6 +13,9 @@ require_login('Reminders');
 $cfg      = app_config();
 $dataFile = user_data_file($cfg['data_dir'], 'reminders');
 
+// Ungrouped reminders live under a permanent, non-deletable group shown last.
+const DEFAULT_SECTION = 'Reminders';
+
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
@@ -133,7 +136,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Section actions. Sections are bold headers that group reminders (orthogonal to folders).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        if ($name !== '') {
+        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0) {   // "Reminders" is reserved for the default group
             $list = load_reminders($dataFile);
             $dup  = false;
             foreach ($list as $it) {
@@ -489,7 +492,7 @@ $sectionInput =
     </span>
     <?php if ($sections): ?>
       <select name="section" class="secsel" title="Add to section">
-        <option value="">No section</option>
+        <option value="">Reminders</option>
         <?php foreach ($sections as $sname): ?>
           <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
         <?php endforeach; ?>
@@ -509,8 +512,6 @@ $sectionInput =
     <p class="empty">Nothing yet. Add your first reminder above.</p>
   <?php else: ?>
    <div id="rlist-root">
-    <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
-
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; // hide empty sections inside a folder view ?>
@@ -529,6 +530,14 @@ $sectionInput =
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
       </div>
     <?php endforeach; ?>
+
+    <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
+    <div class="section-group default-group" data-section="">
+      <div class="section-head">
+        <span class="section-title"><?= DEFAULT_SECTION ?></span>
+      </div>
+      <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
+    </div>
    </div>
 
     <?php if ($doneCount): ?>
@@ -564,29 +573,30 @@ $sectionInput =
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   const editBtn = document.getElementById('editBtn');
   const doneBtn = document.getElementById('doneBtn');
-  const refreshShowDone = () => {
-    document.body.classList.toggle('show-done',
-      localStorage.getItem('remShowDone') === '1' || document.body.classList.contains('editing'));
+  // Show-done follows the Show All toggle only — so it can be turned off even while editing.
+  const applyShowDone = () => {
+    document.body.classList.toggle('show-done', localStorage.getItem('remShowDone') === '1');
   };
-  const setEdit = (on) => {
+  const setEdit = (on, userInitiated) => {
     document.body.classList.toggle('editing', on);
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('remEditing', on ? '1' : '0');
-    refreshShowDone();                                   // editing always shows completed
+    if (on && userInitiated) { localStorage.setItem('remShowDone', '1'); }   // tapping Edit auto-shows completed
+    applyShowDone();
   };
-  setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
+  setEdit(localStorage.getItem('remEditing') === '1', false);   // restore edit state without forcing show-all
   // Undo shows only immediately after a delete (server redirects back with ?undo=1).
   if (new URLSearchParams(location.search).get('undo') === '1') {
     document.body.classList.add('can-undo');
     const u = new URL(location.href); u.searchParams.delete('undo');
     history.replaceState(null, '', u);
   }
-  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
+  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing'), true));
   document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
   doneBtn.addEventListener('click', () => {
     localStorage.setItem('remShowDone', localStorage.getItem('remShowDone') === '1' ? '0' : '1');
-    refreshShowDone();
+    applyShowDone();
   });
 
   // ----- Drag to reorder (pointer events => works with touch; edit mode only) -----
