@@ -52,4 +52,10 @@ function render_tabbar(string $active): void
            . '<span>' . $t['label'] . '</span></a>';
     }
     echo '</div></nav>';
+    // iOS home-screen (standalone) apps otherwise open internal links in Safari
+    // with the browser chrome; intercept same-origin links so they stay in the app.
+    echo '<script>if(window.navigator.standalone){document.addEventListener("click",function(e){'
+       . 'var a=e.target.closest&&e.target.closest("a");'
+       . 'if(a&&a.href&&a.host===location.host&&!a.target&&!a.hasAttribute("download")){'
+       . 'e.preventDefault();location.href=a.getAttribute("href");}},false);}</script>';
 }

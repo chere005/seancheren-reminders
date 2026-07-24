@@ -2,7 +2,7 @@
   "name": "Reminders",
   "short_name": "Reminders",
   "start_url": "/reminders/",
-  "scope": "/reminders/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#111111",
