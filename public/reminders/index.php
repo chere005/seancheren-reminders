@@ -573,29 +573,38 @@ $sectionInput =
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   const editBtn = document.getElementById('editBtn');
   const doneBtn = document.getElementById('doneBtn');
-  // Show-done follows the Show All toggle only — so it can be turned off even while editing.
+  // Editing temporarily forces "show all" on, but the saved preference (remShowDone)
+  // is untouched — so tapping Done restores whatever Show All state you had before Edit.
+  let editShowDone = true;   // transient view state while editing
   const applyShowDone = () => {
-    document.body.classList.toggle('show-done', localStorage.getItem('remShowDone') === '1');
+    const on = document.body.classList.contains('editing')
+      ? editShowDone
+      : (localStorage.getItem('remShowDone') === '1');
+    document.body.classList.toggle('show-done', on);
   };
-  const setEdit = (on, userInitiated) => {
+  const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('remEditing', on ? '1' : '0');
-    if (on && userInitiated) { localStorage.setItem('remShowDone', '1'); }   // tapping Edit auto-shows completed
+    if (on) { editShowDone = true; }                       // entering edit auto-shows completed (view only)
     applyShowDone();
   };
-  setEdit(localStorage.getItem('remEditing') === '1', false);   // restore edit state without forcing show-all
+  setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
   // Undo shows only immediately after a delete (server redirects back with ?undo=1).
   if (new URLSearchParams(location.search).get('undo') === '1') {
     document.body.classList.add('can-undo');
     const u = new URL(location.href); u.searchParams.delete('undo');
     history.replaceState(null, '', u);
   }
-  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing'), true));
+  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
   doneBtn.addEventListener('click', () => {
-    localStorage.setItem('remShowDone', localStorage.getItem('remShowDone') === '1' ? '0' : '1');
+    if (document.body.classList.contains('editing')) {
+      editShowDone = !editShowDone;                        // transient toggle while editing
+    } else {
+      localStorage.setItem('remShowDone', localStorage.getItem('remShowDone') === '1' ? '0' : '1');
+    }
     applyShowDone();
   });
 
