@@ -212,18 +212,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($action === 'delete_book') {
         $books = books_load($booksFile);
-        foreach ($books as $b) { if (($b['id'] ?? '') === $bookId) { $_SESSION['undo_book'] = $b; break; } }
+        $bk = null;
+        foreach ($books as $b) { if (($b['id'] ?? '') === $bookId) { $bk = $b; break; } }
         $books = array_values(array_filter($books, fn($b) => ($b['id'] ?? '') !== $bookId));
         books_save($booksFile, $books);
+        // Also remove this book's notes (kept for undo so nothing is lost).
+        $nmap    = bnotes_load($notesFile);
+        $bknotes = $nmap[$bookId] ?? null;
+        if ($bknotes !== null) { unset($nmap[$bookId]); bnotes_save($notesFile, $nmap); }
+        $_SESSION['undo_book'] = ['id' => $bookId, 'book' => $bk, 'notes' => $bknotes];
         header('Location: ' . $shelfUrl . '&undo=1');
         exit;
     }
     if ($action === 'undo_book') {
-        if (!empty($_SESSION['undo_book'])) {
+        $u = $_SESSION['undo_book'] ?? null;
+        if (!empty($u['book'])) {
             $books   = books_load($booksFile);
-            $books[] = $_SESSION['undo_book'];
-            unset($_SESSION['undo_book']);
+            $books[] = $u['book'];
             books_save($booksFile, $books);
+            if (!empty($u['notes'])) {                       // reattach the notes to the same book id
+                $nmap        = bnotes_load($notesFile);
+                $nmap[$u['id']] = $u['notes'];
+                bnotes_save($notesFile, $nmap);
+            }
+            unset($_SESSION['undo_book']);
         }
         header('Location: ' . $shelfUrl);
         exit;
@@ -411,6 +423,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 $books = books_load($booksFile);
 $csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
+// One-time greeting on a fresh login (GET only — POSTs redirect before here).
+$greet = false;
+if (empty($_SESSION['aki_greeted'])) { $_SESSION['aki_greeted'] = true; $greet = true; }
+
 $shelf = (string) ($_GET['shelf'] ?? 'library');
 if (!in_array($shelf, ['library', 'read', 'want', 'data'], true)) { $shelf = 'library'; }
 
@@ -438,7 +454,7 @@ natcasesort($allFolders);
 $allFolders = array_values($allFolders);
 
 // Sort + rating filter (applies to the shelf/folder being viewed).
-$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added'], true) ? (string) $_GET['sort'] : 'stars';
+$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added', 'rated'], true) ? (string) $_GET['sort'] : 'stars';
 $curMin  = (string) ($_GET['min'] ?? '');
 if (!in_array($curMin, ['', '5', '4', '3', '2', '1', 'unrated'], true)) { $curMin = ''; }
 $sfBase  = '?shelf=' . urlencode($shelf) . (($shelf === 'library' && $folder !== '') ? '&folder=' . urlencode($folder) : '');
@@ -657,6 +673,7 @@ function books_header(string $titleHtml): void
     .bookhead .coverbox { width: 84px; flex: 0 0 auto; }
     .bookhead .bh-title { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
     .bookhead .bh-author { font-size: 0.85rem; color: #999; margin-top: 0.2rem; }
+    .bookhead .bh-dates { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.35rem; font-size: 0.72rem; color: #777; }
     .bookhead .bh-stars { margin-top: 0.5rem; }
     .bookhead .bh-flags { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; }
     .bookhead .bh-flags .flagrow { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -708,9 +725,20 @@ function books_header(string $titleHtml): void
     .editor .meta { font-size: 0.72rem; color: #666; }
     .editor button.del { margin-left: auto; background: none; border: none; color: #666; font-size: 0.8rem; cursor: pointer; }
     .editor button.del:hover { color: #f66; }
+
+    /* One-time login greeting */
+    .lovebanner {
+      position: fixed; top: calc(1rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) translateY(-8px);
+      z-index: 200; background: linear-gradient(135deg, #d6336c, #8b6ef0); color: #fff;
+      font-weight: 700; font-size: 1rem; padding: 0.7rem 1.3rem; border-radius: 999px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
+      white-space: nowrap; pointer-events: none;
+    }
+    .lovebanner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
+<?php if ($greet): ?><div class="lovebanner" id="loveBanner">I love you, baby! &#10084;&#65039;</div><?php endif; ?>
 <div class="wrap">
 <?php if (!$book): ?>
   <!-- ===================== BOOKS LIST ===================== -->
@@ -761,6 +789,7 @@ function books_header(string $titleHtml): void
         <a href="<?= e(sf_url($sfBase, 'title', $curMin)) ?>" class="<?= $curSort === 'title' ? 'on' : '' ?>">Title</a>
         <a href="<?= e(sf_url($sfBase, 'author', $curMin)) ?>" class="<?= $curSort === 'author' ? 'on' : '' ?>">Author</a>
         <a href="<?= e(sf_url($sfBase, 'added', $curMin)) ?>" class="<?= $curSort === 'added' ? 'on' : '' ?>">Date added</a>
+        <a href="<?= e(sf_url($sfBase, 'rated', $curMin)) ?>" class="<?= $curSort === 'rated' ? 'on' : '' ?>">Date rated</a>
         <div class="smhead">Show</div>
         <a href="<?= e(sf_url($sfBase, $curSort, '')) ?>" class="<?= $curMin === '' ? 'on' : '' ?>">All ratings</a>
         <a href="<?= e(sf_url($sfBase, $curSort, '5')) ?>" class="<?= $curMin === '5' ? 'on' : '' ?>">&#9733;&#9733;&#9733;&#9733;&#9733; only</a>
@@ -797,6 +826,7 @@ function books_header(string $titleHtml): void
         if ($curSort === 'title')  { return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         if ($curSort === 'author') { $c = strcasecmp((string) ($a['author'] ?? ''), (string) ($b['author'] ?? '')); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         if ($curSort === 'added')  { return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0)); }
+        if ($curSort === 'rated')  { $c = ((int) ($b['read_at'] ?? 0)) <=> ((int) ($a['read_at'] ?? 0)); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         $r = ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0));
         return $r !== 0 ? $r : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
     });
@@ -934,6 +964,10 @@ function books_header(string $titleHtml): void
     <div>
       <div class="bh-title"><?= e($book['title'] ?? 'Untitled') ?></div>
       <?php if (!empty($book['author'])): ?><div class="bh-author"><?= e($book['author']) ?></div><?php endif; ?>
+      <div class="bh-dates">
+        <?php if (!empty($book['created'])): ?><span>Added <?= date('M j, Y', (int) $book['created']) ?></span><?php endif; ?>
+        <?php if (!empty($book['read_at'])): ?><span>Rated <?= date('M j, Y', (int) $book['read_at']) ?></span><?php endif; ?>
+      </div>
       <div class="bh-stars"><?= stars_html((int) ($book['rating'] ?? 0), true, $book['id']) ?></div>
       <div class="bh-flags" data-book="<?= e($book['id']) ?>">
         <div class="flagrow">
@@ -1104,6 +1138,14 @@ function books_header(string $titleHtml): void
   </div>
 </nav>
 <script>
+  // ---- One-time login greeting: show for ~2s, then fade out ----
+  const loveBanner = document.getElementById('loveBanner');
+  if (loveBanner) {
+    requestAnimationFrame(() => loveBanner.classList.add('show'));
+    setTimeout(() => loveBanner.classList.remove('show'), 2000);
+    setTimeout(() => loveBanner.remove(), 2500);
+  }
+
   // ---- Username dropdown ----
   const userBtn = document.getElementById('userBtn');
   const userMenu = document.getElementById('userMenu');
