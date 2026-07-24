@@ -16,6 +16,24 @@ if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(16)); }
 function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES); }
 function load_habits(string $f): array { return store_read($f); }
 function save_habits(string $f, array $h): void { store_write($f, array_values($h)); }
+function is_section(array $it): bool { return ($it['type'] ?? '') === 'section'; }
+
+// Render one habit's name bubble + 7 day cells into the grid.
+function render_habit_row(array $h, array $days, string $today, string $csrf): void { ?>
+        <div class="hname">
+          <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
+          <form method="post" action="" style="display:inline">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete_habit">
+            <input type="hidden" name="id" value="<?= e($h['id']) ?>">
+            <button class="del" type="submit" title="Delete habit">&times;</button>
+          </form>
+        </div>
+        <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
+          <button class="cell <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : '' ?>"
+                  data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
+        <?php endforeach;
+}
 
 // --- Mutations ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
@@ -47,14 +65,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $undoFlag = '';   // set after a delete so the page shows the Undo button
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
+        $section = (string) ($_POST['section'] ?? '');
+        // Only keep a section id that actually exists.
+        $validSection = '';
+        foreach ($habits as $it) { if (is_section($it) && ($it['id'] ?? '') === $section) { $validSection = $section; break; } }
         if ($name !== '') {
-            $habits[] = ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr($name, 0, 60), 'done' => new stdClass(), 'created' => time()];
+            $habits[] = ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr($name, 0, 60), 'done' => new stdClass(), 'section' => $validSection, 'created' => time()];
             save_habits($dataFile, $habits);
         }
+    } elseif ($_POST['action'] === 'add_section') {
+        $name = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
+        $exists = false;
+        foreach ($habits as $it) { if (is_section($it) && mb_strtolower($it['name'] ?? '') === mb_strtolower($name)) { $exists = true; break; } }
+        if ($name !== '' && !$exists) {
+            $habits[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name, 'created' => time()];
+            save_habits($dataFile, $habits);
+        }
+    } elseif ($_POST['action'] === 'delete_section') {
+        $id = (string) ($_POST['id'] ?? '');
+        $habits = array_values(array_filter($habits, fn($it) => !(is_section($it) && ($it['id'] ?? '') === $id)));
+        foreach ($habits as &$it) { if (($it['section'] ?? '') === $id) { $it['section'] = ''; } }
+        unset($it);
+        save_habits($dataFile, $habits);
     } elseif ($_POST['action'] === 'delete_habit') {
         $id = (string) ($_POST['id'] ?? '');
-        foreach ($habits as $h) { if (($h['id'] ?? '') === $id) { $_SESSION['undo_habit'] = $h; break; } }
-        $habits = array_values(array_filter($habits, fn($h) => ($h['id'] ?? '') !== $id));
+        foreach ($habits as $h) { if (!is_section($h) && ($h['id'] ?? '') === $id) { $_SESSION['undo_habit'] = $h; break; } }
+        $habits = array_values(array_filter($habits, fn($h) => is_section($h) || ($h['id'] ?? '') !== $id));
         save_habits($dataFile, $habits);
         $undoFlag = '?undo=1';
     } elseif ($_POST['action'] === 'undo') {
@@ -70,6 +106,13 @@ $today  = date('Y-m-d');
 $days   = [];
 for ($i = 6; $i >= 0; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
+
+// Split sections from habits; group habits under their section (ungrouped first).
+$sections   = array_values(array_filter($habits, 'is_section'));
+$habitItems = array_values(array_filter($habits, fn($h) => !is_section($h)));
+$sectionIds = array_map(fn($s) => $s['id'], $sections);
+$ungrouped  = array_values(array_filter($habitItems, fn($h) => !in_array($h['section'] ?? '', $sectionIds, true)));
+$bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) => ($h['section'] ?? '') === $sid));
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,9 +147,19 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     .bar input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
     .bar .editbtn { padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 0.95rem; cursor: pointer; }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
+    .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .bar #undoBtn { display: none; }
     body.can-undo .bar #undoBtn { display: inline-block; }   /* only right after a delete */
+
+    /* + New section — left-aligned amber pill above the day grid. */
+    .newsection { margin: 0 0 1.1rem; }
+    .newsection input {
+      width: 220px; max-width: 100%; padding: 0.45rem 0.85rem; background: #1a1a1a;
+      border: 1px dashed #4a3f6a; border-radius: 999px; color: #b9a7f5; font-size: 16px;
+    }
+    .newsection input::placeholder { color: #b9a7f5; opacity: 0.8; }
+    .newsection input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
 
     /* Grid: name column + 7 flexible day columns that shrink to fit narrow phones. */
     .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 1fr); gap: 5px; align-items: center; max-width: 520px; }
@@ -114,6 +167,17 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     .colhead.today { color: #fff; font-weight: 700; }
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     .corner { }
+
+    /* Section header row spans the full grid width. */
+    .hsection {
+      grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem;
+      margin: 0.9rem 0 0.1rem; padding: 0 0.1rem 0.35rem;
+      color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
+    }
+    .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hsection .del { display: none; margin-left: auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    body.editing .hsection .del { display: inline-block; }
+    .hsection .del:hover { border-color: #f66; color: #f66; }
 
     .hname {
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
@@ -153,12 +217,26 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_habit">
       <input type="text" name="name" placeholder="+ New habit…" maxlength="60" autocomplete="off">
+      <?php if ($sections): ?>
+        <select name="section" class="hsel" aria-label="Section for new habit">
+          <option value="">No section</option>
+          <?php foreach ($sections as $s): ?>
+            <option value="<?= e($s['id']) ?>"><?= e($s['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      <?php endif; ?>
     </form>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
   </div>
 
-  <?php if (!$habits): ?>
+  <form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==''">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="add_section">
+    <input type="text" name="name" placeholder="+ New section" maxlength="40" autocomplete="off">
+  </form>
+
+  <?php if (!$habitItems && !$sections): ?>
     <p class="empty">No habits yet. Add one above, then tap a day to mark it done.</p>
   <?php else: ?>
     <div class="grid">
@@ -169,20 +247,19 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
         </div>
       <?php endforeach; ?>
 
-      <?php foreach ($habits as $h): ?>
-        <div class="hname">
-          <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
+      <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf); ?>
+
+      <?php foreach ($sections as $s): ?>
+        <div class="hsection">
+          <span class="hslabel"><?= e($s['name']) ?></span>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_habit">
-            <input type="hidden" name="id" value="<?= e($h['id']) ?>">
-            <button class="del" type="submit" title="Delete habit">&times;</button>
+            <input type="hidden" name="action" value="delete_section">
+            <input type="hidden" name="id" value="<?= e($s['id']) ?>">
+            <button class="del" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
-        <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
-          <button class="cell <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : '' ?>"
-                  data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
-        <?php endforeach; ?>
+        <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf); ?>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
