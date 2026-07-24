@@ -82,7 +82,7 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Habits">
   <link rel="apple-touch-icon" href="/reminders/icon-180.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
@@ -108,8 +108,8 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     .bar #undoBtn { display: none; }
     body.can-undo .bar #undoBtn { display: inline-block; }   /* only right after a delete */
 
-    /* Grid: name column + 7 day columns (fixed small squares, left-aligned) */
-    .grid { display: grid; grid-template-columns: 92px repeat(7, 34px); gap: 8px; align-items: center; justify-content: start; }
+    /* Grid: name column + 7 flexible day columns that shrink to fit narrow phones. */
+    .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 1fr); gap: 5px; align-items: center; max-width: 520px; }
     .colhead { text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: #888; padding-bottom: 0.4rem; }
     .colhead.today { color: #fff; font-weight: 700; }
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
