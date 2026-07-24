@@ -51,6 +51,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $dayParam = (string) ($_POST['day'] ?? '');
     $retDay   = $dateOk ? $date : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dayParam) ? $dayParam : '');
     $ym       = $retDay !== '' ? substr($retDay, 0, 7) : ((string) ($_POST['ym'] ?? date('Y-m')));
+    $undoFlag = '';   // set after a delete so the Undo button appears
 
     if ($action === 'add_event' && $text !== '') {
         [$etext, $ptime] = parse_time_from_text($text);   // "Dinner 7pm" -> text "Dinner", time 19:00
@@ -98,13 +99,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         save_json_list($file, $list);
     } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== '') {
         $file = user_data_file($cfg['data_dir'], $spec['base']);
-        $list = array_values(array_filter(load_json_list($file), fn($it) => ($it['id'] ?? '') !== $id));
+        $list = load_json_list($file);
+        foreach ($list as $it) { if (($it['id'] ?? '') === $id) { $_SESSION['undo_cal'] = ['base' => $spec['base'], 'item' => $it]; break; } }
+        $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
         save_json_list($file, $list);
+        $undoFlag = '&undo=1';
+    } elseif ($action === 'undo_item') {
+        if (!empty($_SESSION['undo_cal'])) {
+            $u      = $_SESSION['undo_cal'];
+            $file   = user_data_file($cfg['data_dir'], $u['base']);
+            $list   = load_json_list($file);
+            $list[] = $u['item'];
+            save_json_list($file, $list);
+            unset($_SESSION['undo_cal']);
+        }
     }
 
     $loc = _self_path() . '?ym=' . $ym;
     if ($retDay !== '') { $loc .= '&day=' . $retDay; }
-    header('Location: ' . $loc);
+    header('Location: ' . $loc . $undoFlag);
     exit;
 }
 
@@ -261,6 +274,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
     .dp-head .dp-edit:hover { border-color: #888; color: #fff; }
     body.editing .dp-head .dp-edit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .dp-head .dp-undo { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 999px;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
+    .dp-head .dp-undo:hover { border-color: #888; color: #fff; }
+    body.can-undo .dp-head .dp-undo { display: inline-block; }   /* only right after a delete */
     .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
     body.editing .dp-item .dp-del { display: inline-block; }
@@ -426,6 +443,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
+    <button class="dp-undo" id="dpUndo" type="button">Undo</button>
     <button class="dp-edit" id="dpEdit" type="button">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
@@ -487,6 +505,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <input type="hidden" name="id" id="diId" value="">
   <input type="hidden" name="ym" value="<?= e($ym) ?>">
   <input type="hidden" name="day" id="diDay" value="">
+</form>
+
+<!-- Hidden form to undo the last day-panel delete -->
+<form id="undoItemForm" method="post" action="" style="display:none">
+  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+  <input type="hidden" name="action" value="undo_item">
+  <input type="hidden" name="ym" value="<?= e($ym) ?>">
+  <input type="hidden" name="day" id="uiDay" value="">
 </form>
 
 <?php render_tabbar('calendar'); ?>
@@ -712,8 +738,19 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
   dpEdit.addEventListener('click', () => {
     const on = document.body.classList.toggle('editing');
+    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     dpEdit.textContent = on ? 'Done' : 'Edit';
     localStorage.setItem('calEditing', on ? '1' : '0');
+  });
+  // Undo shows only right after a delete (server redirects back with ?undo=1).
+  if (new URLSearchParams(location.search).get('undo') === '1') {
+    document.body.classList.add('can-undo');
+    const u = new URL(location.href); u.searchParams.delete('undo');
+    history.replaceState(null, '', u);
+  }
+  document.getElementById('dpUndo').addEventListener('click', () => {
+    document.getElementById('uiDay').value = selected || '';
+    document.getElementById('undoItemForm').submit();
   });
 
   document.getElementById('mCancel').addEventListener('click', closeModal);
