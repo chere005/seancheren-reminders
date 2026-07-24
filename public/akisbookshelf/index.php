@@ -31,6 +31,9 @@ function books_save(string $f, array $b): void { store_write($f, array_values($b
 function bnotes_load(string $f): array { return store_read($f); }        // map keyed by bookId
 function bnotes_save(string $f, array $m): void { store_write($f, $m); }
 
+/** A stored book-notes entry that is a section header rather than a note. */
+function is_bsection(array $it): bool { return ($it['type'] ?? '') === 'section'; }
+
 /** Open Library cover URL for a numeric cover id ('S' | 'M' | 'L'). */
 function cover_url(?int $id, string $size = 'M'): string
 {
@@ -306,13 +309,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($action === 'save_note') {
-        $nid   = (string) ($_POST['id'] ?? '');
-        $title = trim((string) ($_POST['title'] ?? ''));
-        $body  = (string) ($_POST['body'] ?? '');
+        $nid     = (string) ($_POST['id'] ?? '');
+        $title   = trim((string) ($_POST['title'] ?? ''));
+        $body    = (string) ($_POST['body'] ?? '');
+        $section = (string) ($_POST['section'] ?? '');
+        $secSet  = [];
+        foreach ($notes as $it) { if (is_bsection($it)) { $secSet[$it['name']] = true; } }
+        if ($section !== '' && !isset($secSet[$section])) { $section = ''; }
         foreach ($notes as &$n) {
-            if (($n['id'] ?? '') === $nid) {
+            if (!is_bsection($n) && ($n['id'] ?? '') === $nid) {
                 $n['title']   = $title === '' ? (date('m/d/Y h:i a', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
                 $n['body']    = mb_substr($body, 0, 20000);
+                $n['section'] = $section;
                 $n['updated'] = time();
                 break;
             }
@@ -349,6 +357,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $bookUrl);
         exit;
     }
+    if ($action === 'add_bsection') {
+        $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
+        if ($name !== '') {
+            $dup = false;
+            foreach ($notes as $it) { if (is_bsection($it) && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; } }
+            if (!$dup) {
+                $notes[]      = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => mb_substr($name, 0, 60), 'created' => time()];
+                $map[$bookId] = $notes;
+                bnotes_save($notesFile, $map);
+            }
+        }
+        header('Location: ' . $bookUrl);
+        exit;
+    }
+    if ($action === 'delete_bsection') {
+        $name  = (string) ($_POST['name'] ?? '');
+        $notes = array_values(array_filter($notes, fn($it) => !(is_bsection($it) && ($it['name'] ?? '') === $name)));
+        foreach ($notes as &$n) {
+            if (!is_bsection($n) && ($n['section'] ?? '') === $name) { $n['section'] = ''; }
+        }
+        unset($n);
+        $map[$bookId] = $notes;
+        bnotes_save($notesFile, $map);
+        header('Location: ' . $bookUrl);
+        exit;
+    }
 
     header('Location: ' . $listUrl);
     exit;
@@ -369,7 +403,7 @@ $noteId    = (string) ($_GET['note'] ?? '');
 $bookNotes = $book ? (bnotes_load($notesFile)[$bookId] ?? []) : [];
 $curNote   = null;
 if ($book && $noteId !== '') {
-    foreach ($bookNotes as $n) { if (($n['id'] ?? '') === $noteId) { $curNote = $n; break; } }
+    foreach ($bookNotes as $n) { if (!is_bsection($n) && ($n['id'] ?? '') === $noteId) { $curNote = $n; break; } }
 }
 
 // Folders (a book's Goodreads shelves become folders inside Library).
@@ -417,9 +451,9 @@ function books_header(string $titleHtml): void
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Aki&#39;s Bookshelf">
-  <link rel="apple-touch-icon" href="/reminders/icon-180.png">
-  <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/akisbookshelf/icon-180.png">
+  <link rel="icon" href="/akisbookshelf/icon-192.png">
+  <link rel="manifest" href="/akisbookshelf/manifest.webmanifest">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
@@ -620,6 +654,19 @@ function books_header(string $titleHtml): void
     .ndel .del { display: none; background: none; border: 1px solid #444; color: #ccc; cursor: pointer; margin-left: 0.5rem; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; }
     body.editing .ndel .del { display: inline-block; }
     .ndel .del:hover { border-color: #f66; color: #f66; }
+
+    /* Book-note sections */
+    .newsection-form { margin-bottom: 0.75rem; }
+    .newsection-form input { width: 170px; padding: 0.35rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 0.85rem; }
+    .newsection-form input::placeholder { color: #f0b429; opacity: 0.85; }
+    .newsection-form input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; }
+    .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    .section-del { display: none; background: none; border: 1px solid #2a2a2a; color: #666; border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; cursor: pointer; }
+    body.editing .section-del { display: inline-block; }
+    .section-del:hover { border-color: #f66; color: #f66; }
+    .editor select.secsel { padding: 0.5rem 0.6rem; background: #1a1a1a; border: 1px solid #4a3f2a; border-radius: 6px; color: #f0b429; font-size: 0.9rem; color-scheme: dark; cursor: pointer; align-self: flex-start; }
+    .editor select.secsel:focus { outline: none; border-color: #f0b429; }
 
     /* ---- Note editor ---- */
     .editor { display: flex; flex-direction: column; gap: 0.6rem; }
@@ -853,27 +900,64 @@ function books_header(string $titleHtml): void
     <button type="submit" class="addbook">Save</button>
   </form>
 
-  <?php if (!$bookNotes): ?>
+  <?php
+    // Split book notes into sections (bold headers) + notes grouped under them.
+    $bSections = [];
+    foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $bSections, true)) { $bSections[] = $it['name']; } }
+    $bNoteRows = array_values(array_filter($bookNotes, fn($it) => !is_bsection($it)));
+    usort($bNoteRows, fn($a, $b) => ($b['updated'] ?? 0) <=> ($a['updated'] ?? 0));
+    $ungroupedN = []; $groupedN = [];
+    foreach ($bNoteRows as $n) {
+        $s = (string) ($n['section'] ?? '');
+        if ($s !== '' && in_array($s, $bSections, true)) { $groupedN[$s][] = $n; } else { $ungroupedN[] = $n; }
+    }
+    /** Echo a <ul> of book-note rows (nothing if empty). */
+    $renderBNotes = function (array $rows) use ($book, $csrf) {
+        if (!$rows) { return; }
+        echo '<ul class="nlist">';
+        foreach ($rows as $n) { ?>
+          <li>
+            <a class="noteitem" href="?book=<?= urlencode($book['id']) ?>&amp;note=<?= e($n['id']) ?>">
+              <span class="ntitle"><?= e($n['title'] ?? 'Untitled note') ?></span>
+              <span class="nchev">&rsaquo;</span>
+            </a>
+            <form method="post" action="" class="ndel">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <input type="hidden" name="action" value="delete_note">
+              <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+              <input type="hidden" name="id" value="<?= e($n['id']) ?>">
+              <button class="del" type="submit" title="Delete note">&times;</button>
+            </form>
+          </li>
+        <?php }
+        echo '</ul>';
+    };
+  ?>
+
+  <form method="post" action="" class="newsection-form" onsubmit="return this.name.value.trim()!==''">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="add_bsection">
+    <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+    <input type="text" name="name" placeholder="+ New section" maxlength="60" autocomplete="off">
+  </form>
+
+  <?php if (!$bNoteRows && !$bSections): ?>
     <p class="empty">No notes for this book yet. Tap <strong>+ New note</strong> to start.</p>
   <?php else: ?>
-    <?php usort($bookNotes, fn($a, $b) => ($b['updated'] ?? 0) <=> ($a['updated'] ?? 0)); ?>
-    <ul class="nlist">
-      <?php foreach ($bookNotes as $n): ?>
-        <li>
-          <a class="noteitem" href="?book=<?= urlencode($book['id']) ?>&amp;note=<?= e($n['id']) ?>">
-            <span class="ntitle"><?= e($n['title'] ?? 'Untitled note') ?></span>
-            <span class="nchev">&rsaquo;</span>
-          </a>
-          <form method="post" action="" class="ndel">
-            <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_note">
-            <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-            <input type="hidden" name="id" value="<?= e($n['id']) ?>">
-            <button class="del" type="submit" title="Delete note">&times;</button>
-          </form>
-        </li>
-      <?php endforeach; ?>
-    </ul>
+    <?php $renderBNotes($ungroupedN); ?>
+    <?php foreach ($bSections as $sname): ?>
+      <div class="section-head">
+        <span class="section-title"><?= e($sname) ?></span>
+        <form method="post" action="" style="display:inline">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="delete_bsection">
+          <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+          <input type="hidden" name="name" value="<?= e($sname) ?>">
+          <button class="section-del" type="submit" title="Delete section">&times;</button>
+        </form>
+      </div>
+      <?php $renderBNotes($groupedN[$sname] ?? []); ?>
+    <?php endforeach; ?>
   <?php endif; ?>
 
   <form id="undoForm" method="post" action="" style="display:none">
@@ -884,7 +968,11 @@ function books_header(string $titleHtml): void
 
 <?php else: ?>
   <!-- ===================== BOOK NOTE EDITOR ===================== -->
-  <?php $noteDefault = date('m/d/Y h:i a', (int) ($curNote['created'] ?? time())) . ' - Note'; ?>
+  <?php
+    $noteDefault = date('m/d/Y h:i a', (int) ($curNote['created'] ?? time())) . ' - Note';
+    $editSections = [];
+    foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $editSections, true)) { $editSections[] = $it['name']; } }
+  ?>
   <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
   <form class="editor" method="post" action="">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -893,6 +981,16 @@ function books_header(string $titleHtml): void
     <input type="hidden" name="id" value="<?= e($curNote['id']) ?>">
     <input type="text" name="title" placeholder="Title" maxlength="200"
            value="<?= e($curNote['title'] ?? '') ?>" data-default="<?= e($noteDefault) ?>">
+    <?php if ($editSections): ?>
+      <select name="section" class="secsel" title="Section">
+        <option value="">No section</option>
+        <?php foreach ($editSections as $sname): ?>
+          <option value="<?= e($sname) ?>" <?= ($curNote['section'] ?? '') === $sname ? 'selected' : '' ?>><?= e($sname) ?></option>
+        <?php endforeach; ?>
+      </select>
+    <?php else: ?>
+      <input type="hidden" name="section" value="<?= e($curNote['section'] ?? '') ?>">
+    <?php endif; ?>
     <textarea name="body" placeholder="Notes on this book…"><?= e($curNote['body'] ?? '') ?></textarea>
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>

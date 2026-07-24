@@ -1,0 +1,13 @@
+{
+  "name": "Aki's Bookshelf",
+  "short_name": "Bookshelf",
+  "start_url": "/akisbookshelf/",
+  "scope": "/akisbookshelf/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#16120b",
+  "icons": [
+    { "src": "/akisbookshelf/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/akisbookshelf/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
