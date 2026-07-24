@@ -722,6 +722,8 @@ function books_header(string $titleHtml): void
     .nlist .drag-handle:active { cursor: grabbing; color: #8b6ef0; }
     .nlist li.dragging { background: #1b1726; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     body.editing #bnotes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
+    /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
+    body.editing #bnotes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
     /* Chapters (purple) */
     .chaptersbtn {
@@ -1355,12 +1357,14 @@ function books_header(string $titleHtml): void
     document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); doSave(); } });
   }
 
-  // ---- Drag to reorder book notes (pointer events; edit mode only) ----
+  // ---- Drag to reorder book notes (edit mode). Hold anywhere on a row to
+  //      pick it up (or use the ☰ handle for an immediate grab). ----
   (function () {
     const root = document.getElementById('bnotes-root');
     if (!root) return;
     const BOOK_ID = '<?= e($book['id'] ?? '') ?>';
-    let dragLi = null;
+    let dragLi = null, pressTimer = null, armedLi = null, pid = null, sx = 0, sy = 0, suppressClick = false;
+
     const persist = () => {
       const order = [];
       root.querySelectorAll('ul.nlist').forEach(ul => {
@@ -1370,14 +1374,28 @@ function books_header(string $titleHtml): void
       const body = new URLSearchParams({ csrf: CSRF, action: 'reorder_notes', book: BOOK_ID, order: JSON.stringify(order) });
       fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
     };
+    const begin = (li) => {
+      dragLi = li; li.classList.add('dragging');
+      try { li.setPointerCapture(pid); } catch (_) {}
+      if (navigator.vibrate) navigator.vibrate(12);
+    };
+    const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } armedLi = null; };
+
     root.addEventListener('pointerdown', (e) => {
       if (!document.body.classList.contains('editing')) return;
-      const h = e.target.closest('.drag-handle'); if (!h) return;
-      dragLi = h.closest('li[data-id]'); if (!dragLi) return;
-      e.preventDefault(); dragLi.classList.add('dragging'); h.setPointerCapture(e.pointerId);
+      const li = e.target.closest('li[data-id]'); if (!li || !root.contains(li)) return;
+      if (e.target.closest('.ndel')) return;            // let the delete button work
+      pid = e.pointerId; sx = e.clientX; sy = e.clientY;
+      if (e.target.closest('.drag-handle')) { e.preventDefault(); begin(li); }   // handle = grab now
+      else { armedLi = li; pressTimer = setTimeout(() => { pressTimer = null; begin(li); }, 280); }  // hold = grab
     });
     document.addEventListener('pointermove', (e) => {
-      if (!dragLi) return; e.preventDefault();
+      if (pressTimer) {                                 // still waiting: a real move = scroll/tap, so cancel
+        if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
+        return;
+      }
+      if (!dragLi) return;
+      e.preventDefault();
       const under = document.elementFromPoint(e.clientX, e.clientY); if (!under) return;
       const overLi = under.closest('li[data-id]');
       if (overLi && overLi !== dragLi && root.contains(overLi)) {
@@ -1388,9 +1406,17 @@ function books_header(string $titleHtml): void
         if (ul && root.contains(ul) && ul !== dragLi.parentNode) ul.appendChild(dragLi);
       }
     }, { passive: false });
-    const end = () => { if (!dragLi) return; dragLi.classList.remove('dragging'); dragLi = null; persist(); };
+    const end = () => {
+      cancelPress();
+      if (!dragLi) return;
+      dragLi.classList.remove('dragging'); dragLi = null;
+      suppressClick = true;                             // swallow the click that follows a drag
+      setTimeout(() => { suppressClick = false; }, 350);
+      persist();
+    };
     document.addEventListener('pointerup', end);
     document.addEventListener('pointercancel', end);
+    root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
   })();
 </script>
 </body>

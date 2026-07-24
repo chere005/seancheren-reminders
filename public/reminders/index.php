@@ -209,6 +209,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // Inline edit of a reminder's text (AJAX, from tapping it in edit mode).
+    if ($_POST['action'] === 'edit_text') {
+        $id   = (string) ($_POST['id'] ?? '');
+        $text = trim((string) ($_POST['text'] ?? ''));
+        $list = load_reminders($dataFile);
+        if ($text !== '') {
+            foreach ($list as &$r) {
+                if (!is_section($r) && ($r['id'] ?? '') === $id) { $r['text'] = mb_substr($text, 0, 500); break; }
+            }
+            unset($r);
+            save_reminders($dataFile, $list);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     $list        = load_reminders($dataFile);
     $sectionSet  = [];
     foreach ($list as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
@@ -322,7 +339,7 @@ $sectionInput =
   <meta name="apple-mobile-web-app-title" content="Reminders">
   <link rel="apple-touch-icon" href="/reminders/icon-180.png">
   <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -414,6 +431,14 @@ $sectionInput =
     ul.rlist { display: flex; flex-direction: column; }
     li.done { order: 1; }   /* when shown, completed items sink below the open ones */
     .text { flex: 1; font-size: 1rem; word-break: break-word; }
+    /* Edit mode: no accidental text selection while holding to drag. */
+    body.editing li, body.editing .section-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    body.editing .text { cursor: text; }
+    .textedit {
+      flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: #222; border: 1px solid #4a4a4a;
+      border-radius: 4px; color: #eee; -webkit-user-select: text; user-select: text;
+    }
+    .textedit:focus { outline: none; border-color: #888; }
     .due {
       font-size: 0.75rem; color: #7a7; background: #142; padding: 0.15rem 0.5rem;
       border-radius: 999px; white-space: nowrap;
@@ -628,10 +653,45 @@ $sectionInput =
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
   };
 
+  let pressTimer = null, pid = null, sx = 0, sy = 0, tapTextLi = null, suppressClick = false;
+  const beginItem = (li) => {
+    dragLi = li; li.classList.add('dragging');
+    try { li.setPointerCapture(pid); } catch (_) {}
+    if (navigator.vibrate) navigator.vibrate(12);
+  };
+  const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } tapTextLi = null; };
+
+  function startInlineEdit(li) {
+    const span = li.querySelector(':scope > .text'); if (!span || li.querySelector('input.textedit')) return;
+    const id = li.dataset.id, cur = span.textContent;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'textedit'; inp.value = cur; inp.maxLength = 500;
+    span.replaceWith(inp); inp.focus();
+    try { inp.setSelectionRange(cur.length, cur.length); } catch (_) {}
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      const val = inp.value.trim();
+      const ns = document.createElement('span'); ns.className = 'text';
+      ns.textContent = (save && val) ? val : cur;
+      inp.replaceWith(ns);
+      if (save && val && val !== cur) {
+        const body = new URLSearchParams({ csrf: CSRF, action: 'edit_text', view: VIEW, id, text: val });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+      }
+    };
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+    });
+    inp.addEventListener('blur', () => commit(true));
+  }
+
   document.addEventListener('pointerdown', (e) => {
     if (!document.body.classList.contains('editing')) return;
     const secHandle = e.target.closest('.sec-handle');
     const remHandle = e.target.closest('.drag-handle');
+    pid = e.pointerId; sx = e.clientX; sy = e.clientY;
     if (secHandle) {
       dragSection = secHandle.closest('.section-group');
       if (!dragSection) return;
@@ -644,10 +704,20 @@ $sectionInput =
       e.preventDefault();
       dragLi.classList.add('dragging');
       remHandle.setPointerCapture(e.pointerId);
+    } else {
+      // Hold anywhere on a reminder to drag it; a short tap on its text edits it.
+      if (e.target.closest('.check, .del, form, input')) return;
+      const li = e.target.closest('li[data-id]'); if (!li) return;
+      tapTextLi = e.target.closest('.text') ? li : null;
+      pressTimer = setTimeout(() => { pressTimer = null; beginItem(li); }, 280);
     }
   });
 
   document.addEventListener('pointermove', (e) => {
+    if (pressTimer) {                                  // waiting on a hold: movement = scroll/tap -> cancel
+      if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
+      return;
+    }
     if (!dragLi && !dragSection) return;
     e.preventDefault();
     const under = document.elementFromPoint(e.clientX, e.clientY);
@@ -673,14 +743,23 @@ $sectionInput =
   }, { passive: false });
 
   const endDrag = () => {
+    const wasPress = !!pressTimer;      // timer still pending => it was a short tap, not a drag
+    const tapLi = tapTextLi;
+    cancelPress();
     if (dragLi) dragLi.classList.remove('dragging');
     if (dragSection) dragSection.classList.remove('dragging');
-    if (!dragLi && !dragSection) return;
+    const wasDrag = !!(dragLi || dragSection);
     dragLi = null; dragSection = null;
-    persistOrder();
+    if (wasDrag) {
+      suppressClick = true; setTimeout(() => { suppressClick = false; }, 350);
+      persistOrder();
+      return;
+    }
+    if (wasPress && tapLi) { startInlineEdit(tapLi); }   // tapped a reminder's text -> edit it
   };
   document.addEventListener('pointerup', endDrag);
   document.addEventListener('pointercancel', endDrag);
+  document.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
 </script>
 <?= chrome_script() ?>
 </body>
