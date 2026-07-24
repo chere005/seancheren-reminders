@@ -414,6 +414,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $bookUrl);
         exit;
     }
+    if ($action === 'reorder_notes') {   // drag reorder (AJAX): order = [{id, section}, …]
+        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        if (!is_array($order)) { $order = []; }
+        $secSet = [];
+        foreach ($notes as $it) { if (is_bsection($it)) { $secSet[$it['name']] = true; } }
+        $sections = array_values(array_filter($notes, fn($it) => is_bsection($it)));
+        $chapters = array_values(array_filter($notes, fn($it) => !is_bsection($it) && !empty($it['chapter'])));
+        $byId     = [];
+        foreach ($notes as $it) { if (!is_bsection($it) && empty($it['chapter'])) { $byId[(string) ($it['id'] ?? '')] = $it; } }
+        $newNotes = []; $used = [];
+        foreach ($order as $o) {
+            $nid = (string) ($o['id'] ?? '');
+            if ($nid === '' || !isset($byId[$nid]) || isset($used[$nid])) { continue; }
+            $sec = (string) ($o['section'] ?? '');
+            if ($sec !== '' && !isset($secSet[$sec])) { $sec = ''; }
+            $it = $byId[$nid]; $it['section'] = $sec; $newNotes[] = $it; $used[$nid] = true;
+        }
+        foreach ($byId as $nid => $it) { if (!isset($used[$nid])) { $newNotes[] = $it; } }   // keep any not posted
+        $map[$bookId] = array_merge($sections, $chapters, $newNotes);
+        bnotes_save($notesFile, $map);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
 
     header('Location: ' . $listUrl);
     exit;
@@ -691,6 +715,13 @@ function books_header(string $titleHtml): void
     .ndel .del { display: none; background: none; border: 1px solid #444; color: #ccc; cursor: pointer; margin-left: 0.5rem; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; }
     body.editing .ndel .del { display: inline-block; }
     .ndel .del:hover { border-color: #f66; color: #f66; }
+
+    /* Drag-to-reorder notes (edit mode) */
+    .nlist .drag-handle { display: none; flex: 0 0 auto; width: 1.5rem; text-align: center; color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none; }
+    body.editing .nlist .drag-handle { display: inline-flex; align-items: center; justify-content: center; }
+    .nlist .drag-handle:active { cursor: grabbing; color: #8b6ef0; }
+    .nlist li.dragging { background: #1b1726; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    body.editing #bnotes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
 
     /* Chapters (purple) */
     .chaptersbtn {
@@ -1029,19 +1060,19 @@ function books_header(string $titleHtml): void
     $bSections = [];
     foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $bSections, true)) { $bSections[] = $it['name']; } }
     $chapCount = count(array_filter($bookNotes, fn($it) => !is_bsection($it) && !empty($it['chapter'])));
+    // Stored array order = the manual (drag) order.
     $bNoteRows = array_values(array_filter($bookNotes, fn($it) => !is_bsection($it) && empty($it['chapter'])));
-    usort($bNoteRows, fn($a, $b) => ($b['updated'] ?? 0) <=> ($a['updated'] ?? 0));
     $ungroupedN = []; $groupedN = [];
     foreach ($bNoteRows as $n) {
         $s = (string) ($n['section'] ?? '');
         if ($s !== '' && in_array($s, $bSections, true)) { $groupedN[$s][] = $n; } else { $ungroupedN[] = $n; }
     }
-    /** Echo a <ul> of book-note rows (nothing if empty). */
-    $renderBNotes = function (array $rows) use ($book, $csrf) {
-        if (!$rows) { return; }
-        echo '<ul class="nlist">';
+    /** Echo a <ul> of book-note rows. Always emitted (empty = a drag drop target). */
+    $renderBNotes = function (array $rows, string $section = '') use ($book, $csrf) {
+        echo '<ul class="nlist" data-section="' . e($section) . '">';
         foreach ($rows as $n) { ?>
-          <li>
+          <li data-id="<?= e($n['id']) ?>">
+            <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
             <a class="noteitem" href="?book=<?= urlencode($book['id']) ?>&amp;note=<?= e($n['id']) ?>">
               <span class="ntitle"><?= e($n['title'] ?? 'Untitled note') ?></span>
               <span class="nchev">&rsaquo;</span>
@@ -1073,7 +1104,8 @@ function books_header(string $titleHtml): void
   <?php if (!$bNoteRows && !$bSections): ?>
     <p class="empty">No notes for this book yet. Tap <strong>+ New note</strong> to start.</p>
   <?php else: ?>
-    <?php $renderBNotes($ungroupedN); ?>
+   <div id="bnotes-root">
+    <?php $renderBNotes($ungroupedN, ''); ?>
     <?php foreach ($bSections as $sname): ?>
       <div class="section-head">
         <span class="section-title"><?= e($sname) ?></span>
@@ -1085,8 +1117,9 @@ function books_header(string $titleHtml): void
           <button class="section-del" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php $renderBNotes($groupedN[$sname] ?? []); ?>
+      <?php $renderBNotes($groupedN[$sname] ?? [], $sname); ?>
     <?php endforeach; ?>
+   </div>
   <?php endif; ?>
 
   <form id="undoForm" method="post" action="" style="display:none">
@@ -1321,6 +1354,44 @@ function books_header(string $titleHtml): void
     noteForm.querySelectorAll('input, textarea').forEach(el => el.addEventListener('input', schedule));
     document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); doSave(); } });
   }
+
+  // ---- Drag to reorder book notes (pointer events; edit mode only) ----
+  (function () {
+    const root = document.getElementById('bnotes-root');
+    if (!root) return;
+    const BOOK_ID = '<?= e($book['id'] ?? '') ?>';
+    let dragLi = null;
+    const persist = () => {
+      const order = [];
+      root.querySelectorAll('ul.nlist').forEach(ul => {
+        const section = ul.dataset.section || '';
+        ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
+      });
+      const body = new URLSearchParams({ csrf: CSRF, action: 'reorder_notes', book: BOOK_ID, order: JSON.stringify(order) });
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+    };
+    root.addEventListener('pointerdown', (e) => {
+      if (!document.body.classList.contains('editing')) return;
+      const h = e.target.closest('.drag-handle'); if (!h) return;
+      dragLi = h.closest('li[data-id]'); if (!dragLi) return;
+      e.preventDefault(); dragLi.classList.add('dragging'); h.setPointerCapture(e.pointerId);
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!dragLi) return; e.preventDefault();
+      const under = document.elementFromPoint(e.clientX, e.clientY); if (!under) return;
+      const overLi = under.closest('li[data-id]');
+      if (overLi && overLi !== dragLi && root.contains(overLi)) {
+        const r = overLi.getBoundingClientRect();
+        overLi.parentNode.insertBefore(dragLi, (e.clientY > r.top + r.height / 2) ? overLi.nextSibling : overLi);
+      } else {
+        const ul = under.closest('ul.nlist');
+        if (ul && root.contains(ul) && ul !== dragLi.parentNode) ul.appendChild(dragLi);
+      }
+    }, { passive: false });
+    const end = () => { if (!dragLi) return; dragLi.classList.remove('dragging'); dragLi = null; persist(); };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  })();
 </script>
 </body>
 </html>
