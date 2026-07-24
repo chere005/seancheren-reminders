@@ -102,7 +102,7 @@ $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
     }
     .bar input::placeholder { color: #b9a7f5; opacity: 0.75; }
     .bar input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
-    .bar .editbtn { padding: 0.6rem 1rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+    .bar .editbtn { padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 0.95rem; cursor: pointer; }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .bar #undoBtn { display: none; }

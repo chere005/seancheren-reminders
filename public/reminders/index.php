@@ -376,14 +376,15 @@ $sectionInput =
       border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
     }
     form.add input:focus, form.add select:focus { outline: none; border-color: #888; }
+    /* Pill buttons matching the Calendar tab's Edit/Add. */
     form.add button[type=submit] {
-      padding: 0.6rem 1.1rem; background: #eee; color: #111; border: none;
-      border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600;
+      padding: 0.5rem 1.1rem; background: #34d399; color: #06251b; border: none;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer; font-weight: 700;
     }
-    form.add button[type=submit]:hover { background: #fff; }
+    form.add button[type=submit]:hover { background: #52e0ac; }
     form.add .editbtn {
-      padding: 0.6rem 1rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
-      border-radius: 6px; font-size: 1rem; cursor: pointer;
+      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
     form.add #editBtn { margin-left: auto; }              /* Edit + Add hug the right edge */
@@ -476,12 +477,13 @@ $sectionInput =
     }
     footer button:hover { color: #f66; }
 <?= folder_nav_styles() ?>
-    .foldernav .newsection input {
-      width: 130px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
-      border-radius: 999px; color: #f0b429; font-size: 0.82rem;
+    .newsection { margin: 0 0 0.6rem; }
+    .newsection input {
+      width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
+      border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
     }
-    .foldernav .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
-    .foldernav .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
+    .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
@@ -502,7 +504,7 @@ $sectionInput =
     <?= render_user_menu() ?>
   </header>
 
-  <?php render_folder_nav($folders, $view, $csrf, $sectionInput); ?>
+  <?php render_folder_nav($folders, $view, $csrf); ?>
 
   <form class="add" method="post" action="">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -532,6 +534,8 @@ $sectionInput =
     <input type="hidden" name="action" value="undo">
     <input type="hidden" name="view" value="<?= e($view) ?>">
   </form>
+
+  <?= $sectionInput ?>
 
   <?php if (!$items && !$sections): ?>
     <p class="empty">Nothing yet. Add your first reminder above.</p>
