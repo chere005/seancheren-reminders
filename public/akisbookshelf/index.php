@@ -760,13 +760,13 @@ function books_header(string $titleHtml): void
 
     /* One-time login greeting */
     .lovebanner {
-      position: fixed; top: calc(1rem + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) translateY(-8px);
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
       z-index: 200; background: linear-gradient(135deg, #d6336c, #8b6ef0); color: #fff;
-      font-weight: 700; font-size: 1rem; padding: 0.7rem 1.3rem; border-radius: 999px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
-      white-space: nowrap; pointer-events: none;
+      font-weight: 700; font-size: 1.25rem; padding: 1rem 1.6rem; border-radius: 999px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
+      white-space: nowrap; pointer-events: none; text-align: center;
     }
-    .lovebanner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   </style>
 </head>
 <body>
