@@ -10,3 +10,6 @@ data/
 
 # Sublime per-user session state (keep the .sublime-project, ignore the workspace)
 *.sublime-workspace
+
+# server-generated WebP cover cache (built on NFSN, not in repo)
+public/akisbookshelf/covers/

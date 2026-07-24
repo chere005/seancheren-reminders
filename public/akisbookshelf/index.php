@@ -37,13 +37,36 @@ function cover_url(?int $id, string $size = 'M'): string
     return $id ? "https://covers.openlibrary.org/b/id/{$id}-{$size}.jpg" : '';
 }
 
-/** Best cover URL for a book: Open Library cover id, then an explicit URL, then by ISBN. */
-function book_cover(array $b, string $size = 'M'): string
+/** External cover source: Open Library cover id, then an explicit URL, then by ISBN. */
+function book_cover_source(array $b, string $size = 'M'): string
 {
     if (!empty($b['cover']))     { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
     if (!empty($b['cover_url'])) { return (string) $b['cover_url']; }
     if (!empty($b['isbn']))      { return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode((string) $b['isbn']) . "-{$size}.jpg?default=false"; }
     return '';
+}
+
+/** Filenames in the local WebP cover cache (read once per request). */
+function cached_cover_set(): array
+{
+    static $set = null;
+    if ($set === null) {
+        $set = [];
+        foreach (@scandir(__DIR__ . '/covers') ?: [] as $f) {
+            if (substr($f, -5) === '.webp') { $set[$f] = true; }
+        }
+    }
+    return $set;
+}
+
+/** Cover URL for display: the locally cached WebP if we have it, else the external source. */
+function book_cover(array $b, string $size = 'M'): string
+{
+    $id = (string) ($b['id'] ?? '');
+    if ($id !== '' && isset(cached_cover_set()[$id . '.webp'])) {
+        return '/akisbookshelf/covers/' . $id . '.webp';
+    }
+    return book_cover_source($b, $size);
 }
 
 /** Build a sort/filter URL preserving the current shelf + folder. */
