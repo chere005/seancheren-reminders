@@ -265,7 +265,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <meta name="apple-mobile-web-app-title" content="Notes">
   <link rel="apple-touch-icon" href="/reminders/icon-180.png">
   <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {

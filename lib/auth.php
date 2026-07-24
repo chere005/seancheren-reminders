@@ -115,7 +115,7 @@ function render_login(string $area, string $error = ''): void
   <meta name="apple-mobile-web-app-title" content="Reminders">
   <link rel="apple-touch-icon" href="/reminders/icon-180.png">
   <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest">
+  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
