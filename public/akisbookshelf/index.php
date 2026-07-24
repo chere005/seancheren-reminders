@@ -565,6 +565,7 @@ function books_header(string $titleHtml): void
     .sortmenu a.on { color: #34d399; font-weight: 700; }
     .setcoverwrap { margin-right: auto; }   /* Set cover sits off to the left */
     .setcoverform { display: flex; gap: 0.5rem; margin: -0.6rem 0 1.25rem; }
+    .setcoverform[hidden] { display: none; }   /* make the hidden attribute win over display:flex */
     .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 0.9rem; }
     .setcoverform input[type=url]:focus { outline: none; border-color: #888; }
 
