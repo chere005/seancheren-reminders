@@ -564,13 +564,13 @@ function books_header(string $titleHtml): void
     /* Top bar */
     .bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1.25rem; }
     .bar .addbook {
-      padding: 0.55rem 1rem; background: #34d399; color: #06251b; border: none;
-      border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      padding: 0.5rem 1rem; background: #34d399; color: #06251b; border: none;
+      border-radius: 999px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .bar .addbook:hover { background: #52e0ac; }
     .bar .editbtn {
-      padding: 0.55rem 0.95rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
-      border-radius: 8px; font-size: 0.95rem; cursor: pointer;
+      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
@@ -590,7 +590,7 @@ function books_header(string $titleHtml): void
     .setcoverwrap { margin-right: auto; }   /* Set cover sits off to the left */
     .setcoverform { display: flex; gap: 0.5rem; margin: -0.6rem 0 1.25rem; }
     .setcoverform[hidden] { display: none; }   /* make the hidden attribute win over display:flex */
-    .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 0.9rem; }
+    .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 16px; }
     .setcoverform input[type=url]:focus { outline: none; border-color: #888; }
 
     /* Book cards grid */
@@ -668,7 +668,7 @@ function books_header(string $titleHtml): void
     .bh-folders .ftag-x { background: none; border: none; color: #a08a3a; cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 0; }
     .bh-folders .ftag-x:hover { color: #f66; }
     .bh-folders .addfolder { margin: 0; }
-    .bh-folders .addfolder input { width: 110px; padding: 0.25rem 0.6rem; background: #1a1a1a; border: 1px dashed #3a3320; border-radius: 999px; color: #f0b429; font-size: 0.82rem; }
+    .bh-folders .addfolder input { width: 130px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a3320; border-radius: 999px; color: #f0b429; font-size: 16px; }
     .bh-folders .addfolder input::placeholder { color: #a08a3a; }
     .bh-folders .addfolder input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 
@@ -733,13 +733,13 @@ function books_header(string $titleHtml): void
     }
     .chaptersbtn:hover { background: #a288f5; }
     .chaptersbtn .chev { font-size: 1.15rem; line-height: 1; }
-    .addchapter { background: #8b6ef0; color: #fff; border: none; border-radius: 8px; padding: 0.55rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+    .addchapter { background: #8b6ef0; color: #fff; border: none; border-radius: 999px; padding: 0.5rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
     .addchapter:hover { background: #a288f5; }
     .chapters-h { color: #b9a7f5 !important; }
 
     /* Book-note sections */
     .newsection-form { margin-bottom: 0.75rem; }
-    .newsection-form input { width: 170px; padding: 0.35rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 0.85rem; }
+    .newsection-form input { width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 16px; }
     .newsection-form input::placeholder { color: #f0b429; opacity: 0.85; }
     .newsection-form input:focus { outline: none; border-style: solid; border-color: #f0b429; }
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; }

@@ -94,8 +94,8 @@ function folder_nav_styles(): string
     .foldernav .chip.active { background: #14251f; border-color: #34d399; color: #34d399; }
     .foldernav .newfolder { margin-left: auto; }
     .foldernav .newfolder input {
-      width: 130px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a5a4d;
-      border-radius: 999px; color: #34d399; font-size: 0.82rem;
+      width: 150px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a5a4d;
+      border-radius: 999px; color: #34d399; font-size: 16px;   /* 16px stops iOS from zooming on focus */
     }
     .foldernav .newfolder input::placeholder { color: #34d399; opacity: 0.8; }
     .foldernav .newfolder input:focus { outline: none; border-style: solid; border-color: #34d399; }

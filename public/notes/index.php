@@ -13,6 +13,9 @@ require_login('Notes');
 $cfg      = app_config();
 $dataFile = user_data_file($cfg['data_dir'], 'notes');
 
+// Ungrouped notes live under a permanent, non-deletable section shown last.
+const NOTES_DEFAULT_SECTION = 'Notes';
+
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
@@ -71,7 +74,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Section actions (bold headers grouping notes; stored in the notes file).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        if ($name !== '') {
+        if ($name !== '' && strcasecmp($name, NOTES_DEFAULT_SECTION) !== 0) {   // "Notes" is reserved
             $notes = load_notes($dataFile);
             $dup   = false;
             foreach ($notes as $it) {
@@ -288,8 +291,8 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     /* List view */
     .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
     .listbar .newnote {
-      margin-left: auto; padding: 0.5rem 0.9rem; background: #34d399; color: #06251b; border: none;
-      border-radius: 6px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      margin-left: auto; padding: 0.5rem 1rem; background: #34d399; color: #06251b; border: none;
+      border-radius: 999px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .listbar .newnote:hover { background: #52e0ac; }
     .listbar select {
@@ -322,14 +325,14 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
     .listbar .nedit {
-      padding: 0.5rem 0.9rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
-      border-radius: 6px; font-size: 0.95rem; cursor: pointer;
+      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
     .listbar .nedit:hover { border-color: #888; color: #fff; }
     body.editing .listbar .nedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .listbar .undo {
-      padding: 0.5rem 0.9rem; background: #1a1a1a; border: 1px solid #333; color: #ccc;
-      border-radius: 6px; font-size: 0.95rem; cursor: pointer; display: none;
+      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer; display: none;
     }
     .listbar .undo:hover { border-color: #888; color: #fff; }
     body.can-undo .listbar .undo { display: inline-block; }   /* only right after a delete */
@@ -391,12 +394,13 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .editor button.del:hover { color: #f66; }
     .editor .meta { font-size: 0.72rem; color: #666; }
 <?= folder_nav_styles() ?>
-    .foldernav .newsection input {
-      width: 130px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
-      border-radius: 999px; color: #f0b429; font-size: 0.82rem;
+    .newsection { margin: 0 0 0.6rem; }
+    .newsection input {
+      width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
+      border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
     }
-    .foldernav .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
-    .foldernav .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
+    .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
@@ -413,7 +417,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
 
 <?php if (!$editing): ?>
   <!-- ===== LIST VIEW ===== -->
-  <?php render_folder_nav($folders, $view, $csrf, $sectionInput); ?>
+  <?php render_folder_nav($folders, $view, $csrf); ?>
 
   <div class="listbar">
     <button type="button" id="editBtn" class="nedit">Edit</button>
@@ -432,10 +436,11 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <input type="hidden" name="view" value="<?= e($view) ?>">
   </form>
 
+  <?= $sectionInput ?>
+
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ New note</strong> to start.</p>
   <?php else: ?>
-    <?php render_note_rows($ungrouped, $view, $csrf); ?>
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; ?>
@@ -452,6 +457,12 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       </div>
       <?php render_note_rows($rows, $view, $csrf); ?>
     <?php endforeach; ?>
+
+    <!-- Permanent "Notes" group: always last, not deletable. -->
+    <div class="section-head">
+      <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
+    </div>
+    <?php render_note_rows($ungrouped, $view, $csrf); ?>
   <?php endif; ?>
 
 <?php else: ?>
@@ -483,7 +494,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
         <?php endforeach; ?>
       </select>
       <select name="section" class="secsel" title="Section">
-        <option value="">No section</option>
+        <option value="">Notes</option>
         <?php foreach ($sections as $sname): ?>
           <option value="<?= e($sname) ?>" <?= ($current['section'] ?? '') === $sname ? 'selected' : '' ?>><?= e($sname) ?></option>
         <?php endforeach; ?>
