@@ -308,6 +308,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $bookUrl . '&note=' . $nid);
         exit;
     }
+    if ($action === 'add_chapter') {
+        // Auto-number: one past the highest existing "Chapter N" (or the count).
+        $max = 0; $cnt = 0;
+        foreach ($notes as $it) {
+            if (is_bsection($it) || empty($it['chapter'])) { continue; }
+            $cnt++;
+            if (preg_match('/^Chapter\s+(\d+)$/', (string) ($it['title'] ?? ''), $mm)) { $max = max($max, (int) $mm[1]); }
+        }
+        $n       = max($max, $cnt) + 1;
+        $nid     = bin2hex(random_bytes(6));
+        $notes[] = ['id' => $nid, 'title' => 'Chapter ' . $n, 'body' => '', 'chapter' => true,
+                    'section' => '', 'created' => time(), 'updated' => time()];
+        $map[$bookId] = $notes;
+        bnotes_save($notesFile, $map);
+        header('Location: ' . $bookUrl . '&view=chapters');
+        exit;
+    }
     if ($action === 'save_note') {
         $nid     = (string) ($_POST['id'] ?? '');
         $title   = trim((string) ($_POST['title'] ?? ''));
@@ -340,21 +357,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($action === 'delete_note') {
         $nid = (string) ($_POST['id'] ?? '');
+        $ret = ($_POST['ret'] ?? '') === 'chapters' ? '&view=chapters' : '';
         foreach ($notes as $x) { if (($x['id'] ?? '') === $nid) { $_SESSION['undo_bnote'] = ['book' => $bookId, 'note' => $x]; break; } }
         $notes = array_values(array_filter($notes, fn($n) => ($n['id'] ?? '') !== $nid));
         $map[$bookId] = $notes;
         bnotes_save($notesFile, $map);
-        header('Location: ' . $bookUrl . '&undo=1');
+        header('Location: ' . $bookUrl . $ret . '&undo=1');
         exit;
     }
     if ($action === 'undo_note') {
+        $ret = ($_POST['ret'] ?? '') === 'chapters' ? '&view=chapters' : '';
         if (!empty($_SESSION['undo_bnote']) && ($_SESSION['undo_bnote']['book'] ?? '') === $bookId) {
             $notes[]      = $_SESSION['undo_bnote']['note'];
             $map[$bookId] = $notes;
             unset($_SESSION['undo_bnote']);
             bnotes_save($notesFile, $map);
         }
-        header('Location: ' . $bookUrl);
+        header('Location: ' . $bookUrl . $ret);
         exit;
     }
     if ($action === 'add_bsection') {
@@ -655,6 +674,18 @@ function books_header(string $titleHtml): void
     body.editing .ndel .del { display: inline-block; }
     .ndel .del:hover { border-color: #f66; color: #f66; }
 
+    /* Chapters (purple) */
+    .chaptersbtn {
+      display: inline-flex; align-items: center; gap: 0.45rem; background: #8b6ef0; color: #fff;
+      text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 0.55rem 1rem;
+      border-radius: 8px; margin-bottom: 1rem;
+    }
+    .chaptersbtn:hover { background: #a288f5; }
+    .chaptersbtn .chev { font-size: 1.15rem; line-height: 1; }
+    .addchapter { background: #8b6ef0; color: #fff; border: none; border-radius: 8px; padding: 0.55rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+    .addchapter:hover { background: #a288f5; }
+    .chapters-h { color: #b9a7f5 !important; }
+
     /* Book-note sections */
     .newsection-form { margin-bottom: 0.75rem; }
     .newsection-form input { width: 170px; padding: 0.35rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 0.85rem; }
@@ -833,6 +864,63 @@ function books_header(string $titleHtml): void
   </div>
   <?php endif; ?>
 
+<?php elseif ($book && $curNote === null && ($_GET['view'] ?? '') === 'chapters'): ?>
+  <!-- ===================== CHAPTERS VIEW ===================== -->
+  <?php
+    $chapters = array_values(array_filter($bookNotes, fn($it) => !is_bsection($it) && !empty($it['chapter'])));
+    usort($chapters, function ($a, $b) {
+        $an = preg_match('/^Chapter\s+(\d+)$/', (string) ($a['title'] ?? ''), $m) ? (int) $m[1] : PHP_INT_MAX;
+        $bn = preg_match('/^Chapter\s+(\d+)$/', (string) ($b['title'] ?? ''), $m) ? (int) $m[1] : PHP_INT_MAX;
+        return $an !== $bn ? $an <=> $bn : (($a['created'] ?? 0) <=> ($b['created'] ?? 0));
+    });
+  ?>
+  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
+  <div class="folderback">
+    <a href="?book=<?= urlencode($book['id']) ?>">&larr; <?= e($book['title'] ?? 'Book') ?></a>
+    <span class="folder-h chapters-h">&#128278; Chapters</span>
+  </div>
+
+  <div class="bar">
+    <button type="button" id="undoBtn" class="editbtn">Undo</button>
+    <button type="button" id="editBtn" class="editbtn">Edit</button>
+    <form method="post" action="" style="margin:0">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="add_chapter">
+      <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+      <button class="addchapter" type="submit">+ Chapter</button>
+    </form>
+  </div>
+
+  <?php if (!$chapters): ?>
+    <p class="empty">No chapters yet. Tap <strong>+ Chapter</strong> to add Chapter 1.</p>
+  <?php else: ?>
+    <ul class="nlist">
+      <?php foreach ($chapters as $n): ?>
+        <li>
+          <a class="noteitem" href="?book=<?= urlencode($book['id']) ?>&amp;note=<?= e($n['id']) ?>">
+            <span class="ntitle"><?= e($n['title'] ?? 'Chapter') ?></span>
+            <span class="nchev">&rsaquo;</span>
+          </a>
+          <form method="post" action="" class="ndel">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete_note">
+            <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+            <input type="hidden" name="id" value="<?= e($n['id']) ?>">
+            <input type="hidden" name="ret" value="chapters">
+            <button class="del" type="submit" title="Delete chapter">&times;</button>
+          </form>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  <?php endif; ?>
+
+  <form id="undoForm" method="post" action="" style="display:none">
+    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+    <input type="hidden" name="action" value="undo_note">
+    <input type="hidden" name="book" value="<?= e($book['id']) ?>">
+    <input type="hidden" name="ret" value="chapters">
+  </form>
+
 <?php elseif ($book && $curNote === null): ?>
   <!-- ===================== BOOK PAGE (rating + notes) ===================== -->
   <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
@@ -892,7 +980,7 @@ function books_header(string $titleHtml): void
       <button class="addbook" type="submit">+ New note</button>
     </form>
   </div>
-  <form class="setcoverform" id="setCoverForm" method="post" action="" <?= empty($book['cover_url']) ? 'hidden' : '' ?>>
+  <form class="setcoverform" id="setCoverForm" method="post" action="" hidden>
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="set_cover">
     <input type="hidden" name="book" value="<?= e($book['id']) ?>">
@@ -902,9 +990,11 @@ function books_header(string $titleHtml): void
 
   <?php
     // Split book notes into sections (bold headers) + notes grouped under them.
+    // Chapters live in their own view, so they're excluded from the normal list.
     $bSections = [];
     foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $bSections, true)) { $bSections[] = $it['name']; } }
-    $bNoteRows = array_values(array_filter($bookNotes, fn($it) => !is_bsection($it)));
+    $chapCount = count(array_filter($bookNotes, fn($it) => !is_bsection($it) && !empty($it['chapter'])));
+    $bNoteRows = array_values(array_filter($bookNotes, fn($it) => !is_bsection($it) && empty($it['chapter'])));
     usort($bNoteRows, fn($a, $b) => ($b['updated'] ?? 0) <=> ($a['updated'] ?? 0));
     $ungroupedN = []; $groupedN = [];
     foreach ($bNoteRows as $n) {
@@ -933,6 +1023,10 @@ function books_header(string $titleHtml): void
         echo '</ul>';
     };
   ?>
+
+  <a class="chaptersbtn" href="?book=<?= urlencode($book['id']) ?>&amp;view=chapters">
+    Chapters<?= $chapCount ? ' &middot; ' . $chapCount : '' ?> <span class="chev">&rsaquo;</span>
+  </a>
 
   <form method="post" action="" class="newsection-form" onsubmit="return this.name.value.trim()!==''">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -971,7 +1065,9 @@ function books_header(string $titleHtml): void
   <?php
     $noteDefault = date('m/d/Y h:i a', (int) ($curNote['created'] ?? time())) . ' - Note';
     $editSections = [];
-    foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $editSections, true)) { $editSections[] = $it['name']; } }
+    if (empty($curNote['chapter'])) {   // chapters aren't grouped into sections
+        foreach ($bookNotes as $it) { if (is_bsection($it) && !in_array($it['name'], $editSections, true)) { $editSections[] = $it['name']; } }
+    }
   ?>
   <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
   <form class="editor" method="post" action="">
