@@ -129,10 +129,11 @@ function render_folder_nav(array $folders, string $active): void
  * $groups is [ ['label' => 'Sean', 'options' => [ [value, label], … ] ], … ]; a group
  * with an empty label has its options listed loose at the top.
  */
-function render_folder_select(array $groups, string $active): void
+function render_folder_select(array $groups, string $active, string $extra = ''): void
 {
     ?>
     <div class="foldernav">
+      <?= $extra ?>
       <select id="folderSel" class="foldersel" aria-label="Folder">
         <option value="All"<?= ($active === 'All' || $active === '') ? ' selected' : '' ?>>All</option>
         <?php foreach ($groups as $g): ?>
@@ -181,13 +182,13 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
             <li>
               <span class="fname"><?= htmlspecialchars($f, ENT_QUOTES) ?></span>
               <?php if ($f !== FOLDER_DEFAULT): ?>
-                <form method="post" action="" style="display:inline"
-                      onsubmit="return confirm('Delete the folder &quot;<?= htmlspecialchars($f, ENT_QUOTES) ?>&quot;? Its items move to <?= FOLDER_DEFAULT ?>.')">
+                <form method="post" action="" style="display:inline">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="delete_folder">
                   <input type="hidden" name="view" value="<?= $vw ?>">
                   <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
-                  <button type="submit" class="fdel" title="Delete folder">&times;</button>
+                  <button type="submit" class="fdel needs-confirm" data-confirm="Delete?"
+                          title="Delete folder">&times;</button>
                 </form>
               <?php endif; ?>
             </li>
