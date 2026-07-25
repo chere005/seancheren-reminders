@@ -57,12 +57,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'notes', $name);
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All'));
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . '&edit=1');
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')));
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -74,7 +74,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($n);
         save_notes($dataFile, $notes);
-        header('Location: ' . _self_path() . '?folder=All');
+        header('Location: ' . _self_path() . '?folder=All&edit=1');
         exit;
     }
 
@@ -92,7 +92,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 save_notes($dataFile, $notes);
             }
         }
-        header('Location: ' . $listUrl);
+        header('Location: ' . $listUrl . '&edit=1');
         exit;
     }
     if ($_POST['action'] === 'delete_section') {
@@ -104,7 +104,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($n);
         save_notes($dataFile, $notes);
-        header('Location: ' . $listUrl);
+        header('Location: ' . $listUrl . '&edit=1');
         exit;
     }
 
@@ -172,7 +172,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             foreach ($notes as $x) { if (!is_section($x) && ($x['id'] ?? '') === $id) { $_SESSION['undo_note'] = $x; break; } }
             $notes = array_values(array_filter($notes, fn($n) => is_section($n) || $n['id'] !== $id));
             save_notes($dataFile, $notes);
-            header('Location: ' . _self_path() . $vq . '&undo=1');   // back to the list
+            header('Location: ' . _self_path() . $vq . '&undo=1&edit=1');   // back to the list, still editing
             exit;
 
         case 'undo':
@@ -581,9 +581,9 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       document.body.classList.toggle('editing', on);
       if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
       editBtn.textContent = on ? 'Done' : 'Edit';
-      localStorage.setItem('notesEditing', on ? '1' : '0');
     };
-    setEdit(localStorage.getItem('notesEditing') === '1');
+    // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
+    setEdit(new URLSearchParams(location.search).get('edit') === '1');
     editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   }
 
