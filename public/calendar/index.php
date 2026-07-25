@@ -266,9 +266,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $list = load_json_list($file);
         foreach ($list as &$it) {
             if (($it['id'] ?? '') === $id) {
-                $it[$spec['textField']] = mb_substr($text, 0, $kind === 'note' ? 200 : 500);
-                $it[$spec['dateField']] = $dateOk ? $date : null;
-                if ($kind === 'event') { $it['time'] = $timeOk ? $time : null; $it['cal'] = $evCalOk; }
+                // Same reading as adding one: a date or time typed into the text counts
+                // ("Vet 8/3 2pm"), and the window's own fields win over what was typed.
+                $it[$spec['textField']] = mb_substr($ptext, 0, $kind === 'note' ? 200 : 500);
+                $it[$spec['dateField']] = $effDate;
+                if ($kind !== 'note')  { $it['time'] = $timeOk ? $time : $ptime; }
+                if ($kind === 'event') { $it['cal'] = $evCalOk; }
                 if ($kind === 'note')  { $it['updated'] = time(); }
                 break;
             }
@@ -1067,7 +1070,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const mTime    = document.getElementById('mTime');
   const mCalRow  = document.getElementById('mCalRow');
   const mCal     = document.getElementById('mCal');
-  const mSecRow  = document.getElementById('mSecRow');
+  const mSecRow  = document.getElementById('mSecRow');   // reminders file under a group, not a calendar
   // Time and calendar are event-only fields, so they show and hide together. A
   // reminder gets the group picker in their place — it belongs to a folder, not a calendar.
   const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };

@@ -671,7 +671,7 @@ $sectionInput =
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; padding: 0.3rem 0.75rem; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1.2; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
@@ -830,7 +830,8 @@ $sectionInput =
   window.sectionEditToggle = () => setEdit(!editing());
   document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
 
-  // "+ Section" becomes the field it's asking for, and goes back if left empty.
+  // "+ Section" becomes the field it's asking for, and goes back if left empty — the
+  // button and the field are the same size, so the row doesn't jump when they swap.
   const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
   if (newSecBtn && newSecForm) {
     const secInput = newSecForm.querySelector('input[type=text]');

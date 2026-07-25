@@ -266,17 +266,22 @@ function rt_script(): string
   };
 
   const toolbar = document.querySelector('.rt-toolbar');
+  // Pressing a toolbar button must not take focus off the body — otherwise the caret
+  // (and the selection the command is about to act on) is gone by the time it runs.
   toolbar.addEventListener('mousedown', (e) => { if (e.target.closest('.rt-btn')) { e.preventDefault(); } });
   toolbar.addEventListener('click', (e) => {
     const btn = e.target.closest('.rt-btn[data-cmd]');
     if (!btn) { return; }
     body.focus();
+    // Quote is a toggle: unquote() returns false when the caret isn't in one, and only
+    // then do we wrap. Everything else is a plain execCommand.
     if (btn.dataset.cmd === 'quote') { if (!unquote()) { document.execCommand('formatBlock', false, 'blockquote'); } }
     else { document.execCommand(btn.dataset.cmd, false, null); }
     sync(); refresh();
   });
 
-  // Light the buttons that describe where the caret is.
+  // Light the buttons that describe where the caret is. queryCommandState throws on
+  // some browsers for commands they don't know, hence the try.
   const refresh = () => {
     toolbar.querySelectorAll('.rt-btn[data-cmd]').forEach(b => {
       const c = b.dataset.cmd;
