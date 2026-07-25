@@ -556,6 +556,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     body:not(.show-done) .cell .dot.reminder.done { display: none; }
     .cell .dot.note { background: #8b6ef0; }
     .cell .dot.event { background: #38bdf8; }
+    /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
+    .cell.wk-hide { display: none; }
+    body.weekmode .legend, body.weekmode .calpick { display: none; }
     .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
     .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
     .legend .dot.reminder { background: #34d399; }
@@ -817,9 +820,15 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <?php endforeach; ?>
   </div>
 
-  <div class="grid">
+  <?php
+    // Every cell carries the row it sits on, so week mode can hide all but two of
+    // them without the grid needing a different shape.
+    $cellNo = 0;
+    $weekOf = function () use (&$cellNo) { return intdiv($cellNo++, 7); };
+  ?>
+  <div class="grid" id="calGrid">
     <?php for ($i = 0; $i < $leadBlank; $i++): ?>
-      <div class="cell blank"></div>
+      <div class="cell blank" data-week="<?= $weekOf() ?>"></div>
     <?php endfor; ?>
 
     <?php for ($day = 1; $day <= $daysInMo; $day++): ?>
@@ -828,7 +837,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         $isToday = $ymd === $todayYmd;
         $events  = $byDay[$ymd] ?? [];
       ?>
-      <div class="cell<?= $isToday ? ' today' : '' ?>" data-date="<?= $ymd ?>" role="button" tabindex="0">
+      <div class="cell<?= $isToday ? ' today' : '' ?>" data-date="<?= $ymd ?>" data-week="<?= $weekOf() ?>" role="button" tabindex="0">
         <div class="num"><?= $day ?></div>
         <div class="dots">
           <?php
@@ -1624,6 +1633,73 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     if (calModal.classList.contains('open')) { closeCalModal(); return; }
     closeModal();
   });
+
+  // ---- Week mode: swipe up on the calendar to keep this week and the next ----
+  // The month is still what the server renders; week mode just hides the other rows
+  // and re-points the arrows, so nothing about the grid or the day panel changes.
+  (function () {
+    const grid  = document.getElementById('calGrid');
+    const cells = [...grid.querySelectorAll('.cell')];
+    const lastWeek = Math.max(...cells.map(c => +c.dataset.week));
+    const weekOfToday = () => {
+      const t = grid.querySelector('.cell.today');
+      return t ? +t.dataset.week : 0;
+    };
+    // Landing here from an arrow press: 'first' or 'last' says which end to open on.
+    const wkParam = new URLSearchParams(location.search).get('wk');
+    let anchor = wkParam === 'last' ? Math.max(0, lastWeek - 1)
+               : wkParam === 'first' ? 0
+               : weekOfToday();
+    let weekMode = localStorage.getItem('calWeekMode') === '1';
+
+    const apply = () => {
+      document.body.classList.toggle('weekmode', weekMode);
+      if (anchor > lastWeek - 1) { anchor = Math.max(0, lastWeek - 1); }
+      cells.forEach(c => {
+        const w = +c.dataset.week;
+        c.classList.toggle('wk-hide', weekMode && w !== anchor && w !== anchor + 1);
+      });
+    };
+    const setMode = (on) => {
+      if (weekMode === on) { return; }
+      weekMode = on;
+      localStorage.setItem('calWeekMode', on ? '1' : '0');
+      if (on) { anchor = weekOfToday(); }
+      apply();
+    };
+    apply();
+
+    // In week mode the arrows step a week at a time, rolling into the next month
+    // (opening on its first or last week) when they run off this one.
+    const step = (dir) => {
+      const target = anchor + dir;
+      if (target < 0)               { location.href = '?ym=<?= $prev ?>&wk=last';  return true; }
+      if (target > lastWeek - 1)    { location.href = '?ym=<?= $next ?>&wk=first'; return true; }
+      anchor = target; apply(); return true;
+    };
+    document.querySelectorAll('.monthnav > a').forEach((a, i) => {
+      a.addEventListener('click', (e) => {
+        if (!weekMode) { return; }        // month mode: the plain ?ym= link
+        e.preventDefault();
+        step(i === 0 ? -1 : 1);
+      });
+    });
+
+    // Swipe up on the calendar half to collapse it, down to open it back out.
+    let sy = null, sx = null;
+    const wrap = document.querySelector('.cal-top') || grid.parentElement;
+    wrap.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) { sy = null; return; }
+      sy = e.touches[0].clientY; sx = e.touches[0].clientX;
+    }, { passive: true });
+    wrap.addEventListener('touchend', (e) => {
+      if (sy === null) { return; }
+      const t = e.changedTouches[0], dy = t.clientY - sy, dx = t.clientX - sx;
+      sy = null;
+      if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) { return; }   // a tap, or a sideways drag
+      setMode(dy < 0);
+    }, { passive: true });
+  })();
 
   // Left/right arrow keys cycle months (when no modal is open).
   document.addEventListener('keydown', e => {
