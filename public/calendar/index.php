@@ -307,6 +307,10 @@ $monthName = date('F Y', $firstTs);
 $todayYmd  = date('Y-m-d');
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
+// The grid fills its first and last rows with the neighbouring months' days.
+$prevDays  = (int) date('t', mktime(0, 0, 0, $month - 1, 1, $year));
+$tailBlank = (7 - ($leadBlank + $daysInMo) % 7) % 7;
+
 $prev = date('Y-m', mktime(0, 0, 0, $month - 1, 1, $year));
 $next = date('Y-m', mktime(0, 0, 0, $month + 1, 1, $year));
 
@@ -464,7 +468,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }
-    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     /* Widget lives in the manager's button row now, dressed like Share. */
     .modal .buttons .widgetlink {
       display: inline-flex; align-items: center; background: #2a2a2a; border: none; color: #ccc;
@@ -481,7 +485,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
     /* Visible-calendar picker, under the back button / title. Hand-built rather than a
        <select> so each entry can carry its calendar's colour dot. */
-    .calpick { margin: 0 0 0.9rem; position: relative; }
+    .calpick { margin: 0 0 0.9rem; padding-left: 2rem; position: relative; }   /* the Reminders offset */
     .calpick-btn {
       display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
       background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px;
@@ -533,16 +537,19 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .monthnav .todaybtn:hover { border-color: #34d399; color: #34d399; background: #14251f; }
 
-    .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .dow { margin-bottom: 4px; }
+    .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .dow { margin-bottom: 6px; }
     .dow span { text-align: center; font-size: 0.7rem; color: #666; padding: 0.25rem 0; }
     .cell {
-      min-height: 46px; background: #171717; border: 1px solid #242424; border-radius: 6px;
+      min-height: 40px; background: #171717; border: 1px solid #242424; border-radius: 6px;
       padding: 4px 4px 3px; cursor: pointer; position: relative;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
     .cell:not(.blank):hover { border-color: #3a5a4d; background: #1b1f1d; }
     .cell.blank { background: transparent; border-color: transparent; cursor: default; }
+    /* The neighbouring months: there, but clearly not this month. */
+    .cell.other { background: #131313; border-color: #1c1c1c; cursor: default; }
+    .cell.other .num { color: #4a4a4a; }
     .cell .num { font-size: 0.82rem; color: #999; }
     .cell.today { border-color: #34d399; }
     .cell.today .num { color: #34d399; font-weight: 700; }
@@ -834,8 +841,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     $weekOf = function () use (&$cellNo) { return intdiv($cellNo++, 7); };
   ?>
   <div class="grid" id="calGrid">
-    <?php for ($i = 0; $i < $leadBlank; $i++): ?>
-      <div class="cell blank" data-week="<?= $weekOf() ?>"></div>
+    <?php // The week either side is shown greyed rather than left empty, so the month
+          // reads as part of a continuous calendar. They aren't tappable — a day panel
+          // for a day this page hasn't loaded any items for would just look broken. ?>
+    <?php for ($i = $leadBlank; $i > 0; $i--): ?>
+      <div class="cell other" data-week="<?= $weekOf() ?>"><div class="num"><?= $prevDays - $i + 1 ?></div></div>
     <?php endfor; ?>
 
     <?php for ($day = 1; $day <= $daysInMo; $day++): ?>
@@ -848,9 +858,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <div class="num"><?= $day ?></div>
         <div class="dots">
           <?php
-            // Events get a dot each, first and in their calendar's colour, so the row
-            // reads as "how much is on today". Reminders and notes are only ever one
-            // dot apiece — a long list shouldn't crowd the events out of the cell.
+            // Events come first, in their calendar's colour, but at most two of them:
+            // the row reads as "how much is on today", and four dots in a 40px cell
+            // read as noise. Reminders and notes are only ever one dot apiece.
             $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
             $hasNote = (bool) array_filter($events, fn($ev) => $ev['kind'] === 'note');
             // The single reminder dot takes the worst state of the day's reminders:
@@ -862,8 +872,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
             }
           ?>
+          <?php $evShown = 0; ?>
           <?php foreach ($events as $ev): ?>
-            <?php if ($ev['kind'] !== 'event') { continue; } ?>
+            <?php if ($ev['kind'] !== 'event' || $evShown >= 2) { continue; } ?>
+            <?php $evShown++; ?>
             <span class="dot event" style="background:<?= e($ev['color']) ?>"></span>
           <?php endforeach; ?>
           <?php if ($remDots): ?><span class="dot reminder<?= $remCls ?>"></span><?php endif; ?>
@@ -871,11 +883,15 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         </div>
       </div>
     <?php endfor; ?>
+
+    <?php for ($day = 1; $day <= $tailBlank; $day++): ?>
+      <div class="cell other" data-week="<?= $weekOf() ?>"><div class="num"><?= $day ?></div></div>
+    <?php endfor; ?>
   </div>
 
   <div class="legend">
-    <span><span class="dot reminder"></span>Reminders</span>
     <span><span class="dot event"></span>Events</span>
+    <span><span class="dot reminder"></span>Reminders</span>
     <span><span class="dot note"></span>Notes</span>
   </div>
  </div>
