@@ -389,11 +389,8 @@ $sectionInput =
       border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
     form.add .editbtn:hover { border-color: #888; color: #fff; }
-    form.add #editBtn { margin-left: auto; }              /* Edit + Add hug the right edge */
-    form.add #undoBtn { display: none; margin-left: auto; }
+    form.add #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
     body.can-undo form.add #undoBtn { display: inline-block; }
-    body.can-undo form.add #editBtn { margin-left: 0; }   /* Undo takes the auto-margin right after a delete */
-    body.editing form.add .editbtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
     body:not(.show-done) li.done { display: none; }
@@ -505,7 +502,7 @@ $sectionInput =
         <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(true) ?>
   </header>
 
   <?php render_folder_nav($folders, $view, $csrf); ?>
@@ -532,7 +529,6 @@ $sectionInput =
       </select>
     <?php endif; ?>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
   </form>
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">

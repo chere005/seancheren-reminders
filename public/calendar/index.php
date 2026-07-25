@@ -399,10 +399,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
     body.show-done .dp-head #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
-    .dp-head .dp-edit { background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
-      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
-    .dp-head .dp-edit:hover { border-color: #888; color: #fff; }
-    body.editing .dp-head .dp-edit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .dp-head .dp-undo { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
     .dp-head .dp-undo:hover { border-color: #888; color: #fff; }
@@ -563,7 +559,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     </div>
     <div class="hright">
       <a class="widgetlink" href="/calendar/feed.php">Widget</a>
-      <?= render_user_menu() ?>
+      <?= render_user_menu(true, 'dpEdit') ?>
     </div>
   </header>
 
@@ -640,7 +636,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <button type="button" id="calShowAll">Show All</button>
     <span class="dp-gap"></span>
     <button class="dp-undo" id="dpUndo" type="button">Undo</button>
-    <button class="dp-edit" id="dpEdit" type="button">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">

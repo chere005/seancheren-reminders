@@ -34,6 +34,14 @@ function chrome_styles(): string
     }
     .usermenu .menu a { display: block; margin: 0; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
     .usermenu .menu a:hover { background: #2a2a2a; color: #fff; }
+    /* Edit sits under the username, wearing the same pill. */
+    .usercol { display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; flex: 0 0 auto; }
+    .hedit {
+      margin: 0; color: #ccc; font-size: 0.8rem; background: none; border: 1px solid #333;
+      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
+    }
+    .hedit:hover { border-color: #888; color: #fff; }
+    body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     CSS;
 }
 
@@ -42,11 +50,20 @@ function back_button(): string
     return '<button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>';
 }
 
-function render_user_menu(): string
+/**
+ * The username chip, optionally with the app's Edit toggle stacked underneath it.
+ * $editId is the button id the page's own script already listens on.
+ */
+function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): string
 {
-    $u = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
-    return '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
-         . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div>';
+    $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
+    $menu = '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
+          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div>';
+    if (!$withEdit) {
+        return $menu;
+    }
+    return '<div class="usercol">' . $menu
+         . '<button type="button" class="hedit" id="' . htmlspecialchars($editId, ENT_QUOTES) . '">Edit</button></div>';
 }
 
 function chrome_script(): string
