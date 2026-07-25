@@ -135,7 +135,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
-    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+    header { display: flex; align-items: center; justify-content: space-between; }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }

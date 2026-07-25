@@ -136,6 +136,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // Reorder / re-section notes after a drag (AJAX). order = [{id, section}, …] top-to-bottom.
+    if ($_POST['action'] === 'reorder') {
+        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        if (!is_array($order)) { $order = []; }
+        $notes = load_notes($dataFile);
+
+        $sectionRows = [];
+        $validSection = [];
+        $byId         = [];
+        foreach ($notes as $it) {
+            if (is_section($it)) { $sectionRows[] = $it; $validSection[$it['name']] = true; }
+            else { $byId[$it['id']] = $it; }
+        }
+
+        $newRows = [];
+        $used    = [];
+        foreach ($order as $o) {
+            $id = (string) ($o['id'] ?? '');
+            if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
+            $sec = (string) ($o['section'] ?? '');
+            if ($sec !== '' && !isset($validSection[$sec])) { $sec = ''; }
+            $row            = $byId[$id];
+            $row['section'] = $sec;
+            $newRows[]      = $row;
+            $used[$id]      = true;
+        }
+        // Notes the drag never saw (they're in another folder) keep their place at the end.
+        foreach ($notes as $it) {
+            if (!is_section($it) && !isset($used[$it['id']])) { $newRows[] = $it; }
+        }
+
+        save_notes($dataFile, array_merge($sectionRows, $newRows));
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     $notes       = load_notes($dataFile);
     $sectionSet  = [];
     foreach ($notes as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
@@ -245,8 +282,7 @@ if (!$editing) {
     if ($view !== 'All') {
         $listNotes = array_values(array_filter($listNotes, fn($n) => ($n['folder'] ?? FOLDER_DEFAULT) === $view));
     }
-    // Newest-updated first by default (JS can re-sort).
-    usort($listNotes, fn($a, $b) => ($b['updated'] ?? 0) <=> ($a['updated'] ?? 0));
+    // Stored order is drag order, as in Reminders and the bookshelf's notes.
 
     $ungrouped = [];
     $grouped   = [];
@@ -257,15 +293,15 @@ if (!$editing) {
     }
 }
 
-/** Echo a list of note rows (nothing if empty). */
-function render_note_rows(array $rows, string $view, string $csrf): void
+/** Echo a list of note rows. Always emitted, since an empty one is a drag target. */
+function render_note_rows(array $rows, string $view, string $csrf, string $section = ''): void
 {
-    if (!$rows) { return; }
-    echo '<ul class="nlist">';
+    echo '<ul class="nlist" data-section="' . e($section) . '">';
     foreach ($rows as $n) {
         $date = $n['date'] ?? '';
         ?>
-        <li data-title="<?= e($n['title'] ?? '') ?>" data-date="<?= e($date) ?>" data-updated="<?= (int) ($n['updated'] ?? 0) ?>">
+        <li data-id="<?= e($n['id']) ?>">
+          <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <a class="noteitem" href="?folder=<?= urlencode($view) ?>&amp;id=<?= e($n['id']) ?>">
             <span class="ntitle"><?= e($n['title'] ?? 'Untitled note') ?></span>
             <?php if ($date !== ''): ?><span class="ndate"><?= e($date) ?></span><?php endif; ?>
@@ -305,7 +341,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;
+      display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
@@ -346,7 +382,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
-    .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
@@ -376,6 +412,24 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
+
+    /* Drag-to-reorder notes (edit mode). Hidden, not gone: taking the handle out of
+       the flow would shift every title sideways the moment you started editing.
+       The section headers carry a blank one so their names start at the same x. */
+    .drag-handle {
+      visibility: hidden; flex: 0 0 auto; width: 1rem; display: inline-flex;
+      align-items: center; justify-content: center; color: #666; font-size: 0.9rem;
+      cursor: grab; touch-action: none; user-select: none;
+    }
+    body.editing .drag-handle { visibility: visible; }
+    /* The blank slot swallows the header's gap, so a section's name starts exactly
+       where the note titles under it do. */
+    .drag-handle.blank { visibility: hidden; cursor: default; margin-right: -0.5rem; }
+    .drag-handle:active { cursor: grabbing; color: #34d399; }
+    ul.nlist li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
+    /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
+    body.editing #notes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
@@ -499,10 +553,12 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ Note</strong> to start.</p>
   <?php else: ?>
+   <div id="notes-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; ?>
       <div class="section-head">
+        <span class="drag-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= e($sname) ?></span>
         <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
         <?= section_edit_button() ?>
@@ -514,16 +570,18 @@ function render_note_rows(array $rows, string $view, string $csrf): void
           <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php render_note_rows($rows, $view, $csrf); ?>
+      <?php render_note_rows($rows, $view, $csrf, $sname); ?>
     <?php endforeach; ?>
 
     <!-- Permanent "Notes" group: always last, not deletable. -->
     <div class="section-head">
+      <span class="drag-handle blank" aria-hidden="true"></span>
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
       <?php render_section_add('', $csrf, $view, $addTarget); ?>
       <?= section_edit_button() ?>
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>
+   </div>
   <?php endif; ?>
 
 <?php else: ?>
@@ -649,7 +707,73 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     input.addEventListener('blur', () => { if (input.value.trim() === '') { close(); } });
   }
 
+  // ---- Drag to reorder notes (edit mode). Hold anywhere on a row to pick it up,
+  //      or use the ☰ handle for an immediate grab. Same gesture as the bookshelf's. ----
+  (function () {
+    const root = document.getElementById('notes-root');
+    if (!root) return;
+    const CSRF = '<?= $csrf ?>', VIEW = '<?= e($view) ?>';
+    let dragLi = null, pressTimer = null, pid = null, sx = 0, sy = 0, suppressClick = false;
 
+    const persist = () => {
+      const order = [];
+      root.querySelectorAll('ul.nlist').forEach(ul => {
+        const section = ul.dataset.section || '';
+        ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
+      });
+      const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW, order: JSON.stringify(order) });
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+    };
+    const begin = (li) => {
+      dragLi = li; li.classList.add('dragging');
+      try { li.setPointerCapture(pid); } catch (_) {}
+      if (navigator.vibrate) navigator.vibrate(12);
+    };
+    const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+
+    root.addEventListener('pointerdown', (e) => {
+      if (!document.body.classList.contains('editing')) return;
+      const li = e.target.closest('li[data-id]'); if (!li || !root.contains(li)) return;
+      if (e.target.closest('.ndel')) return;            // let the delete button work
+      pid = e.pointerId; sx = e.clientX; sy = e.clientY;
+      if (e.target.closest('.drag-handle')) { e.preventDefault(); begin(li); }
+      else { pressTimer = setTimeout(() => { pressTimer = null; begin(li); }, 280); }
+    });
+    // iOS sits on a touch deciding whether it's a scroll; claiming the handle makes
+    // the grab feel immediate.
+    root.addEventListener('touchstart', (e) => {
+      if (!document.body.classList.contains('editing')) return;
+      if (e.target.closest('.drag-handle:not(.blank)')) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('pointermove', (e) => {
+      if (pressTimer) {                                 // still waiting: a real move = scroll/tap
+        if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
+        return;
+      }
+      if (!dragLi) return;
+      e.preventDefault();
+      const under = document.elementFromPoint(e.clientX, e.clientY); if (!under) return;
+      const overLi = under.closest('li[data-id]');
+      if (overLi && overLi !== dragLi && root.contains(overLi)) {
+        const r = overLi.getBoundingClientRect();
+        overLi.parentNode.insertBefore(dragLi, (e.clientY > r.top + r.height / 2) ? overLi.nextSibling : overLi);
+      } else {
+        const ul = under.closest('ul.nlist');
+        if (ul && root.contains(ul) && ul !== dragLi.parentNode) ul.appendChild(dragLi);
+      }
+    }, { passive: false });
+    const end = () => {
+      cancelPress();
+      if (!dragLi) return;
+      dragLi.classList.remove('dragging'); dragLi = null;
+      suppressClick = true;                             // swallow the click that follows a drag
+      setTimeout(() => { suppressClick = false; }, 350);
+      persist();
+    };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+    root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
+  })();
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>

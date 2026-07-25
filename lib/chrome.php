@@ -16,8 +16,9 @@ function chrome_styles(): string
     return <<<CSS
     /* The top bar: back, the app's name, its one round button, then the username on
        the right. Everything on it is 32px tall and sits on the same line, with a
-       rule under the lot. Apps only supply what goes inside. */
-    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; margin-bottom: 1rem; }
+       rule under the lot, and the same small gap under that rule in every app.
+       Apps only supply what goes inside. */
+    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; margin-bottom: 0.5rem; }
     .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
     .hright { display: flex; align-items: center; gap: 0.8rem; flex: 0 0 auto; }
     .backbtn, .titlebtn, .usermenu .who {
@@ -25,7 +26,7 @@ function chrome_styles(): string
       border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
       font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
-    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0 0.1rem 0.15rem 0; }
+    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
     /* The "+" (or pencil) beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
@@ -40,11 +41,13 @@ function chrome_styles(): string
     }
     .usermenu .menu a { display: block; margin: 0; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
     .usermenu .menu a:hover { background: #2a2a2a; color: #fff; }
-    /* Edit sits to the left of the username, wearing the same pill. */
+    /* Edit — a pencil, as on every other Edit in the suite — sits to the left of
+       the username, wearing the same pill. */
     .usercol { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
     .hedit {
-      margin: 0; color: #ccc; font-size: 0.8rem; background: none; border: 1px solid #333;
-      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
+      margin: 0; color: #ccc; font-size: 0.95rem; background: none; border: 1px solid #333;
+      border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; font-family: inherit;
+      line-height: 1.2;
     }
     .hedit:hover { border-color: #888; color: #fff; }
     body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
@@ -57,6 +60,7 @@ function chrome_styles(): string
     .sec-edit:hover { border-color: #888; color: #ccc; }
     body.editing .sec-edit { background: #34d399; border-color: #34d399; color: #06251b; }
     CSS
+    . settings_modal_styles()
     . confirm_delete_styles();
 }
 
@@ -66,20 +70,135 @@ function back_button(): string
 }
 
 /**
- * The username chip, optionally with the app's Edit toggle stacked underneath it.
- * $editId is the button id the page's own script already listens on.
+ * The username chip, the settings "⋮" to its left, and optionally the app's Edit
+ * toggle (a pencil) beside them. $editId is the button id the page's own script
+ * already listens on.
  */
 function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): string
 {
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
-    $menu = '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
-          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div>';
+    $menu = settings_button()
+          . '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
+          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div>'
+          . settings_modal_html();
     if (!$withEdit) {
         return $menu;
     }
     return '<div class="usercol">'
-         . '<button type="button" class="hedit" id="' . htmlspecialchars($editId, ENT_QUOTES) . '">Edit</button>'
+         . '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
+         . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
          . $menu . '</div>';
+}
+
+/**
+ * User settings: the "⋮" that sits left of the username, and the window behind it.
+ * The only thing in there so far is changing your own password, which posts
+ * `change_password` to whatever page you're on — require_login() answers it, so no
+ * app has to wire anything up. Pages that don't use chrome_styles()/chrome_script()
+ * (Aki's Bookshelf) emit the three helpers themselves.
+ */
+function settings_button(): string
+{
+    return '<button type="button" class="dots" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
+}
+
+function settings_modal_html(): string
+{
+    $csrf = htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES);
+    $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
+    return <<<HTML
+<div class="setmodal-backdrop" id="setBackdrop">
+  <div class="setmodal">
+    <h2>Settings</h2>
+    <p class="setwho">Signed in as <strong>{$u}</strong></p>
+    <form id="pwForm" autocomplete="off">
+      <input type="hidden" name="csrf" value="{$csrf}">
+      <input type="hidden" name="action" value="change_password">
+      <label>Current password<input type="password" name="current" autocomplete="current-password"></label>
+      <label>New password<input type="password" name="new" autocomplete="new-password"></label>
+      <label>Repeat new password<input type="password" name="again" autocomplete="new-password"></label>
+      <p class="setmsg" id="setMsg" hidden></p>
+      <button type="submit" class="setsave">Change password</button>
+    </form>
+    <button type="button" class="setdone" id="setDone">Done</button>
+  </div>
+</div>
+HTML;
+}
+
+function settings_modal_styles(): string
+{
+    return <<<CSS
+    /* The "⋮" wears the username's pill, one notch narrower. */
+    .dots {
+      height: 32px; width: 26px; display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid #333; border-radius: 999px; color: #ccc;
+      font-family: inherit; font-size: 1.1rem; line-height: 1; cursor: pointer; flex: 0 0 auto;
+    }
+    .dots:hover { border-color: #888; color: #fff; }
+    /* Same shape as the calendar and folder managers. */
+    .setmodal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 70;
+      display: none; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .setmodal-backdrop.open { display: flex; }
+    .setmodal {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 12px; text-align: left;
+      width: 100%; max-width: 340px; padding: 1.25rem; max-height: 85vh; overflow-y: auto;
+    }
+    .setmodal h2 { font-size: 1.05rem; margin-bottom: 0.4rem; }
+    .setmodal .setwho { font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
+    .setmodal label { display: block; font-size: 0.78rem; color: #aaa; margin-bottom: 0.7rem; }
+    .setmodal input[type=password] {
+      display: block; width: 100%; margin-top: 0.25rem; padding: 0.45rem 0.75rem;
+      background: #222; border: 1px solid #444; border-radius: 6px; color: #eee;
+      font-size: 16px; font-family: inherit;
+    }
+    .setmodal input[type=password]:focus { outline: none; border-color: #888; }
+    .setmodal .setmsg { font-size: 0.8rem; margin-bottom: 0.7rem; color: #f66; }
+    .setmodal .setmsg.ok { color: #34d399; }
+    .setmodal .setsave {
+      background: #34d399; color: #06251b; border: none; border-radius: 999px; font-weight: 700;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    }
+    .setmodal .setsave:hover { background: #52e0ac; }
+    .setmodal .setdone {
+      display: block; margin: 1.1rem 0 0 auto; padding: 0.35rem 0.9rem; border: 1px solid #444;
+      background: none; color: #ccc; border-radius: 999px; font-size: 0.9rem; cursor: pointer;
+      font-family: inherit;
+    }
+    .setmodal .setdone:hover { border-color: #888; color: #fff; }
+    CSS;
+}
+
+function settings_modal_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var btn = document.getElementById('setBtn'), back = document.getElementById('setBackdrop');
+  if (!btn || !back) { return; }
+  var form = document.getElementById('pwForm'), msg = document.getElementById('setMsg');
+  var show = function (text, ok) { msg.textContent = text; msg.classList.toggle('ok', !!ok); msg.hidden = !text; };
+  var close = function () { back.classList.remove('open'); form.reset(); show(''); };
+  btn.addEventListener('click', function () { back.classList.add('open'); });
+  document.getElementById('setDone').addEventListener('click', close);
+  back.addEventListener('click', function (e) { if (e.target === back) { close(); } });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var d = new FormData(form);
+    if (String(d.get('new')) !== String(d.get('again'))) { show('The new passwords do not match.'); return; }
+    d.delete('again');
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: new URLSearchParams(d) })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (r && r.ok) { form.reset(); show('Password changed.', true); }
+        else { show((r && r.error) || 'Could not change it.'); }
+      })
+      .catch(function () { show('Could not change it.'); });
+  });
+})();</script>
+JS;
 }
 
 /**
@@ -179,6 +298,7 @@ function chrome_script(): string
          . "document.querySelectorAll('.sec-edit').forEach(function(s){"
          . "s.addEventListener('click',function(){"
          . "if(window.sectionEditToggle){window.sectionEditToggle();}else{eb.click();}});});}})();</script>"
+         . settings_modal_script()
          . confirm_delete_script()
          . keep_edit_script();
 }
