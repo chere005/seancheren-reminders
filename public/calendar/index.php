@@ -617,7 +617,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .tag.reminder { color: var(--k-reminder); background: var(--k-reminder-soft); }
     .dp-item .tag.event { color: var(--k-event-soft); background: var(--k-event-bg); }
     .dp-item .tag.note { color: var(--k-note-soft); background: var(--k-note-bg); }
-    .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .dp-item .dp-check { width: 17px; height: 17px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .dp-item .cdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
