@@ -371,8 +371,8 @@ $doneCount = count($items) - $openCount;
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
 
-// Folder picker contents: mine first, then whatever the other person shared.
-$folderGroups = [['label' => $partner ? share_name($me) : '',
+// Folder picker contents: mine under my name, then whatever the other person shared.
+$folderGroups = [['label' => share_name($me),
                   'options' => array_map(fn($f) => [$f, $f], $myFolders)]];
 if ($sharedFolders) {
     $folderGroups[] = ['label' => share_name($partner),
