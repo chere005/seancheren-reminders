@@ -42,6 +42,14 @@ function chrome_styles(): string
     }
     .hedit:hover { border-color: #888; color: #fff; }
     body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    /* The same toggle again, small enough to sit beside a section's "+". */
+    .sec-edit {
+      flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      width: 24px; height: 24px; font-size: 0.8rem; line-height: 1; cursor: pointer;
+      font-family: inherit; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .sec-edit:hover { border-color: #888; color: #ccc; }
+    body.editing .sec-edit { background: #34d399; border-color: #34d399; color: #06251b; }
     CSS;
 }
 
@@ -67,9 +75,23 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): s
          . $menu . '</div>';
 }
 
+/**
+ * A second Edit toggle, sized to sit beside a section's "+". It clicks the header's
+ * Edit button rather than toggling anything itself, so whatever Edit means on a
+ * given page (each app layers its own behaviour on) stays in one place.
+ */
+function section_edit_button(): string
+{
+    // U+FE0E forces the text pencil rather than the colour emoji one.
+    return '<button type="button" class="sec-edit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>';
+}
+
 function chrome_script(): string
 {
     return "<script>(function(){var b=document.getElementById('userBtn'),m=document.getElementById('userMenu');"
          . "if(b&&m){b.addEventListener('click',function(e){e.stopPropagation();m.hidden=!m.hidden;});"
-         . "document.addEventListener('click',function(e){if(!m.hidden&&!m.contains(e.target)){m.hidden=true;}});}})();</script>";
+         . "document.addEventListener('click',function(e){if(!m.hidden&&!m.contains(e.target)){m.hidden=true;}});}"
+         . "var eb=document.getElementById('editBtn');if(eb){"
+         . "document.querySelectorAll('.sec-edit').forEach(function(s){"
+         . "s.addEventListener('click',function(){eb.click();});});}})();</script>";
 }

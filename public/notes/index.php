@@ -43,6 +43,26 @@ function is_section(array $it): bool
     return ($it['type'] ?? '') === 'section';
 }
 
+/**
+ * The "+" on a section header: makes a note straight into that section and opens it.
+ * A plain submit, since adding a note already means jumping to the editor.
+ */
+function render_section_add(string $name, string $csrf, string $view, string $folder): void
+{
+    $label = e($name === '' ? NOTES_DEFAULT_SECTION : $name);
+    ?>
+    <form method="post" action="" style="display:inline">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="add">
+      <input type="hidden" name="view" value="<?= e($view) ?>">
+      <input type="hidden" name="folder" value="<?= e($folder) ?>">
+      <input type="hidden" name="section" value="<?= e($name) ?>">
+      <button type="submit" class="sec-add" title="New note in <?= $label ?>"
+              aria-label="New note in <?= $label ?>">+</button>
+    </form>
+    <?php
+}
+
 function load_notes(string $file): array { return store_read($file); }
 function save_notes(string $file, array $notes): void { store_write($file, array_values($notes)); }
 
@@ -312,6 +332,13 @@ function render_note_rows(array $rows, string $view, string $csrf): void
 
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.4rem; }
     .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    .sec-add {
+      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
+      border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
+      cursor: pointer; font-family: inherit; display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+    .sec-add:hover { border-color: #34d399; background: #14251f; }
     .section-del {
       background: none; border: 1px solid #2a2a2a; color: #666; border-radius: 6px;
       padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; cursor: pointer;
@@ -458,6 +485,8 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <?php if (!$rows && $view !== 'All') continue; ?>
       <div class="section-head">
         <span class="section-title"><?= e($sname) ?></span>
+        <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
+        <?= section_edit_button() ?>
         <form method="post" action="" style="display:inline"
               onsubmit="return confirm('Delete this section? Its notes stay, just ungrouped.')">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -473,6 +502,8 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <!-- Permanent "Notes" group: always last, not deletable. -->
     <div class="section-head">
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
+      <?php render_section_add('', $csrf, $view, $addTarget); ?>
+      <?= section_edit_button() ?>
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>
   <?php endif; ?>

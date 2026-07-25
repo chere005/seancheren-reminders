@@ -699,6 +699,7 @@ $sectionInput =
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= e($sname) ?></span>
           <?php render_section_add_button($sname); ?>
+          <?= section_edit_button() ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
@@ -717,6 +718,7 @@ $sectionInput =
       <div class="section-head">
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
         <?php render_section_add_button(CALENDAR_SECTION); ?>
+        <?= section_edit_button() ?>
       </div>
       <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view); ?>
       <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
@@ -727,6 +729,7 @@ $sectionInput =
       <div class="section-head">
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
         <?php render_section_add_button(''); ?>
+        <?= section_edit_button() ?>
       </div>
       <?php render_section_add_row('', $csrf, $view); ?>
       <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
