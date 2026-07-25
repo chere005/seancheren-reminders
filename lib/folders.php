@@ -48,6 +48,31 @@ function folders_add(string $dir, string $type, string $name): void
     }
 }
 
+/**
+ * Which folder new items land in while you're viewing "All". Chosen in the folder
+ * window and kept alongside the folder list. Falls back to General, including when
+ * the chosen folder has since been deleted.
+ */
+function folder_default_get(string $dir, string $type, ?string $user = null): string
+{
+    $data = folders_load($dir, $user);
+    $name = (string) ($data['default'][$type] ?? '');
+    return in_array($name, $data[$type] ?? [], true) ? $name : FOLDER_DEFAULT;
+}
+
+function folder_default_set(string $dir, string $type, string $name): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) {
+        return;
+    }
+    $data = folders_load($dir);
+    if (!in_array($name, $data[$type], true)) {
+        return;
+    }
+    $data['default'][$type] = $name;
+    folders_save($dir, $data);
+}
+
 function folders_delete(string $dir, string $type, string $name): void
 {
     if ($name === FOLDER_DEFAULT || !in_array($type, ['reminders', 'notes'], true)) {
@@ -113,9 +138,11 @@ function render_folder_select(array $groups, string $active): void
  * It posts the add_folder / delete_folder actions the pages already handle, so
  * each change is an ordinary POST -> redirect, not AJAX.
  */
-function render_folder_modal(array $folders, string $csrf, string $view = 'All'): void
+function render_folder_modal(array $folders, string $csrf, string $view = 'All',
+                             string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to'): void
 {
     $csrf = htmlspecialchars($csrf, ENT_QUOTES);
+    $vw   = htmlspecialchars($view, ENT_QUOTES);
     ?>
     <div class="modal-backdrop" id="folderModal">
       <div class="foldermodal">
@@ -135,7 +162,7 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All')
                       onsubmit="return confirm('Delete the folder &quot;<?= htmlspecialchars($f, ENT_QUOTES) ?>&quot;? Its items move to <?= FOLDER_DEFAULT ?>.')">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="delete_folder">
-                  <input type="hidden" name="view" value="<?= htmlspecialchars($view, ENT_QUOTES) ?>">
+                  <input type="hidden" name="view" value="<?= $vw ?>">
                   <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
                   <button type="submit" class="fdel" title="Delete folder">&times;</button>
                 </form>
@@ -143,6 +170,19 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All')
             </li>
           <?php endforeach; ?>
         </ul>
+        <form class="defrow" method="post" action="">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="set_default_folder">
+          <input type="hidden" name="view" value="<?= $vw ?>">
+          <label for="folderDefault"><?= htmlspecialchars($defaultLabel, ENT_QUOTES) ?></label>
+          <select id="folderDefault" name="name" onchange="this.form.submit()">
+            <?php foreach ($folders as $f): ?>
+              <option value="<?= htmlspecialchars($f, ENT_QUOTES) ?>"<?= $f === $default ? ' selected' : '' ?>>
+                <?= htmlspecialchars($f, ENT_QUOTES) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </form>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
         <button type="button" class="fdone" id="folderDone">Done</button>
       </div>
@@ -221,6 +261,14 @@ function folder_nav_styles(): string
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
+    /* Which folder new items land in — same shape as the Calendar's default picker. */
+    .foldermodal .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
+    .foldermodal .defrow label { font-size: 0.85rem; color: #999; white-space: nowrap; }
+    .foldermodal .defrow select {
+      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+    }
+    .foldermodal .defrow select:focus { outline: none; border-color: #888; }
     .foldermodal .fhint { color: #777; font-size: 0.78rem; margin: 0.8rem 0 0; }
     .foldermodal .fdone {
       display: block; margin: 1.1rem 0 0 auto; padding: 0.55rem 1.1rem; border: none;

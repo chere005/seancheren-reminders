@@ -27,7 +27,9 @@ $view = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
 if ($view !== 'All' && !in_array($view, $folders, true)) {
     $view = 'All';
 }
-$addTarget = $view === 'All' ? FOLDER_DEFAULT : $view;
+// New notes land in the viewed folder, or the chosen default when viewing All.
+$defFolder = folder_default_get($cfg['data_dir'], 'notes');
+$addTarget = $view === 'All' ? $defFolder : $view;
 $listUrl   = _self_path() . '?folder=' . urlencode($view);
 
 function e(?string $s): string
@@ -56,6 +58,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'notes', $name);
         header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All'));
+        exit;
+    }
+    if ($_POST['action'] === 'set_default_folder') {
+        folder_default_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''));
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')));
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -434,7 +441,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <button type="button" id="undoBtn" class="undo">Undo</button>
   </div>
 
-  <?php render_folder_modal($folders, $csrf, $view); ?>
+  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="undo">
