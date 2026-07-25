@@ -230,7 +230,8 @@ $today = date('Y-m-d');
 
 // The "+ New section" control for the list view.
 $sectionInput =
-    '<form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==\'\'">'
+    '<form method="post" action="" class="newsection" id="newSecForm" hidden'
+  . ' onsubmit="return this.name.value.trim()!==\'\'">'
   . '<input type="hidden" name="csrf" value="' . $csrf . '">'
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
@@ -302,7 +303,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       font-family: system-ui, sans-serif; background: #111; color: #eee;
       min-height: 100vh; padding: 1.5rem 1rem;
     }
-    .wrap { max-width: 720px; margin: 0 auto; }
+    .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;
     }
@@ -434,13 +435,13 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .editor button.del:hover { color: #f66; }
     .editor .meta { font-size: 0.72rem; color: #666; }
 <?= folder_nav_styles() ?>
-    .newsection { margin: 0 0 0.6rem; display: flex; gap: 0.4rem; align-items: center; }
+    .newsection { margin: 0; display: flex; gap: 0.4rem; align-items: center; }
+    .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     .newsection .plus {
       flex: 0 0 auto; width: 34px; background: #f0b429; color: #241a00; border: none;
       border-radius: 999px; font-size: 1.05rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .newsection .plus:hover { background: #f7c95a; }
-    body:not(.editing) .newsection { display: none !important; }   /* edit mode only */
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
@@ -480,12 +481,11 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
       <button class="newnote" type="submit">+ New note</button>
     </form>
-    <button type="button" id="editBtn" class="listedit">Edit</button>
+    <button type="button" id="newSecBtn" class="listedit">+ New section</button>
+    <?= $sectionInput ?>
   </div>
 
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
-
-  <?= $sectionInput ?>
 
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ New note</strong> to start.</p>
@@ -618,16 +618,25 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); doSave(); } });
   }
 
-  // List: edit mode reveals delete buttons (persisted across adds, like reminders).
-  const editBtn = document.getElementById('editBtn');
-  if (editBtn) {
-    const setEdit = (on) => {
-      document.body.classList.toggle('editing', on);
-      editBtn.textContent = on ? 'Done' : 'Edit';
-    };
-    // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
-    setEdit(new URLSearchParams(location.search).get('edit') === '1');
-    editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
+  // List: edit mode reveals delete buttons. The bar's Edit button is gone — the pencil
+  // on each section header is the way in, so it toggles the mode itself here.
+  const setEdit = (on) => document.body.classList.toggle('editing', on);
+  // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
+  setEdit(new URLSearchParams(location.search).get('edit') === '1');
+  window.sectionEditToggle = () => setEdit(!document.body.classList.contains('editing'));
+  document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
+
+  // "+ New section" turns into the field it's asking for, and turns back if you
+  // leave it empty — the same shape as the "+" on a section header.
+  const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
+  if (newSecBtn && newSecForm) {
+    const input = newSecForm.querySelector('input[type=text]');
+    const close = () => { newSecForm.hidden = true; newSecBtn.hidden = false; input.value = ''; };
+    newSecBtn.addEventListener('click', () => {
+      newSecBtn.hidden = true; newSecForm.hidden = false; input.focus();
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+    input.addEventListener('blur', () => { if (input.value.trim() === '') { close(); } });
   }
 
 
