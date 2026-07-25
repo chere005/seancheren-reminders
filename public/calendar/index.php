@@ -1093,7 +1093,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.classList.add('shared');
         chev.textContent = '';
         const who = document.createElement('span');
-        who.className = 'owner'; who.textContent = PARTNER || it.owner;
+        // Their name, capitalised here rather than read from PARTNER — that const is
+        // declared further down, and this runs during the first render.
+        who.className = 'owner'; who.textContent = it.owner.charAt(0).toUpperCase() + it.owner.slice(1);
         row.appendChild(who);
       }
       row.appendChild(chev);
