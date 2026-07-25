@@ -33,7 +33,8 @@ lib/                   → shared code, NOT web-served  (maps to /home/protected
   sharing.php            what sean and aki let each other see
   chrome.php             back button, username menu, Edit toggle
   tabbar.php             bottom tab bar (Reminders / Calendar / Notes / Habits)
-  util.php               small shared helpers (time parsing, …)
+  util.php               small shared helpers (time parsing, the shared palette, …)
+  richtext.php           the note-body formatting toolbar + its sanitiser
   config.php             credentials + secrets   ← gitignored, never deployed
   config.sample.php      template for config.php
 
@@ -57,10 +58,10 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 | App | Login | Storage | Highlights |
 |-----|-------|---------|------------|
 | Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, Show Completed |
-| Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, autosave |
-| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
+| Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
+| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), swipe up for a two-week view, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
 | Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections |
-| Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections |
+| Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections and a quote window (quote + your note + page + optional date) |
 | Chat | **no** | `chat.json` (shared) | public message board, live AJAX feed |
 
 ## Auth & data model
