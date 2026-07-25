@@ -7,6 +7,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
+require_once $__libDir . '/folders.php';
 require_login('Calendar');   // same login as Reminders
 
 $cfg = app_config();
@@ -56,6 +57,13 @@ function load_calendars(string $file): array
 
 $calFile = user_data_file($cfg['data_dir'], 'calendars');
 $calList = load_calendars($calFile);
+
+// Reminder folders the user has switched off for the calendar. Kept in its own
+// little settings file rather than in the calendar list, which is strictly items.
+$prefFile   = user_data_file($cfg['data_dir'], 'calprefs');
+$calPrefs   = store_read($prefFile);
+$hidFolders = array_values(array_filter((array) ($calPrefs['hidden_folders'] ?? []), 'is_string'));
+$remFolders = folders_load($cfg['data_dir'])['reminders'];
 
 // --- Quick add / edit / delete from the calendar (POST -> redirect -> GET), CSRF protected ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
@@ -130,6 +138,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         save_json_list($calFile, $calList);
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'list' => array_values($calList)]);
+        exit;
+    }
+
+    // --- Show/hide a reminder folder on the calendar (AJAX, same answer-with-the-truth style) ---
+    if ($action === 'folder_vis') {
+        $fname = (string) ($_POST['name'] ?? '');
+        if (in_array($fname, $remFolders, true)) {
+            $hidFolders = array_values(array_filter($hidFolders, fn($f) => $f !== $fname));
+            if (empty($_POST['show'])) { $hidFolders[] = $fname; }
+            $calPrefs['hidden_folders'] = $hidFolders;
+            store_write($prefFile, $calPrefs);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'hidden' => $hidFolders]);
         exit;
     }
 
@@ -249,7 +271,8 @@ $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'do
 
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
     if (empty($r['due'])) { continue; }
-    $done = !empty($r['done']);                                    // done are hidden until "Show All"
+    if (in_array($r['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)) { continue; }   // folder switched off
+    $done = !empty($r['done']);                                    // done are hidden until "Show Completed"
     $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];   // overdue rolls onto today; done/future stay
     if (strpos($eff, $monthPrefix) === 0) {
         $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
@@ -326,6 +349,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
+    body:not(.editing) header .widgetlink { display: none; }   /* edit mode only */
     /* + beside the word Calendar — manage calendars, edit mode only. */
     .calplus {
       display: none; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
@@ -392,7 +416,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
     .dp-head .dp-gap { flex: 1; }          /* pushes Undo/Edit/Add to the right */
-    /* Show All sits right of the day, styled to line up with the Edit button. */
+    /* Show Completed sits right of the day, styled to line up with the Edit button. */
     .dp-head #calShowAll {
       background: none; border: 1px solid #333; color: #888; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit; white-space: nowrap;
@@ -533,6 +557,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .callist .ccount { font-size: 0.75rem; color: #666; white-space: nowrap; }
     .callist .cmember { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
+    .calmodal .chint { color: #777; font-size: 0.78rem; margin: -0.4rem 0 0.7rem; }
     /* Colour palette popover */
     .swatches {
       position: fixed; z-index: 80; background: #1c1c1c; border: 1px solid #444; border-radius: 10px;
@@ -633,7 +658,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
-    <button type="button" id="calShowAll">Show All</button>
+    <button type="button" id="calShowAll">Show Completed</button>
     <span class="dp-gap"></span>
     <button class="dp-undo" id="dpUndo" type="button">Undo</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
@@ -703,6 +728,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <button type="button" class="plus" id="setAdd" title="Add set">+</button>
     </div>
     <ul class="callist" id="setRows"></ul>
+    <hr class="cdiv">
+    <h2>Reminder folders</h2>
+    <p class="chint">Which folders' reminders show up on the calendar.</p>
+    <ul class="callist" id="folderRows"></ul>
     <div class="buttons" style="margin-top:1.1rem">
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
@@ -881,7 +910,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       return;
     }
     for (const it of items) {
-      if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Show All"
+      if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Show Completed"
       const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
       const row = document.createElement('div');
       row.className = 'dp-item' + (it.done ? ' done' : '');
@@ -1001,6 +1030,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const PALETTE  = <?= json_encode(CAL_COLORS) ?>;
   const VIEW_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : $defCal) ?>';
   let CALS   = <?= json_encode(array_values($calList), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const FOLDERS = <?= json_encode(array_values($remFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  let HIDDEN = <?= json_encode(array_values($hidFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let calDirty = false;          // something changed -> reload on close so dots/colours catch up
 
   const calModal = document.getElementById('calModal');
@@ -1017,7 +1048,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     const body = new URLSearchParams(Object.assign({ csrf: CSRF, action }, extra || {}));
     return fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
       .then(r => r.json())
-      .then(j => { if (j && j.list) { CALS = j.list; calDirty = true; renderCals(); renderSets(); } })
+      .then(j => {
+        if (!j) return;
+        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); }
+        if (j.hidden) { HIDDEN = j.hidden; calDirty = true; renderFolders(); }
+      })
       .catch(() => location.reload());
   };
 
@@ -1079,6 +1114,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       li.append(name, count, del);
       li.addEventListener('click', () => openSetPicker(s));
       setRows.appendChild(li);
+    });
+  }
+
+  // Reminder folders: ticked means that folder's reminders appear on the calendar.
+  const folderRows = document.getElementById('folderRows');
+  function renderFolders() {
+    folderRows.innerHTML = '';
+    FOLDERS.forEach(f => {
+      const li = document.createElement('li');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'cmember';
+      cb.checked = HIDDEN.indexOf(f) === -1;
+      cb.addEventListener('change', () => calApi('folder_vis', { name: f, show: cb.checked ? 1 : 0 }));
+      const name = document.createElement('span');
+      name.className = 'cname'; name.textContent = f;
+      li.append(cb, name);
+      li.addEventListener('click', e => { if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
+      folderRows.appendChild(li);
     });
   }
 
@@ -1169,7 +1222,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   document.getElementById('setName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSet(); } });
 
   document.getElementById('calMgr').addEventListener('click', () => {
-    renderCals(); renderSets();
+    renderCals(); renderSets(); renderFolders();
     calModal.classList.add('open');
   });
   const closeCalModal = () => {

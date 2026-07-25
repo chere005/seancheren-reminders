@@ -497,7 +497,7 @@ $sectionInput =
       <div>
         <div class="titlebar">
           <h1>Reminders</h1>
-          <button type="button" id="doneBtn" class="showall">Show All</button>
+          <button type="button" id="doneBtn" class="showall">Show Completed</button>
         </div>
         <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
@@ -604,7 +604,7 @@ $sectionInput =
   const editBtn = document.getElementById('editBtn');
   const doneBtn = document.getElementById('doneBtn');
   // Editing temporarily forces "show all" on, but the saved preference (remShowDone)
-  // is untouched — so tapping Done restores whatever Show All state you had before Edit.
+  // is untouched — so tapping Done restores whatever Show Completed state you had before Edit.
   let editShowDone = true;   // transient view state while editing
   const applyShowDone = () => {
     const on = document.body.classList.contains('editing')
