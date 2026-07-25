@@ -5,7 +5,8 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
-require_once $__libDir . '/chrome.php';   // for the shared two-press delete helper
+require_once $__libDir . '/chrome.php';     // for the shared two-press delete helper
+require_once $__libDir . '/richtext.php';   // note-body toolbar + sanitiser
 require_login("Aki's Bookshelf");
 // Standalone, private app — only aki may use it. The site login session is
 // shared, so we don't destroy it; we just refuse others and offer a log out.
@@ -286,7 +287,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($notes as &$n) {
             if (!is_bsection($n) && ($n['id'] ?? '') === $nid) {
                 $n['title']   = $title === '' ? (date('m/d/Y h:i a', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
-                $n['body']    = mb_substr($body, 0, 20000);
+                // The body is HTML now, so it only ever gets stored sanitised.
+                $n['body']    = mb_substr(rt_sanitize($body), 0, 20000);
                 $n['section'] = $section;
                 $n['updated'] = time();
                 break;
@@ -643,6 +645,7 @@ function books_header(string $titleHtml): void
     }
     .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 <?= confirm_delete_styles() ?>
+<?= rt_styles() ?>
   </style>
 </head>
 <body>
@@ -1019,12 +1022,15 @@ function books_header(string $titleHtml): void
     <?php else: ?>
       <input type="hidden" name="section" value="<?= e($curNote['section'] ?? '') ?>">
     <?php endif; ?>
-    <textarea name="body" placeholder="Notes on this book…"><?= e($curNote['body'] ?? '') ?></textarea>
+    <?= rt_toolbar_html(true) ?>
+    <div class="rt-body" contenteditable="true" data-placeholder="Notes on this book&hellip;"><?= rt_body_html($curNote['body'] ?? '') ?></div>
+    <input type="hidden" class="rt-value" name="body" value="<?= e(rt_body_html($curNote['body'] ?? '')) ?>">
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
       <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete_note">Delete</button>
     </div>
   </form>
+  <?= rt_entry_modal_html() ?>
 <?php endif; ?>
 </div>
 <nav class="shelfbar">
@@ -1273,5 +1279,6 @@ function books_header(string $titleHtml): void
   })();
 </script>
 <?= confirm_delete_script() ?>
+<?= rt_script() ?>
 </body>
 </html>
