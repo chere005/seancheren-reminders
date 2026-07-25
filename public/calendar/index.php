@@ -686,6 +686,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <div class="calpick">
     <select id="calSel" aria-label="Visible calendar">
       <option value="all"<?= $calView === 'all' ? ' selected' : '' ?>>All calendars</option>
+      <?php $anyShared = $sharedCals || $sharedFolders; ?>
       <optgroup label="<?= e(share_name($me)) ?>">
         <?php foreach ($calsOnly as $c): ?>
           <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
@@ -698,7 +699,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           <?php endforeach; ?>
         </optgroup>
       <?php endif; ?>
-      <?php if ($sharedCals || $sharedFolders): ?>
+      <?php if ($anyShared): ?>
         <optgroup label="<?= e(share_name($partner)) ?>">
           <?php foreach ($sharedCals as $c): ?>
             <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
