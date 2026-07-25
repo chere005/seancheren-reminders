@@ -136,7 +136,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
-    header h1 { font-size: 1.5rem; }
+    header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     /* The pencil beside the title, the size of the "+" the other apps wear there. */
     .titleedit {

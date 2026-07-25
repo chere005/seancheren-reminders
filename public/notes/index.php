@@ -307,7 +307,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     header {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;
     }
-    header h1 { font-size: 1.5rem; }
+    header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
