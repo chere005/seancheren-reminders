@@ -202,6 +202,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // Sharing: the same window the Calendar has, so it can be reached from either app.
+    if ($_POST['action'] === 'share_set' && $partner && !$isShared) {
+        share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)), $myFolders);
+    }
+
     // Folder actions don't touch the reminders list.
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
@@ -435,6 +440,12 @@ $doneCount = count($items) - $openCount;
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
 
+// Calendars, as [id, name] pairs, for the share window.
+$shareCals = [];
+if ($partner && !$isShared) {
+    foreach (share_calendars($cfg['data_dir'], $me) as $cid => $cname) { $shareCals[] = [$cid, $cname]; }
+}
+
 // Folder picker contents: mine under my name, then whatever the other person shared.
 $folderGroups = [['label' => share_name($me),
                   'options' => array_map(fn($f) => [$f, $f], $myFolders)]];
@@ -663,6 +674,7 @@ $sectionInput =
     .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
     .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= kind_color_css() ?>
+<?= share_modal_styles() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
@@ -688,7 +700,11 @@ $sectionInput =
   <?php render_folder_select($folderGroups, $view,
         '<button type="button" id="doneBtn" class="showall">Show Completed</button>'); ?>
 
-  <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to'); } ?>
+  <?php if (!$isShared) {
+        render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
+                            $partner ? share_button_html() : '');
+      } ?>
+  <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
   <?= $sectionInput ?>
 
@@ -812,6 +828,14 @@ $sectionInput =
 
   // ----- Drag to reorder (pointer events => works with touch; edit mode only) -----
   const CSRF = '<?= $csrf ?>', VIEW = '<?= e($view) ?>';
+  // What the share window draws: my calendars, my reminder folders, what's ticked now.
+  window.SHARES = <?= json_encode(($partner && !$isShared) ? shares_load($cfg['data_dir'], $me) : ['calendars' => [], 'folders' => []]) ?>;
+  window.shareData = () => ({
+    cals: <?= json_encode($shareCals) ?>,
+    folders: <?= json_encode($myFolders) ?>,
+    shares: window.SHARES
+  });
+  window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };
   let dragLi = null, dragSection = null;
 
   const persistOrder = () => {
@@ -947,5 +971,6 @@ $sectionInput =
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
+<?php if ($partner && !$isShared) { echo share_modal_script($csrf); } ?>
 </body>
 </html>
