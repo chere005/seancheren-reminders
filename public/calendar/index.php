@@ -151,10 +151,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 store_write($prefFile, $calPrefs);
             }
         } elseif ($action === 'set_members') {
+            // A set may hold the other person's shared calendars alongside my own.
+            $pool = array_merge($calIdsNow, $sharedIds);
             $want = (array) (json_decode((string) ($_POST['cals'] ?? '[]'), true) ?: []);
             foreach ($calList as &$s) {
                 if (is_calset($s) && ($s['id'] ?? '') === $id) {
-                    $s['cals'] = array_values(array_intersect($calIdsNow, $want));
+                    $s['cals'] = array_values(array_intersect($pool, $want));
                     break;
                 }
             }
@@ -324,7 +326,8 @@ if (strncmp($calView, 'f:', 2) === 0) {
     $visibleCals = [$calView];
 } elseif ($calView !== 'all') {
     foreach ($setsOnly as $s) {
-        if (($s['id'] ?? '') === $calView) { $visibleCals = array_values(array_intersect($calIds, $s['cals'] ?? [])); break; }
+        // $pickIds, not $calIds — a set can hold shared calendars too.
+        if (($s['id'] ?? '') === $calView) { $visibleCals = array_values(array_intersect($pickIds, $s['cals'] ?? [])); break; }
     }
     if ($visibleCals === null) { $calView = 'all'; }   // stale id (deleted calendar/set)
 }
@@ -1205,6 +1208,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const FOLDERS = <?= json_encode(array_values($remFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const PARTNER = <?= json_encode($partner ? share_name($partner) : null) ?>;
   const SHARED_FOLDERS = <?= json_encode(array_values($sharedFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  // id/name/colour only — enough to offer them as members of a set.
+  const SHARED_CALS = <?= json_encode(array_map(fn($c) => ['id' => $c['id'], 'name' => $c['name'], 'color' => $c['color'] ?? CAL_COLORS[0]], $sharedCals), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let SHARES = <?= json_encode($myShares, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN = <?= json_encode(array_values($hidFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN_SHARED = <?= json_encode(array_values($hidShared), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -1390,7 +1395,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     document.getElementById('setHeading').textContent = s.name;
     const box = document.getElementById('setMembers');
     box.innerHTML = '';
-    onlyCals().forEach(c => {
+    const memberRow = c => {
       const li = document.createElement('li');
       const cb = document.createElement('input');
       cb.type = 'checkbox'; cb.className = 'cmember'; cb.value = c.id;
@@ -1401,8 +1406,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       name.className = 'cname'; name.textContent = c.name;
       li.append(cb, sw, name);
       li.addEventListener('click', e => { if (e.target !== cb) cb.checked = !cb.checked; });
-      box.appendChild(li);
-    });
+      return li;
+    };
+    onlyCals().forEach(c => box.appendChild(memberRow(c)));
+    // The other person's calendars can go in a set too — they stay theirs, we just show them.
+    if (SHARED_CALS.length) {
+      box.appendChild(subHead(PARTNER + '’s calendars'));
+      SHARED_CALS.forEach(c => box.appendChild(memberRow(c)));
+    }
     setModal.classList.add('open');
   }
   document.getElementById('setSave').addEventListener('click', () => {
