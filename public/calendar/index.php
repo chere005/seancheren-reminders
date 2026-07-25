@@ -352,7 +352,7 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
     $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
     if (empty($r['due']) && !$rides) { continue; }
     if (in_array($r['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)) { continue; }   // folder switched off
-    $done = !empty($r['done']);                                    // done are hidden until "Show Completed"
+    $done = !empty($r['done']);                                    // done are hidden until "Completed"
     $eff  = $rides ? $todayYmd
           : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);   // overdue rolls onto today; done/future stay
     if (strpos($eff, $monthPrefix) === 0) {
@@ -462,12 +462,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     header h1 { font-size: 1.35rem; }
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
-    header .widgetlink {
-      color: var(--k-event); text-decoration: none; font-size: 0.78rem;
-      border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
+    /* Widget lives in the manager's button row now, dressed like Share. */
+    .modal .buttons .widgetlink {
+      display: inline-flex; align-items: center; background: #2a2a2a; border: none; color: #ccc;
+      text-decoration: none; padding: 0.55rem 1.1rem; border-radius: 6px; font-size: 0.95rem;
+      font-weight: 600; line-height: 1.2;
     }
-    header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
-    body:not(.editing) header .widgetlink { display: none; }   /* edit mode only */
+    .modal .buttons .widgetlink:hover { background: #333; color: #fff; }
     /* + beside the word Calendar — manage calendars. Always there: it's how you get
        to the calendar list and the share window, neither of which is destructive. */
     .calplus {
@@ -571,9 +572,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
-    .dp-head .dp-gap { flex: 1; }          /* pushes Show Completed/Edit/Add to the right */
-    .dp-head .hedit { white-space: nowrap; }
-    /* Show Completed sits just left of + Add, at the same size. */
+    .dp-head .dp-gap { flex: 1; }          /* pushes Completed/Edit/Add to the right */
+    /* Completed, Edit and + Add are one size — set here so they can't drift apart. */
+    .dp-head button {
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; line-height: 1.2; border-radius: 999px;
+      font-family: inherit; white-space: nowrap; cursor: pointer;
+    }
+    /* Completed sits just left of + Add, at the same size. */
     .dp-head #calShowAll {
       background: none; border: 1px solid #333; color: #888; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit; white-space: nowrap;
@@ -769,7 +774,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       </div>
     </div>
     <div class="hright">
-      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
       <?= render_user_menu() ?>
     </div>
   </header>
@@ -887,7 +891,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
     <span class="dp-gap"></span>
-    <button type="button" id="calShowAll">Show Completed</button>
+    <button type="button" id="calShowAll">Completed</button>
     <button type="button" class="hedit" id="dpEdit">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
@@ -991,6 +995,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?php if ($partner): ?>
         <?= share_button_html() ?>
       <?php endif; ?>
+      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
   </div>
@@ -1195,7 +1200,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
 
     for (const it of items) {
-      if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Show Completed"
+      if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Completed"
       const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
       const row = document.createElement('div');
       row.className = 'dp-item' + (it.done ? ' done' : '');
@@ -1273,7 +1278,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       }
       groups[it.kind].appendChild(row);
     }
-    // Everything on the day may have been filtered out (all done, "Show Completed" off).
+    // Everything on the day may have been filtered out (all done, "Completed" off).
     if (!dpList.children.length) {
       const p = document.createElement('p');
       p.className = 'dp-empty';

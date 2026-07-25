@@ -57,7 +57,7 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 
 | App | Login | Storage | Highlights |
 |-----|-------|---------|------------|
-| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, Show Completed |
+| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, a Completed toggle |
 | Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
 | Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), swipe up for a two-week view, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
 | Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections |

@@ -245,12 +245,13 @@ function folder_nav_styles(): string
     }
     .foldersel:focus { outline: none; border-color: #34d399; }
 
-    /* The "+" beside the app title — edit mode only, like the Calendar's. */
+    /* The "+" beside the app title. Always there, like the Calendar's — it opens the
+       folder manager and the share window, neither of which destroys anything. */
     .folderplus {
-      display: none; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
       width: 26px; height: 26px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
-    body.editing .folderplus { display: inline-flex; align-items: center; justify-content: center; }
     .folderplus:hover { border-color: #34d399; color: #34d399; }
 
     /* Folder manager window */

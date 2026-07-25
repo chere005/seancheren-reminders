@@ -324,6 +324,14 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       font-family: inherit;
     }
     .listbar .newnote:hover { background: #52e0ac; }
+    /* Edit sits beside New note, wearing the same size. */
+    .listbar .listedit {
+      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
+      font-family: inherit;
+    }
+    .listbar .listedit:hover { border-color: #888; color: #fff; }
+    body.editing .listbar .listedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .listbar select {
       padding: 0.5rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 0.9rem; color-scheme: dark; cursor: pointer;
@@ -457,7 +465,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
         <?php endif; ?>
       </div>
     </div>
-    <?= render_user_menu(!$editing) ?>
+    <?= render_user_menu() ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -472,6 +480,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
       <button class="newnote" type="submit">+ New note</button>
     </form>
+    <button type="button" id="editBtn" class="listedit">Edit</button>
   </div>
 
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
