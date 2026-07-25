@@ -33,6 +33,30 @@ function kind_spec(string $kind): ?array
     ][$kind] ?? null;
 }
 
+/** Palette offered when tapping a calendar's colour square. */
+const CAL_COLORS = ['#38bdf8', '#34d399', '#f0a860', '#f472b6', '#8b6ef0',
+                    '#facc15', '#fb7185', '#22d3ee', '#a3e635', '#94a3b8'];
+
+/**
+ * Calendars and calendar sets share one list, the way sections share a list elsewhere:
+ *   calendar -> ['id','name','color']            set -> ['id','type'=>'set','name','cals'=>[ids]]
+ * List order is display order.
+ */
+function is_calset(array $it): bool { return ($it['type'] ?? '') === 'set'; }
+
+/** Always hands back at least one calendar, creating the default one on first use. */
+function load_calendars(string $file): array
+{
+    $list = store_read($file);
+    foreach ($list as $it) { if (!is_calset($it)) { return $list; } }
+    $list[] = ['id' => bin2hex(random_bytes(6)), 'name' => 'Personal', 'color' => CAL_COLORS[0], 'created' => time()];
+    store_write($file, array_values($list));
+    return $list;
+}
+
+$calFile = user_data_file($cfg['data_dir'], 'calendars');
+$calList = load_calendars($calFile);
+
 // --- Quick add / edit / delete from the calendar (POST -> redirect -> GET), CSRF protected ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
@@ -53,12 +77,74 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $ym       = $retDay !== '' ? substr($retDay, 0, 7) : ((string) ($_POST['ym'] ?? date('Y-m')));
     $undoFlag = '';   // set after a delete so the Undo button appears
 
+    // --- Manage calendars / calendar sets (AJAX: answers with the fresh list, no reload) ---
+    if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder',
+                           'set_add', 'set_delete', 'set_members'], true)) {
+        $calIdsNow = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+        $name      = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
+
+        if ($action === 'cal_add' && $name !== '') {
+            $calList[] = ['id' => bin2hex(random_bytes(6)), 'name' => $name,
+                          'color' => CAL_COLORS[count($calIdsNow) % count(CAL_COLORS)], 'created' => time()];
+        } elseif ($action === 'cal_delete' && count($calIdsNow) > 1) {
+            $calList = array_values(array_filter($calList, fn($c) => is_calset($c) || ($c['id'] ?? '') !== $id));
+            foreach ($calList as &$s) {   // drop it from any set that listed it
+                if (is_calset($s)) { $s['cals'] = array_values(array_filter($s['cals'] ?? [], fn($c) => $c !== $id)); }
+            }
+            unset($s);
+            $evFile  = user_data_file($cfg['data_dir'], 'events');   // its events fall back to the first calendar
+            $evs     = load_json_list($evFile);
+            $touched = false;
+            foreach ($evs as &$ev) { if (($ev['cal'] ?? '') === $id) { $ev['cal'] = ''; $touched = true; } }
+            unset($ev);
+            if ($touched) { save_json_list($evFile, $evs); }
+        } elseif ($action === 'cal_color') {
+            $color = (string) ($_POST['color'] ?? '');
+            if (in_array($color, CAL_COLORS, true)) {
+                foreach ($calList as &$c) {
+                    if (!is_calset($c) && ($c['id'] ?? '') === $id) { $c['color'] = $color; break; }
+                }
+                unset($c);
+            }
+        } elseif ($action === 'cal_reorder') {
+            $pos  = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
+            $cals = array_values(array_filter($calList, fn($c) => !is_calset($c)));
+            $sets = array_values(array_filter($calList, 'is_calset'));
+            usort($cals, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
+            $calList = array_merge($cals, $sets);
+        } elseif ($action === 'set_add' && $name !== '') {
+            $calList[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'set', 'name' => $name,
+                          'cals' => [], 'created' => time()];
+        } elseif ($action === 'set_delete') {
+            $calList = array_values(array_filter($calList, fn($c) => !(is_calset($c) && ($c['id'] ?? '') === $id)));
+        } elseif ($action === 'set_members') {
+            $want = (array) (json_decode((string) ($_POST['cals'] ?? '[]'), true) ?: []);
+            foreach ($calList as &$s) {
+                if (is_calset($s) && ($s['id'] ?? '') === $id) {
+                    $s['cals'] = array_values(array_intersect($calIdsNow, $want));
+                    break;
+                }
+            }
+            unset($s);
+        }
+        save_json_list($calFile, $calList);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'list' => array_values($calList)]);
+        exit;
+    }
+
+    // An event's calendar, ignored unless it names one that exists.
+    $calIds  = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+    $evCal   = (string) ($_POST['cal'] ?? '');
+    $evCalOk = in_array($evCal, $calIds, true) ? $evCal : '';
+
     if ($action === 'add_event' && $text !== '') {
         [$etext, $ptime] = parse_time_from_text($text);   // "Dinner 7pm" -> text "Dinner", time 19:00
         $file = user_data_file($cfg['data_dir'], 'events');
         $list = load_json_list($file);
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($etext, 0, 500),
-                   'date' => $dateOk ? $date : null, 'time' => $timeOk ? $time : $ptime, 'created' => time()];
+                   'date' => $dateOk ? $date : null, 'time' => $timeOk ? $time : $ptime,
+                   'cal' => $evCalOk, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
         $file = user_data_file($cfg['data_dir'], 'reminders');
@@ -90,7 +176,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (($it['id'] ?? '') === $id) {
                 $it[$spec['textField']] = mb_substr($text, 0, $kind === 'note' ? 200 : 500);
                 $it[$spec['dateField']] = $dateOk ? $date : null;
-                if ($kind === 'event') { $it['time'] = $timeOk ? $time : null; }
+                if ($kind === 'event') { $it['time'] = $timeOk ? $time : null; $it['cal'] = $evCalOk; }
                 if ($kind === 'note')  { $it['updated'] = time(); }
                 break;
             }
@@ -138,6 +224,25 @@ $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $prev = date('Y-m', mktime(0, 0, 0, $month - 1, 1, $year));
 $next = date('Y-m', mktime(0, 0, 0, $month + 1, 1, $year));
 
+// --- Which calendar (or set) is on screen? ?cal= picks it; the choice sticks in the session. ---
+$calsOnly = array_values(array_filter($calList, fn($c) => !is_calset($c)));
+$setsOnly = array_values(array_filter($calList, 'is_calset'));
+$calIds   = array_column($calsOnly, 'id');
+$defCal   = $calIds[0] ?? '';
+$calColor = array_column($calsOnly, 'color', 'id');
+
+if (isset($_GET['cal'])) { $_SESSION['cal_view'] = (string) $_GET['cal']; }
+$calView     = (string) ($_SESSION['cal_view'] ?? 'all');
+$visibleCals = null;                                  // null = show every calendar
+if (in_array($calView, $calIds, true)) {
+    $visibleCals = [$calView];
+} elseif ($calView !== 'all') {
+    foreach ($setsOnly as $s) {
+        if (($s['id'] ?? '') === $calView) { $visibleCals = array_values(array_intersect($calIds, $s['cals'] ?? [])); break; }
+    }
+    if ($visibleCals === null) { $calView = 'all'; }   // stale id (deleted calendar/set)
+}
+
 // --- Sync: gather this user's dated reminders + notes for the visible month ---
 $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
@@ -154,9 +259,13 @@ foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
 usort($evList, fn($a, $b) => ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99')));
 foreach ($evList as $ev) {
+    // An event with no (or a stale) calendar belongs to the first one.
+    $ec = in_array($ev['cal'] ?? '', $calIds, true) ? $ev['cal'] : $defCal;
+    if ($visibleCals !== null && !in_array($ec, $visibleCals, true)) { continue; }
     if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
         $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
-                                 'time' => $ev['time'] ?? '', 'done' => false];
+                                 'time' => $ev['time'] ?? '', 'done' => false,
+                                 'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0]];
     }
 }
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes')) as $n) {
@@ -211,21 +320,33 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;
     }
     header h1 { font-size: 1.35rem; }
-    header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header .widgetlink {
       color: #38bdf8; text-decoration: none; font-size: 0.78rem;
       border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
-    header #calShowAll { color: #888; border-color: #333; }
-    header #calShowAll:hover { border-color: #888; color: #ccc; }
-    body.show-done header #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
+    /* + beside the word Calendar — manage calendars, edit mode only. */
+    .calplus {
+      display: none; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      width: 26px; height: 26px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    body.editing .calplus { display: inline-flex; align-items: center; justify-content: center; }
+    .calplus:hover { border-color: #34d399; color: #34d399; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
       color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
+
+    /* Visible-calendar picker, under the back button / title. */
+    .calpick { margin: -0.5rem 0 0.9rem; }
+    .calpick select {
+      background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      padding: 0.3rem 0.7rem; font-size: 16px; font-family: inherit; max-width: 100%;
+    }
+    .calpick select:focus { outline: none; border-color: #888; }
 
     .monthnav {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
@@ -269,7 +390,15 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
-    .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; flex: 1; }
+    .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
+    .dp-head .dp-gap { flex: 1; }          /* pushes Undo/Edit/Add to the right */
+    /* Show All sits right of the day, styled to line up with the Edit button. */
+    .dp-head #calShowAll {
+      background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit; white-space: nowrap;
+    }
+    .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
+    body.show-done .dp-head #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
     .dp-head .dp-edit { background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
     .dp-head .dp-edit:hover { border-color: #888; color: #fff; }
@@ -302,6 +431,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .tag.event { color: #7dd3fc; background: #0c2a3a; }
     .dp-item .tag.note { color: #b9a7f5; background: #241a3a; }
     .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .dp-item .cdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
     .dp-item .evtime { font-size: 0.75rem; color: #7dd3fc; font-weight: 600; white-space: nowrap; }
@@ -369,6 +499,52 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
     .modal .buttons .ok { background: #34d399; color: #06251b; }
+    .modal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .modal .calrow select {
+      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
+    }
+
+    /* --- Manage-calendars modal --- */
+    .calmodal { max-height: 85vh; overflow-y: auto; }
+    .calmodal h2 { margin-bottom: 0.7rem; }
+    .calmodal .cdiv { border: none; border-top: 1px solid #333; margin: 1.2rem 0 1rem; }
+    .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    .addrow input[type=text] { flex: 1; margin-bottom: 0; font-size: 16px; }
+    .addrow .plus {
+      flex: 0 0 auto; width: 40px; background: #34d399; color: #06251b; border: none;
+      border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .addrow .plus:hover { background: #52e0ac; }
+    .callist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+    .callist li {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
+      background: #222; border: 1px solid #333; border-radius: 8px;
+    }
+    .callist li.dragging { opacity: 0.6; border-color: #34d399; }
+    .callist .chandle { color: #666; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; }
+    .callist .cname { flex: 1; font-size: 0.95rem; word-break: break-word; }
+    .callist .cswatch {
+      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; border: 1px solid #444;
+      cursor: pointer; padding: 0;
+    }
+    .callist .cdel {
+      flex: 0 0 auto; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    .callist .cdel:hover { border-color: #f66; color: #f66; }
+    .callist li.setrow { cursor: pointer; }
+    .callist .ccount { font-size: 0.75rem; color: #666; white-space: nowrap; }
+    .callist .cmember { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
+    /* Colour palette popover */
+    .swatches {
+      position: fixed; z-index: 80; background: #1c1c1c; border: 1px solid #444; border-radius: 10px;
+      padding: 0.5rem; display: grid; grid-template-columns: repeat(5, 26px); gap: 0.4rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+    }
+    .swatches[hidden] { display: none; }
+    .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
     body { padding-bottom: 0; }   /* panel handles the tab-bar clearance */
@@ -382,7 +558,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Calendar</h1>
-        <button type="button" id="calShowAll" class="widgetlink" style="background:none;cursor:pointer;">Show All</button>
+        <button type="button" id="calMgr" class="calplus" title="Manage calendars" aria-label="Manage calendars">+</button>
       </div>
     </div>
     <div class="hright">
@@ -390,6 +566,22 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= render_user_menu() ?>
     </div>
   </header>
+
+  <div class="calpick">
+    <select id="calSel" aria-label="Visible calendar">
+      <option value="all"<?= $calView === 'all' ? ' selected' : '' ?>>All calendars</option>
+      <?php foreach ($calsOnly as $c): ?>
+        <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+      <?php endforeach; ?>
+      <?php if ($setsOnly): ?>
+        <optgroup label="Calendar sets">
+          <?php foreach ($setsOnly as $s): ?>
+            <option value="<?= e($s['id']) ?>"<?= $calView === $s['id'] ? ' selected' : '' ?>><?= e($s['name']) ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+      <?php endif; ?>
+    </select>
+  </div>
 
   <div class="monthnav">
     <a href="?ym=<?= $prev ?>" title="Previous month">&#8592;</a>
@@ -423,8 +615,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
               if ($ev['kind'] === 'reminder') {
                   $dcls .= $ev['done'] ? ' done' : (($ymd < $todayYmd || !empty($ev['rolled'])) ? ' overdue' : '');
               }
+              // Events are tinted with their calendar's colour.
+              $dsty = $ev['kind'] === 'event' ? ' style="background:' . e($ev['color']) . '"' : '';
             ?>
-            <span class="dot <?= $dcls ?>"></span>
+            <span class="dot <?= $dcls ?>"<?= $dsty ?>></span>
           <?php endforeach; ?>
         </div>
       </div>
@@ -443,6 +637,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
+    <button type="button" id="calShowAll">Show All</button>
+    <span class="dp-gap"></span>
     <button class="dp-undo" id="dpUndo" type="button">Undo</button>
     <button class="dp-edit" id="dpEdit" type="button">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
@@ -480,6 +676,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <input type="time" name="time" id="mTime" value="">
       <button type="button" class="cleardate" id="mClearTime" title="Remove time">&times;</button>
     </div>
+    <div class="calrow" id="mCalRow" hidden>
+      <span class="tlabel">Calendar</span>
+      <select name="cal" id="mCal">
+        <?php foreach ($calsOnly as $c): ?>
+          <option value="<?= e($c['id']) ?>"><?= e($c['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
     <div class="buttons">
       <button type="button" class="del" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
@@ -487,6 +691,42 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     </div>
   </form>
 </div>
+
+<!-- Manage calendars + calendar sets (opened by the + beside "Calendar" in edit mode) -->
+<div class="modal-backdrop" id="calModal">
+  <div class="modal calmodal">
+    <h2>Calendars</h2>
+    <div class="addrow">
+      <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
+      <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
+    </div>
+    <ul class="callist" id="calRows"></ul>
+    <hr class="cdiv">
+    <h2>Calendar sets</h2>
+    <div class="addrow">
+      <input type="text" id="setName" placeholder="New set" maxlength="40" autocomplete="off">
+      <button type="button" class="plus" id="setAdd" title="Add set">+</button>
+    </div>
+    <ul class="callist" id="setRows"></ul>
+    <div class="buttons" style="margin-top:1.1rem">
+      <button type="button" class="ok" id="calDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Which calendars belong to a set -->
+<div class="modal-backdrop" id="setModal">
+  <div class="modal">
+    <h2 id="setHeading">Set</h2>
+    <ul class="callist" id="setMembers"></ul>
+    <div class="buttons" style="margin-top:1.1rem">
+      <button type="button" class="cancel" id="setCancel">Cancel</button>
+      <button type="button" class="ok" id="setSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="swatches" id="swatchPop" hidden></div>
 
 <!-- Hidden form to check reminders off directly from the day panel -->
 <form id="toggleForm" method="post" action="" style="display:none">
@@ -550,8 +790,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   // Time — events only.
   const mTimeRow = document.getElementById('mTimeRow');
   const mTime    = document.getElementById('mTime');
-  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; };
-  const hideTime = () => { mTime.value = ''; mTimeRow.hidden = true; };
+  const mCalRow  = document.getElementById('mCalRow');
+  const mCal     = document.getElementById('mCal');
+  // Time and calendar are event-only fields, so they show and hide together.
+  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; };
+  const hideTime = () => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; };
   document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
     r.addEventListener('change', () => { if (r.checked) (r.value === 'event' ? showTime(mTime.value) : hideTime()); });
@@ -574,6 +817,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mOk.textContent = 'Add';
     mText.value = '';
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
+    mCal.value = VIEW_CAL;                 // new events land in the calendar you're looking at
     showTime('');
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
@@ -581,7 +825,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   };
 
   // EDIT mode — from tapping an item in the day panel.
-  const openEdit = (id, kind, text, date, time) => {
+  const openEdit = (id, kind, text, date, time, cal) => {
     mHeading.textContent = 'Edit ' + kind;
     mAction.value = 'edit_item';
     mId.value = id;
@@ -591,7 +835,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
-    (kind === 'event') ? showTime(time) : hideTime();
+    if (kind === 'event') { mCal.value = cal || VIEW_CAL; showTime(time); } else { hideTime(); }
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
@@ -659,12 +903,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         });
         row.appendChild(cb);
       }
-      // Only notes get a marker ("N"). Reminders have the checkbox; events show nothing.
+      // Notes get a marker ("N"), events a dot in their calendar's colour; reminders have the checkbox.
       let tag = null;
       if (it.kind === 'note') {
         tag = document.createElement('span');
         tag.className = 'tag note';
         tag.textContent = 'N';
+      } else if (it.kind === 'event' && it.color) {
+        tag = document.createElement('span');
+        tag.className = 'cdot';
+        tag.style.background = it.color;
       }
       const txt = document.createElement('span');
       txt.className = 'txt';
@@ -698,7 +946,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       row.appendChild(del);
       row.addEventListener('click', () => {
         if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
-        openEdit(it.id, it.kind, it.text, date, it.time || '');
+        openEdit(it.id, it.kind, it.text, date, it.time || '', it.cal || '');
       });
       dpList.appendChild(row);
     }
@@ -753,13 +1001,211 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     document.getElementById('undoItemForm').submit();
   });
 
+  // ---- Calendars & calendar sets ----
+  const CSRF     = '<?= $csrf ?>';
+  const PALETTE  = <?= json_encode(CAL_COLORS) ?>;
+  const VIEW_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : $defCal) ?>';
+  let CALS   = <?= json_encode(array_values($calList), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  let calDirty = false;          // something changed -> reload on close so dots/colours catch up
+
+  const calModal = document.getElementById('calModal');
+  const setModal = document.getElementById('setModal');
+  const calRows  = document.getElementById('calRows');
+  const setRows  = document.getElementById('setRows');
+  const swatchPop= document.getElementById('swatchPop');
+  const isSet    = c => c.type === 'set';
+  const onlyCals = () => CALS.filter(c => !isSet(c));
+  const onlySets = () => CALS.filter(isSet);
+
+  // Every change posts here and gets the whole list back, so the UI never guesses.
+  const calApi = (action, extra) => {
+    const body = new URLSearchParams(Object.assign({ csrf: CSRF, action }, extra || {}));
+    return fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+      .then(r => r.json())
+      .then(j => { if (j && j.list) { CALS = j.list; calDirty = true; renderCals(); renderSets(); } })
+      .catch(() => location.reload());
+  };
+
+  function renderCals() {
+    calRows.innerHTML = '';
+    const cals = onlyCals();
+    cals.forEach(c => {
+      const li = document.createElement('li');
+      li.dataset.id = c.id;
+
+      const handle = document.createElement('span');
+      handle.className = 'chandle'; handle.textContent = '☰'; handle.title = 'Drag to reorder';
+
+      const sw = document.createElement('button');
+      sw.type = 'button'; sw.className = 'cswatch'; sw.style.background = c.color; sw.title = 'Choose colour';
+      sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, c.id); });
+
+      const name = document.createElement('span');
+      name.className = 'cname'; name.textContent = c.name;
+
+      li.append(handle, sw, name);
+      if (cals.length > 1) {                 // never leave the user with no calendar
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'cdel'; del.textContent = '×'; del.title = 'Delete calendar';
+        del.addEventListener('click', () => {
+          if (confirm('Delete "' + c.name + '"? Its events move to ' + cals[0].name + '.')) calApi('cal_delete', { id: c.id });
+        });
+        li.appendChild(del);
+      }
+      calRows.appendChild(li);
+    });
+  }
+
+  function renderSets() {
+    setRows.innerHTML = '';
+    const sets = onlySets();
+    if (!sets.length) {
+      const p = document.createElement('li');
+      p.className = 'calempty'; p.style.background = 'none'; p.style.border = 'none';
+      p.textContent = 'No sets yet. A set shows several calendars at once.';
+      setRows.appendChild(p);
+      return;
+    }
+    sets.forEach(s => {
+      const li = document.createElement('li');
+      li.className = 'setrow'; li.dataset.id = s.id;
+      const name = document.createElement('span');
+      name.className = 'cname'; name.textContent = s.name;
+      const count = document.createElement('span');
+      count.className = 'ccount';
+      const n = (s.cals || []).length;
+      count.textContent = n + (n === 1 ? ' calendar' : ' calendars');
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'cdel'; del.textContent = '×'; del.title = 'Delete set';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        if (confirm('Delete the set "' + s.name + '"?')) calApi('set_delete', { id: s.id });
+      });
+      li.append(name, count, del);
+      li.addEventListener('click', () => openSetPicker(s));
+      setRows.appendChild(li);
+    });
+  }
+
+  // Colour palette popover, anchored to the swatch that opened it.
+  function openSwatches(anchor, id) {
+    swatchPop.innerHTML = '';
+    PALETTE.forEach(col => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.style.background = col; b.title = col;
+      b.addEventListener('click', () => { swatchPop.hidden = true; calApi('cal_color', { id, color: col }); });
+      swatchPop.appendChild(b);
+    });
+    swatchPop.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    const w = swatchPop.offsetWidth, h = swatchPop.offsetHeight;
+    swatchPop.style.left = Math.max(8, Math.min(r.left, window.innerWidth  - w - 8)) + 'px';
+    swatchPop.style.top  = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - h - 8)) + 'px';
+  }
+  document.addEventListener('click', e => {
+    if (!swatchPop.hidden && !swatchPop.contains(e.target) && !e.target.closest('.cswatch')) swatchPop.hidden = true;
+  });
+
+  // Which calendars are in this set.
+  let editingSet = null;
+  function openSetPicker(s) {
+    editingSet = s.id;
+    document.getElementById('setHeading').textContent = s.name;
+    const box = document.getElementById('setMembers');
+    box.innerHTML = '';
+    onlyCals().forEach(c => {
+      const li = document.createElement('li');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'cmember'; cb.value = c.id;
+      cb.checked = (s.cals || []).indexOf(c.id) !== -1;
+      const sw = document.createElement('span');
+      sw.className = 'cswatch'; sw.style.background = c.color; sw.style.cursor = 'default';
+      const name = document.createElement('span');
+      name.className = 'cname'; name.textContent = c.name;
+      li.append(cb, sw, name);
+      li.addEventListener('click', e => { if (e.target !== cb) cb.checked = !cb.checked; });
+      box.appendChild(li);
+    });
+    setModal.classList.add('open');
+  }
+  document.getElementById('setSave').addEventListener('click', () => {
+    const ids = [...document.querySelectorAll('#setMembers .cmember')].filter(c => c.checked).map(c => c.value);
+    calApi('set_members', { id: editingSet, cals: JSON.stringify(ids) }).then(() => setModal.classList.remove('open'));
+  });
+  document.getElementById('setCancel').addEventListener('click', () => setModal.classList.remove('open'));
+  setModal.addEventListener('click', e => { if (e.target === setModal) setModal.classList.remove('open'); });
+
+  // Drag to reorder calendars (pointer events, so it works by touch).
+  let dragCal = null;
+  calRows.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.chandle'); if (!h) return;
+    e.preventDefault();
+    dragCal = h.closest('li'); dragCal.classList.add('dragging');
+    try { h.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  calRows.addEventListener('pointermove', e => {
+    if (!dragCal) return;
+    const el   = document.elementFromPoint(e.clientX, e.clientY);
+    const over = el && el.closest('#calRows li');
+    if (over && over !== dragCal) {
+      const r = over.getBoundingClientRect();
+      calRows.insertBefore(dragCal, (e.clientY < r.top + r.height / 2) ? over : over.nextSibling);
+    }
+  });
+  const endCalDrag = () => {
+    if (!dragCal) return;
+    dragCal.classList.remove('dragging'); dragCal = null;
+    calApi('cal_reorder', { order: JSON.stringify([...calRows.querySelectorAll('li')].map(li => li.dataset.id)) });
+  };
+  calRows.addEventListener('pointerup', endCalDrag);
+  calRows.addEventListener('pointercancel', endCalDrag);
+
+  const addCal = () => {
+    const i = document.getElementById('calName');
+    if (i.value.trim()) { calApi('cal_add', { name: i.value.trim() }); i.value = ''; }
+  };
+  const addSet = () => {
+    const i = document.getElementById('setName');
+    if (i.value.trim()) { calApi('set_add', { name: i.value.trim() }); i.value = ''; }
+  };
+  document.getElementById('calAdd').addEventListener('click', addCal);
+  document.getElementById('setAdd').addEventListener('click', addSet);
+  document.getElementById('calName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCal(); } });
+  document.getElementById('setName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSet(); } });
+
+  document.getElementById('calMgr').addEventListener('click', () => {
+    renderCals(); renderSets();
+    calModal.classList.add('open');
+  });
+  const closeCalModal = () => {
+    calModal.classList.remove('open');
+    if (calDirty) location.reload();   // colours, names and the picker all live in the page
+  };
+  document.getElementById('calDone').addEventListener('click', closeCalModal);
+  calModal.addEventListener('click', e => { if (e.target === calModal) closeCalModal(); });
+
+  // Picking the visible calendar / set.
+  document.getElementById('calSel').addEventListener('change', function () {
+    const u = new URL(location.href);
+    u.searchParams.set('cal', this.value);
+    if (selected) u.searchParams.set('day', selected);
+    location.href = u.toString();
+  });
+
   document.getElementById('mCancel').addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-
-  // Left/right arrow keys cycle months (when modal closed).
+  const anyModalOpen = () => modal.classList.contains('open')
+    || calModal.classList.contains('open') || setModal.classList.contains('open');
   document.addEventListener('keydown', e => {
-    if (modal.classList.contains('open')) return;
+    if (e.key !== 'Escape') return;
+    if (setModal.classList.contains('open')) { setModal.classList.remove('open'); return; }
+    if (calModal.classList.contains('open')) { closeCalModal(); return; }
+    closeModal();
+  });
+
+  // Left/right arrow keys cycle months (when no modal is open).
+  document.addEventListener('keydown', e => {
+    if (anyModalOpen() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if (e.key === 'ArrowLeft')  location.href = '?ym=<?= $prev ?>';
     if (e.key === 'ArrowRight') location.href = '?ym=<?= $next ?>';
   });
