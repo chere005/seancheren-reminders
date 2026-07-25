@@ -499,7 +499,7 @@ $sectionInput =
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* Show Completed sits on the folder-dropdown row, sized to match it. */
+    /* Completed sits on the folder-dropdown row, sized to match it. */
     .foldernav .showall {
       background: none; color: #888; border: 1px solid #333; border-radius: 999px;
       padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
@@ -507,6 +507,7 @@ $sectionInput =
     }
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
     body.show-done .foldernav #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    body.editing .foldernav #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
 
     /* The + on each section header, and the row it opens. */
     .sec-add {
@@ -534,7 +535,7 @@ $sectionInput =
       font-size: 0.75rem; color: #7dd3fc; background: #0c2a3a; padding: 0.15rem 0.5rem;
       border-radius: 999px; white-space: nowrap;
     }
-    /* Completed reminders + the clear button stay hidden until "Show Completed" is on */
+    /* Completed reminders + the clear button stay hidden until "Completed" is on */
     body:not(.show-done) li.done { display: none; }
     body:not(.show-done) footer { display: none; }
 
@@ -694,11 +695,13 @@ $sectionInput =
         </div>
       </div>
     </div>
-    <?= render_user_menu(true) ?>
+    <?= render_user_menu() ?>
   </header>
 
-  <?php render_folder_select($folderGroups, $view,
-        '<button type="button" id="doneBtn" class="showall">Show Completed</button>'); ?>
+  <?php // Completed and Edit ride on the folder row, same size, in that order.
+        render_folder_select($folderGroups, $view,
+        '<button type="button" id="doneBtn" class="showall">Completed</button>'
+      . '<button type="button" id="editBtn" class="showall">Edit</button>'); ?>
 
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
