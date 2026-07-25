@@ -18,6 +18,8 @@ public/                → the web root   (maps to NFSN /home/public)
   notes/index.php        Notes app       (list -> editor, folders, sections)
   calendar/index.php     Calendar        (multiple calendars, sets, day panel)
   calendar/feed.php      token JSON feed + iOS widget setup page
+                         (the script it hands you is pinned to the calendars
+                          you had selected — copy it again to re-point it)
   calendar/quick.php     one-field quick add, opened by the widget
   habits/index.php       Habits          (7-day grid, sections)
   akisbookshelf/         private bookshelf — only the user "aki" may open it
@@ -56,7 +58,7 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 |-----|-------|---------|------------|
 | Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, Show Completed |
 | Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, autosave |
-| Calendar | yes | `events-<user>.json` + reminders + notes | month grid, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
+| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
 | Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections |
 | Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections |
 | Chat | **no** | `chat.json` (shared) | public message board, live AJAX feed |
