@@ -269,8 +269,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($list as $it) { if (($it['id'] ?? '') === $id) { $_SESSION['undo_cal'] = ['base' => $spec['base'], 'item' => $it]; break; } }
         $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
         save_json_list($file, $list);
-        $undoFlag = '&undo=1';
+        $undoFlag = '&undo=1&edit=1';   // deleting is edit-mode only; hand it back
     } elseif ($action === 'undo_item') {
+        $undoFlag = '&edit=1';
         if (!empty($_SESSION['undo_cal'])) {
             $u      = $_SESSION['undo_cal'];
             $file   = user_data_file($cfg['data_dir'], $u['base']);
@@ -1200,8 +1201,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   // Day-panel Edit mode: reveal × to quick-delete items.
   // Always starts off — opening the app or switching tabs never lands you in edit mode.
+  // A delete redirects back with ?edit=1 so quick-deleting several things in a row works.
   const dpEdit = document.getElementById('dpEdit');
-  dpEdit.textContent = 'Edit';
+  if (new URLSearchParams(location.search).get('edit') === '1') {
+    document.body.classList.add('editing');
+    const u = new URL(location.href); u.searchParams.delete('edit');
+    history.replaceState(null, '', u);
+  }
+  dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
   dpEdit.addEventListener('click', () => {
     const on = document.body.classList.toggle('editing');
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
