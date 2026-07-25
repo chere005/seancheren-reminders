@@ -34,8 +34,8 @@ function chrome_styles(): string
     }
     .usermenu .menu a { display: block; margin: 0; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
     .usermenu .menu a:hover { background: #2a2a2a; color: #fff; }
-    /* Edit sits under the username, wearing the same pill. */
-    .usercol { display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; flex: 0 0 auto; }
+    /* Edit sits to the left of the username, wearing the same pill. */
+    .usercol { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
     .hedit {
       margin: 0; color: #ccc; font-size: 0.8rem; background: none; border: 1px solid #333;
       border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
@@ -62,8 +62,9 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): s
     if (!$withEdit) {
         return $menu;
     }
-    return '<div class="usercol">' . $menu
-         . '<button type="button" class="hedit" id="' . htmlspecialchars($editId, ENT_QUOTES) . '">Edit</button></div>';
+    return '<div class="usercol">'
+         . '<button type="button" class="hedit" id="' . htmlspecialchars($editId, ENT_QUOTES) . '">Edit</button>'
+         . $menu . '</div>';
 }
 
 function chrome_script(): string
