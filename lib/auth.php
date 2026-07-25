@@ -50,10 +50,11 @@ function current_user(): ?string
 /**
  * Per-user data file path, e.g. reminders -> data/reminders-jacob.json.
  * The username is sanitized so it is always a safe filename.
+ * $user names someone other than the signed-in user (sharing reads their files).
  */
-function user_data_file(string $dir, string $base): string
+function user_data_file(string $dir, string $base, ?string $user = null): string
 {
-    $u    = current_user() ?? 'default';
+    $u    = $user ?? (current_user() ?? 'default');
     $safe = preg_replace('/[^A-Za-z0-9_-]/', '_', $u);
     return rtrim($dir, '/') . "/{$base}-{$safe}.json";
 }

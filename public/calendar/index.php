@@ -8,6 +8,7 @@ require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
+require_once $__libDir . '/sharing.php';
 require_login('Calendar');   // same login as Reminders
 
 $cfg = app_config();
@@ -63,7 +64,25 @@ $calList = load_calendars($calFile);
 $prefFile   = user_data_file($cfg['data_dir'], 'calprefs');
 $calPrefs   = store_read($prefFile);
 $hidFolders = array_values(array_filter((array) ($calPrefs['hidden_folders'] ?? []), 'is_string'));
+$hidShared  = array_values(array_filter((array) ($calPrefs['hidden_shared_folders'] ?? []), 'is_string'));
 $remFolders = folders_load($cfg['data_dir'])['reminders'];
+
+// --- Sharing: the other person's calendars and reminder folders, if they shared any ---
+$me          = current_user() ?? '';
+$partner     = share_partner();
+$myShares    = $partner ? shares_load($cfg['data_dir'], $me) : ['calendars' => [], 'folders' => []];
+$theirShares = $partner ? shares_load($cfg['data_dir'], $partner) : ['calendars' => [], 'folders' => []];
+
+// Their whole calendar list (needed to resolve an event with no calendar), and the shared slice.
+$theirCals   = $partner ? array_values(array_filter(store_read(user_data_file($cfg['data_dir'], 'calendars', $partner)),
+                                                    fn($c) => !is_calset($c))) : [];
+$theirCalIds = array_column($theirCals, 'id');
+$sharedCals  = array_values(array_filter($theirCals, fn($c) => in_array($c['id'] ?? '', $theirShares['calendars'], true)));
+$sharedIds   = array_column($sharedCals, 'id');
+// Their folders that they shared and I haven't switched off.
+$sharedFolders = $partner
+    ? array_values(array_intersect(folders_load($cfg['data_dir'], $partner)['reminders'], $theirShares['folders']))
+    : [];
 
 // --- Quick add / edit / delete from the calendar (POST -> redirect -> GET), CSRF protected ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
@@ -143,15 +162,34 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // --- Show/hide a reminder folder on the calendar (AJAX, same answer-with-the-truth style) ---
     if ($action === 'folder_vis') {
-        $fname = (string) ($_POST['name'] ?? '');
-        if (in_array($fname, $remFolders, true)) {
-            $hidFolders = array_values(array_filter($hidFolders, fn($f) => $f !== $fname));
-            if (empty($_POST['show'])) { $hidFolders[] = $fname; }
-            $calPrefs['hidden_folders'] = $hidFolders;
+        $fname  = (string) ($_POST['name'] ?? '');
+        $isTheirs = !empty($_POST['shared']);
+        $pool   = $isTheirs ? $sharedFolders : $remFolders;
+        $key    = $isTheirs ? 'hidden_shared_folders' : 'hidden_folders';
+        if (in_array($fname, $pool, true)) {
+            $cur = array_values(array_filter($isTheirs ? $hidShared : $hidFolders, fn($f) => $f !== $fname));
+            if (empty($_POST['show'])) { $cur[] = $fname; }
+            if ($isTheirs) { $hidShared = $cur; } else { $hidFolders = $cur; }
+            $calPrefs[$key] = $cur;
             store_write($prefFile, $calPrefs);
         }
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'hidden' => $hidFolders]);
+        echo json_encode(['ok' => true, 'hidden' => $hidFolders, 'hiddenShared' => $hidShared]);
+        exit;
+    }
+
+    // --- Share one of my calendars / reminder folders with the other person ---
+    if ($action === 'share_set' && $partner) {
+        $kind = (string) ($_POST['kind'] ?? '');
+        $key  = (string) ($_POST['key'] ?? '');
+        $pool = $kind === 'calendar'
+            ? array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id')
+            : $remFolders;
+        if (in_array($kind, ['calendar', 'folder'], true) && in_array($key, $pool, true)) {
+            $myShares = shares_toggle($cfg['data_dir'], $me, $kind, $key, !empty($_POST['on']));
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'shares' => $myShares]);
         exit;
     }
 
@@ -184,9 +222,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: /notes/?id=' . $newId);   // jump straight to the note editor
         exit;
     } elseif ($action === 'toggle_reminder' && $id !== '') {
-        $file = user_data_file($cfg['data_dir'], 'reminders');
+        // A reminder shown from a shared folder still lives in its owner's file.
+        $owner = ($partner && ($_POST['owner'] ?? '') === $partner) ? $partner : null;
+        $file = user_data_file($cfg['data_dir'], 'reminders', $owner);
         $list = load_json_list($file);
         foreach ($list as &$it) {
+            // Only ever reach into a folder they actually shared.
+            if ($owner !== null && !in_array($it['folder'] ?? FOLDER_DEFAULT, $sharedFolders, true)) { continue; }
             if (($it['id'] ?? '') === $id) { $it['done'] = empty($it['done']); break; }
         }
         unset($it);
@@ -253,10 +295,14 @@ $calIds   = array_column($calsOnly, 'id');
 $defCal   = $calIds[0] ?? '';
 $calColor = array_column($calsOnly, 'color', 'id');
 
+// Shared calendars join the picker and the colour map; their ids stay distinct from mine.
+$pickIds  = array_merge($calIds, $sharedIds);
+$calColor = array_merge($calColor, array_column($sharedCals, 'color', 'id'));
+
 if (isset($_GET['cal'])) { $_SESSION['cal_view'] = (string) $_GET['cal']; }
 $calView     = (string) ($_SESSION['cal_view'] ?? 'all');
 $visibleCals = null;                                  // null = show every calendar
-if (in_array($calView, $calIds, true)) {
+if (in_array($calView, $pickIds, true)) {
     $visibleCals = [$calView];
 } elseif ($calView !== 'all') {
     foreach ($setsOnly as $s) {
@@ -291,6 +337,39 @@ foreach ($evList as $ev) {
                                  'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0]];
     }
 }
+
+// --- The other person's shared calendars and reminder folders, read from their files ---
+if ($partner) {
+    $theirDef = $theirCalIds[0] ?? '';
+    foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders', $partner)) as $r) {
+        if (empty($r['due'])) { continue; }
+        $f = $r['folder'] ?? FOLDER_DEFAULT;
+        if (!in_array($f, $sharedFolders, true) || in_array($f, $hidShared, true)) { continue; }
+        $done = !empty($r['done']);
+        $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
+        if (strpos($eff, $monthPrefix) === 0) {
+            $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
+                              'done' => $done, 'rolled' => ($eff !== $r['due']), 'due' => $r['due'],
+                              'owner' => $partner];
+        }
+    }
+    if ($sharedIds) {
+        $theirEvs = load_json_list(user_data_file($cfg['data_dir'], 'events', $partner));
+        usort($theirEvs, fn($a, $b) => ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99')));
+        foreach ($theirEvs as $ev) {
+            $ec = in_array($ev['cal'] ?? '', $theirCalIds, true) ? $ev['cal'] : $theirDef;
+            if (!in_array($ec, $sharedIds, true)) { continue; }              // not shared with me
+            if ($visibleCals !== null && !in_array($ec, $visibleCals, true)) { continue; }
+            if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
+                $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
+                                         'time' => $ev['time'] ?? '', 'done' => false,
+                                         'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0],
+                                         'owner' => $partner];
+            }
+        }
+    }
+}
+
 foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes')) as $n) {
     if (!empty($n['date']) && strpos($n['date'], $monthPrefix) === 0) {
         $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note', 'done' => false];
@@ -457,6 +536,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .evtime { font-size: 0.75rem; color: #7dd3fc; font-weight: 600; white-space: nowrap; }
     .dp-item.done .txt { color: #666; text-decoration: line-through; }
     .dp-item .chev { color: #555; font-size: 0.9rem; }
+    /* Someone else's item, shown here but owned (and edited) over in their app. */
+    .dp-item.shared { cursor: default; }
+    .dp-item .owner {
+      font-size: 0.68rem; color: #888; border: 1px solid #3a3a3a; border-radius: 999px;
+      padding: 0.05rem 0.45rem; white-space: nowrap;
+    }
     .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
     .dp-none { color: #555; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
 
@@ -519,6 +604,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
     .modal .buttons .ok { background: #34d399; color: #06251b; }
+    /* Share sits on the left of the manager's button row. */
+    .modal .buttons .share { margin-right: auto; background: #2a2a2a; color: #ccc; }
+    .modal .buttons .share:hover { background: #333; color: #fff; }
     .modal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     .modal .calrow select {
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
@@ -594,6 +682,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?php foreach ($calsOnly as $c): ?>
         <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
       <?php endforeach; ?>
+      <?php if ($sharedCals): ?>
+        <optgroup label="<?= e(share_name($partner)) ?>&rsquo;s calendars">
+          <?php foreach ($sharedCals as $c): ?>
+            <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+      <?php endif; ?>
       <?php if ($setsOnly): ?>
         <optgroup label="Calendar sets">
           <?php foreach ($setsOnly as $s): ?>
@@ -733,10 +828,31 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <p class="chint">Which folders' reminders show up on the calendar.</p>
     <ul class="callist" id="folderRows"></ul>
     <div class="buttons" style="margin-top:1.1rem">
+      <?php if ($partner): ?>
+        <button type="button" class="share" id="shareBtn">Share</button>
+      <?php endif; ?>
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
   </div>
 </div>
+
+<?php if ($partner): ?>
+<!-- What I let the other person see -->
+<div class="modal-backdrop" id="shareModal">
+  <div class="modal calmodal">
+    <h2>Shared with <?= e(share_name($partner)) ?></h2>
+    <p class="chint">Ticked calendars and folders show up on <?= e(share_name($partner)) ?>&rsquo;s calendar.</p>
+    <h2>Calendars</h2>
+    <ul class="callist" id="shareCals"></ul>
+    <hr class="cdiv">
+    <h2>Reminders</h2>
+    <ul class="callist" id="shareFolders"></ul>
+    <div class="buttons" style="margin-top:1.1rem">
+      <button type="button" class="ok" id="shareDone">Done</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- Which calendars belong to a set -->
 <div class="modal-backdrop" id="setModal">
@@ -757,6 +873,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <input type="hidden" name="csrf" value="<?= $csrf ?>">
   <input type="hidden" name="action" value="toggle_reminder">
   <input type="hidden" name="id" id="tgId" value="">
+  <input type="hidden" name="owner" id="tgOwner" value="">
   <input type="hidden" name="ym" value="<?= e($ym) ?>">
   <input type="hidden" name="day" id="tgDay" value="">
 </form>
@@ -923,6 +1040,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         cb.addEventListener('change', () => {
           document.getElementById('tgId').value = it.id;
           document.getElementById('tgDay').value = date;
+          document.getElementById('tgOwner').value = it.owner || '';   // shared: write to their file
           toggleForm.submit();
         });
         row.appendChild(cb);
@@ -957,21 +1075,31 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         od.textContent = new Date(it.due + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
         row.appendChild(od);
       }
+      // Someone else's item: say whose, and don't offer to edit or delete it here.
+      if (it.owner) {
+        row.classList.add('shared');
+        chev.textContent = '';
+        const who = document.createElement('span');
+        who.className = 'owner'; who.textContent = PARTNER || it.owner;
+        row.appendChild(who);
+      }
       row.appendChild(chev);
-      const del = document.createElement('button');
-      del.className = 'dp-del'; del.textContent = '×'; del.title = 'Delete';
-      del.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        document.getElementById('diKind').value = it.kind;
-        document.getElementById('diId').value = it.id;
-        document.getElementById('diDay').value = date;
-        document.getElementById('delItemForm').submit();
-      });
-      row.appendChild(del);
-      row.addEventListener('click', () => {
-        if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
-        openEdit(it.id, it.kind, it.text, date, it.time || '', it.cal || '');
-      });
+      if (!it.owner) {
+        const del = document.createElement('button');
+        del.className = 'dp-del'; del.textContent = '×'; del.title = 'Delete';
+        del.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          document.getElementById('diKind').value = it.kind;
+          document.getElementById('diId').value = it.id;
+          document.getElementById('diDay').value = date;
+          document.getElementById('delItemForm').submit();
+        });
+        row.appendChild(del);
+        row.addEventListener('click', () => {
+          if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
+          openEdit(it.id, it.kind, it.text, date, it.time || '', it.cal || '');
+        });
+      }
       dpList.appendChild(row);
     }
   };
@@ -1031,7 +1159,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const VIEW_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : $defCal) ?>';
   let CALS   = <?= json_encode(array_values($calList), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const FOLDERS = <?= json_encode(array_values($remFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const PARTNER = <?= json_encode($partner ? share_name($partner) : null) ?>;
+  const SHARED_FOLDERS = <?= json_encode(array_values($sharedFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  let SHARES = <?= json_encode($myShares, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN = <?= json_encode(array_values($hidFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  let HIDDEN_SHARED = <?= json_encode(array_values($hidShared), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let calDirty = false;          // something changed -> reload on close so dots/colours catch up
 
   const calModal = document.getElementById('calModal');
@@ -1050,8 +1182,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       .then(r => r.json())
       .then(j => {
         if (!j) return;
-        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); }
-        if (j.hidden) { HIDDEN = j.hidden; calDirty = true; renderFolders(); }
+        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); if (PARTNER) renderShare(); }
+        if (j.hidden) { HIDDEN = j.hidden; HIDDEN_SHARED = j.hiddenShared || []; calDirty = true; renderFolders(); }
+        if (j.shares) { SHARES = j.shares; calDirty = true; renderShare(); }
       })
       .catch(() => location.reload());
   };
@@ -1117,22 +1250,57 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     });
   }
 
+  // A checkbox row: ticked/unticked calls back with the new state.
+  function checkRow(label, checked, onChange) {
+    const li = document.createElement('li');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'cmember'; cb.checked = checked;
+    cb.addEventListener('change', () => onChange(cb.checked));
+    const name = document.createElement('span');
+    name.className = 'cname'; name.textContent = label;
+    li.append(cb, name);
+    li.addEventListener('click', e => { if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
+    return li;
+  }
+  function subHead(text) {
+    const li = document.createElement('li');
+    li.className = 'calempty'; li.style.background = 'none'; li.style.border = 'none';
+    li.textContent = text;
+    return li;
+  }
+
   // Reminder folders: ticked means that folder's reminders appear on the calendar.
   const folderRows = document.getElementById('folderRows');
   function renderFolders() {
     folderRows.innerHTML = '';
-    FOLDERS.forEach(f => {
-      const li = document.createElement('li');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.className = 'cmember';
-      cb.checked = HIDDEN.indexOf(f) === -1;
-      cb.addEventListener('change', () => calApi('folder_vis', { name: f, show: cb.checked ? 1 : 0 }));
-      const name = document.createElement('span');
-      name.className = 'cname'; name.textContent = f;
-      li.append(cb, name);
-      li.addEventListener('click', e => { if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
-      folderRows.appendChild(li);
-    });
+    FOLDERS.forEach(f => folderRows.appendChild(
+      checkRow(f, HIDDEN.indexOf(f) === -1, on => calApi('folder_vis', { name: f, show: on ? 1 : 0 }))));
+    if (SHARED_FOLDERS.length) {
+      folderRows.appendChild(subHead(PARTNER + '’s folders'));
+      SHARED_FOLDERS.forEach(f => folderRows.appendChild(
+        checkRow(f, HIDDEN_SHARED.indexOf(f) === -1,
+                 on => calApi('folder_vis', { name: f, shared: 1, show: on ? 1 : 0 }))));
+    }
+  }
+
+  // What I let the other person see. Ticking posts straight away.
+  function renderShare() {
+    if (!PARTNER) return;
+    const cals = document.getElementById('shareCals');
+    const fols = document.getElementById('shareFolders');
+    cals.innerHTML = ''; fols.innerHTML = '';
+    onlyCals().forEach(c => cals.appendChild(
+      checkRow(c.name, (SHARES.calendars || []).indexOf(c.id) !== -1,
+               on => calApi('share_set', { kind: 'calendar', key: c.id, on: on ? 1 : 0 }))));
+    FOLDERS.forEach(f => fols.appendChild(
+      checkRow(f, (SHARES.folders || []).indexOf(f) !== -1,
+               on => calApi('share_set', { kind: 'folder', key: f, on: on ? 1 : 0 }))));
+  }
+  if (PARTNER) {
+    const shareModal = document.getElementById('shareModal');
+    document.getElementById('shareBtn').addEventListener('click', () => { renderShare(); shareModal.classList.add('open'); });
+    document.getElementById('shareDone').addEventListener('click', () => shareModal.classList.remove('open'));
+    shareModal.addEventListener('click', e => { if (e.target === shareModal) shareModal.classList.remove('open'); });
   }
 
   // Colour palette popover, anchored to the swatch that opened it.
@@ -1242,10 +1410,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   document.getElementById('mCancel').addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  const shareModalEl = document.getElementById('shareModal');
   const anyModalOpen = () => modal.classList.contains('open')
-    || calModal.classList.contains('open') || setModal.classList.contains('open');
+    || calModal.classList.contains('open') || setModal.classList.contains('open')
+    || (shareModalEl && shareModalEl.classList.contains('open'));
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    if (shareModalEl && shareModalEl.classList.contains('open')) { shareModalEl.classList.remove('open'); return; }
     if (setModal.classList.contains('open')) { setModal.classList.remove('open'); return; }
     if (calModal.classList.contains('open')) { closeCalModal(); return; }
     closeModal();

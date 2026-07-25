@@ -8,10 +8,10 @@ require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
+require_once $__libDir . '/sharing.php';
 require_login('Reminders');
 
-$cfg      = app_config();
-$dataFile = user_data_file($cfg['data_dir'], 'reminders');
+$cfg = app_config();
 
 // Ungrouped reminders live under a permanent, non-deletable group shown last.
 const DEFAULT_SECTION = 'Reminders';
@@ -20,15 +20,36 @@ if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 
-$folders = folders_load($cfg['data_dir'])['reminders'];
+$me        = current_user() ?? '';
+$myFolders = folders_load($cfg['data_dir'])['reminders'];
 
-// Which folder is being viewed? ('All' = show everything)
-$view = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
-if ($view !== 'All' && !in_array($view, $folders, true)) {
-    $view = 'All';
+// Folders the other person shared with me, shown in the picker as "@aki:Groceries".
+$partner       = share_partner();
+$sharedFolders = $partner
+    ? array_values(array_intersect(folders_load($cfg['data_dir'], $partner)['reminders'],
+                                   shares_load($cfg['data_dir'], $partner)['folders']))
+    : [];
+
+/**
+ * Which folder is being viewed? 'All', one of mine, or '@<partner>:<folder>' for
+ * a shared one — in which case every read and write goes to their file instead.
+ */
+$view       = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
+$owner      = $me;
+$viewFolder = $view;
+$isShared   = false;
+if ($partner && preg_match('/^@([A-Za-z0-9_-]+):(.*)$/s', $view, $m)
+    && $m[1] === $partner && in_array($m[2], $sharedFolders, true)) {
+    $owner = $partner; $viewFolder = $m[2]; $isShared = true;
+} elseif ($view !== 'All' && !in_array($view, $myFolders, true)) {
+    $view = $viewFolder = 'All';
 }
+
+$dataFile = user_data_file($cfg['data_dir'], 'reminders', $isShared ? $owner : null);
+$folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['reminders'] : $myFolders;
+
 // New items land in the viewed folder, or General when viewing All.
-$addTarget = $view === 'All' ? FOLDER_DEFAULT : $view;
+$addTarget = $viewFolder === 'All' ? FOLDER_DEFAULT : $viewFolder;
 $backUrl   = _self_path() . '?folder=' . urlencode($view);
 
 function e(?string $s): string
@@ -110,6 +131,38 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
         http_response_code(400);
         exit('Bad request (invalid CSRF token).');
+    }
+
+    // A shared folder is someone else's list: you can work its reminders, but its
+    // folders and sections stay theirs to arrange.
+    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder'], true)) {
+        http_response_code(403);
+        exit('That belongs to ' . htmlspecialchars(share_name($owner), ENT_QUOTES) . '.');
+    }
+
+    // The New-item window can also make an event or a note; those live in their own files.
+    if ($_POST['action'] === 'add_event' || $_POST['action'] === 'add_note') {
+        $text = trim((string) ($_POST['text'] ?? ''));
+        $due  = trim((string) ($_POST['due'] ?? ''));
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $due) ? $due : null;
+        if ($text === '') { header('Location: ' . $backUrl); exit; }
+        if ($_POST['action'] === 'add_event') {
+            $file = user_data_file($cfg['data_dir'], 'events');
+            $list = store_read($file);
+            $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
+                       'date' => $date, 'time' => null, 'cal' => '', 'created' => time()];
+            store_write($file, array_values($list));
+            header('Location: /calendar/' . ($date ? '?day=' . $date . '&ym=' . substr($date, 0, 7) : ''));
+            exit;
+        }
+        $file  = user_data_file($cfg['data_dir'], 'notes');
+        $list  = store_read($file);
+        $newId = bin2hex(random_bytes(6));
+        $list[] = ['id' => $newId, 'title' => mb_substr($text, 0, 200), 'date' => $date,
+                   'body' => '', 'created' => time(), 'updated' => time()];
+        store_write($file, array_values($list));
+        header('Location: /notes/?id=' . $newId);
+        exit;
     }
 
     // Folder actions don't touch the reminders list.
@@ -276,9 +329,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
         case 'clear_done':
             // Clear completed within the folder being viewed (or all when viewing All).
-            $list = array_filter($list, function ($r) use ($view) {
+            $list = array_filter($list, function ($r) use ($viewFolder) {
                 if (is_section($r) || empty($r['done'])) { return true; }
-                return $view !== 'All' && ($r['folder'] ?? FOLDER_DEFAULT) !== $view;
+                return $viewFolder !== 'All' && ($r['folder'] ?? FOLDER_DEFAULT) !== $viewFolder;
             });
             break;
     }
@@ -299,8 +352,8 @@ foreach ($all as $it) {
 
 // Reminder rows, filtered to the viewed folder.
 $items = array_values(array_filter($all, fn($it) => !is_section($it)));
-if ($view !== 'All') {
-    $items = array_values(array_filter($items, fn($r) => ($r['folder'] ?? FOLDER_DEFAULT) === $view));
+if ($viewFolder !== 'All') {
+    $items = array_values(array_filter($items, fn($r) => ($r['folder'] ?? FOLDER_DEFAULT) === $viewFolder));
 }
 
 // Split into ungrouped + per-section. Stored array order = the manual (drag) order;
@@ -317,6 +370,14 @@ $openCount = count(array_filter($items, fn($r) => empty($r['done'])));
 $doneCount = count($items) - $openCount;
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
+
+// Folder picker contents: mine first, then whatever the other person shared.
+$folderGroups = [['label' => $partner ? share_name($me) : '',
+                  'options' => array_map(fn($f) => [$f, $f], $myFolders)]];
+if ($sharedFolders) {
+    $folderGroups[] = ['label' => share_name($partner),
+                       'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f], $sharedFolders)];
+}
 
 // The "+ New section" control that sits next to "+ New folder".
 $sectionInput =
@@ -364,57 +425,78 @@ $sectionInput =
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    form.add {
-      display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;
+    /* The bar above the list: Add, Show Completed, and Undo after a delete. */
+    .addbar { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; align-items: center; }
+    .addbar button {
+      padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.95rem;
+      cursor: pointer; font-family: inherit;
     }
-    form.add input[type=text] {
-      flex: 1 1 8rem; min-width: 0; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 1rem;
-    }
-    /* Forces Edit/Undo onto their own row, so the top row is text + "+ Date" + Add. */
-    form.add .rowbreak { flex: 1 1 100%; height: 0; margin: 0; }
-    form.add input[type=date] {
-      padding: 0.6rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
-    }
-    form.add input:focus, form.add select:focus { outline: none; border-color: #888; }
-    /* Pill buttons matching the Calendar tab's Edit/Add. */
-    form.add button[type=submit] {
-      padding: 0.5rem 1.1rem; background: #34d399; color: #06251b; border: none;
-      border-radius: 999px; font-size: 0.95rem; cursor: pointer; font-weight: 700;
-    }
-    form.add button[type=submit]:hover { background: #52e0ac; }
-    form.add .editbtn {
-      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
-      border-radius: 999px; font-size: 0.95rem; cursor: pointer;
-    }
-    form.add .editbtn:hover { border-color: #888; color: #fff; }
-    form.add #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
-    body.can-undo form.add #undoBtn { display: inline-block; }
-    /* Show Completed lives in the add form's second row, wearing the same pill as the others. */
-    form.add .showall { padding: 0.5rem 1rem; font-size: 0.95rem; }
-    body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
+    .addbar .addopen { background: #34d399; color: #06251b; border: none; font-weight: 700; }
+    .addbar .addopen:hover { background: #52e0ac; }
+    .addbar .showall { background: none; color: #888; border: 1px solid #333; }
+    .addbar .showall:hover { border-color: #888; color: #ccc; }
+    body.show-done .addbar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .addbar .editbtn { background: none; border: 1px solid #333; color: #ccc; }
+    .addbar .editbtn:hover { border-color: #888; color: #fff; }
+    .addbar #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
+    body.can-undo .addbar #undoBtn { display: inline-block; }
+    /* Completed reminders + the clear button stay hidden until "Show Completed" is on */
     body:not(.show-done) li.done { display: none; }
     body:not(.show-done) footer { display: none; }
-    /* Same pill as Edit/Add, kept green so it still reads as the date affordance. */
-    form.add .adddate {
-      background: none; border: 1px solid #3a5a4d; color: #34d399; border-radius: 999px;
-      padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; white-space: nowrap;
+
+    /* New-item window, the same one the Calendar uses. */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 60;
+      display: none; align-items: center; justify-content: center; padding: 1rem;
     }
-    form.add .adddate:hover { border-color: #34d399; background: #14251f; }
-    form.add .datewrap { display: inline-flex; align-items: center; gap: 0.35rem; }
-    form.add .datewrap[hidden] { display: none; }   /* make [hidden] win over inline-flex */
-    form.add .cleardate {
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      width: 100%; max-width: 380px; padding: 1.25rem;
+    }
+    .modal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .modal input[type=text] {
+      width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; margin-bottom: 0.85rem;
+    }
+    .modal input:focus, .modal select:focus { outline: none; border-color: #888; }
+    .modal .kind { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .modal .kind label {
+      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid #3a3a3a;
+      border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
+    }
+    .modal .kind input { display: none; }
+    .modal .kind input:checked + span { color: #34d399; font-weight: 700; }
+    .modal .kind label:has(input:checked) { border-color: #34d399; background: #14251f; }
+    .modal .daterow, .modal .secrow { margin-bottom: 1rem; }
+    .modal .adddate {
+      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
+      padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    }
+    .modal .adddate:hover { background: #14251f; }
+    .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
+    .modal .datewrap[hidden] { display: none; }   /* make [hidden] win over flex */
+    .modal .datewrap input[type=date] {
+      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; color-scheme: dark;
+    }
+    .modal .datewrap .cleardate {
       background: none; border: 1px solid #3a3a3a; color: #999; border-radius: 6px;
-      padding: 0.5rem 0.55rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
+      padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1; font-family: inherit;
     }
-    form.add .cleardate:hover { border-color: #f66; color: #f66; }
-    form.add select {
-      padding: 0.6rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 0.9rem; color-scheme: dark; cursor: pointer;
+    .modal .datewrap .cleardate:hover { border-color: #f66; color: #f66; }
+    .modal .secsel {
+      width: 100%; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #4a3f2a;
+      border-radius: 6px; color: #f0b429; font-size: 16px; color-scheme: dark; cursor: pointer;
+      font-family: inherit;
     }
-    form.add select.secsel { border-color: #4a3f2a; color: #f0b429; }
+    .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    .modal .buttons button {
+      padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
+    .modal .buttons .ok { background: #34d399; color: #06251b; }
 
     /* Section headers (bold), grouping reminders */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.25rem; }
@@ -500,38 +582,58 @@ $sectionInput =
         <div class="titlebar">
           <h1>Reminders</h1>
         </div>
-        <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
+        <div class="meta"><?= $isShared ? e(share_name($owner)) . ' &middot; ' : '' ?><?= e($viewFolder) ?>
+          &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
     </div>
     <?= render_user_menu(true) ?>
   </header>
 
-  <?php render_folder_nav($folders, $view, $csrf); ?>
+  <?php render_folder_select($folderGroups, $view, $csrf); ?>
 
-  <form class="add" method="post" action="">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="add">
-    <input type="hidden" name="view" value="<?= e($view) ?>">
-    <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
-    <input type="text" name="text" placeholder="Add a reminder…" maxlength="500" required autofocus>
-    <button type="button" class="adddate" id="addDateBtn">+ Date</button>
-    <span class="datewrap" id="dateWrap" hidden>
-      <input type="date" name="due" id="dueInput" title="Optional due date">
-      <button type="button" class="cleardate" id="clearDateBtn" title="Remove date">&times;</button>
-    </span>
-    <button type="submit">Add</button>
-    <span class="rowbreak"></span>
+  <div class="addbar">
+    <button type="button" id="addBtn" class="addopen">+ Add</button>
     <button type="button" id="doneBtn" class="showall">Show Completed</button>
-    <?php if ($sections): ?>
-      <select name="section" class="secsel" title="Add to section">
-        <option value="">Reminders</option>
-        <?php foreach ($sections as $sname): ?>
-          <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
-        <?php endforeach; ?>
-      </select>
-    <?php endif; ?>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
-  </form>
+  </div>
+
+  <!-- New item, the same window the Calendar uses — but starting on Reminder. -->
+  <div class="modal-backdrop" id="addModal">
+    <form class="modal" method="post" action="" id="addForm">
+      <h2>New item</h2>
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" id="aAction" value="add">
+      <input type="hidden" name="view" value="<?= e($view) ?>">
+      <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
+      <input type="text" name="text" id="aText" placeholder="What is it?" maxlength="500" required>
+      <div class="kind">
+        <label><input type="radio" name="kindchoice" value="reminder" checked><span>&#9745; Reminder</span></label>
+        <label><input type="radio" name="kindchoice" value="event"><span>&#128197; Event</span></label>
+        <label><input type="radio" name="kindchoice" value="note"><span>&#128221; Note</span></label>
+      </div>
+      <div class="daterow">
+        <button type="button" class="adddate" id="aDateBtn">+ Date</button>
+        <span class="datewrap" id="aDateWrap" hidden>
+          <input type="date" name="due" id="aDate">
+          <button type="button" class="cleardate" id="aDateClear" title="Remove date">&times;</button>
+        </span>
+      </div>
+      <?php if ($sections): ?>
+        <div class="secrow" id="aSecRow">
+          <select name="section" class="secsel" title="Add to section">
+            <option value="">Reminders</option>
+            <?php foreach ($sections as $sname): ?>
+              <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      <?php endif; ?>
+      <div class="buttons">
+        <button type="button" class="cancel" id="aCancel">Cancel</button>
+        <button type="submit" class="ok">Add</button>
+      </div>
+    </form>
+  </div>
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="undo">
@@ -588,18 +690,50 @@ $sectionInput =
 <script>
   const TODAY = '<?= date('Y-m-d') ?>';
 
-  // Optional date: reveal the date picker only when "+ Date" is tapped (defaults to today).
-  const addBtn   = document.getElementById('addDateBtn');
-  const wrap     = document.getElementById('dateWrap');
-  const dueInput = document.getElementById('dueInput');
-  addBtn.addEventListener('click', () => {
-    wrap.hidden = false; addBtn.hidden = true;
-    if (!dueInput.value) dueInput.value = TODAY;
-    dueInput.focus();
-    if (dueInput.showPicker) { try { dueInput.showPicker(); } catch (_) {} }
+  // ----- New-item window -----
+  const addModal = document.getElementById('addModal');
+  const aText    = document.getElementById('aText');
+  const aDateBtn = document.getElementById('aDateBtn');
+  const aWrap    = document.getElementById('aDateWrap');
+  const aDate    = document.getElementById('aDate');
+  const aSecRow  = document.getElementById('aSecRow');
+
+  // Sections only mean anything for reminders; events and notes go to their own apps.
+  const syncKind = () => {
+    const kind = document.querySelector('input[name=kindchoice]:checked').value;
+    if (aSecRow) aSecRow.hidden = kind !== 'reminder';
+  };
+  document.querySelectorAll('input[name=kindchoice]').forEach(r => r.addEventListener('change', syncKind));
+
+  const closeAdd = () => addModal.classList.remove('open');
+  document.getElementById('addBtn').addEventListener('click', () => {
+    aText.value = ''; aDate.value = ''; aWrap.hidden = true; aDateBtn.hidden = false;
+    document.querySelector('input[name=kindchoice][value=reminder]').checked = true;
+    syncKind();
+    addModal.classList.add('open');
+    setTimeout(() => aText.focus(), 30);
   });
-  document.getElementById('clearDateBtn').addEventListener('click', () => {
-    dueInput.value = ''; wrap.hidden = true; addBtn.hidden = false;
+  document.getElementById('aCancel').addEventListener('click', closeAdd);
+  addModal.addEventListener('click', e => { if (e.target === addModal) closeAdd(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && addModal.classList.contains('open')) closeAdd();
+  });
+
+  // Optional date: reveal the date picker only when "+ Date" is tapped (defaults to today).
+  aDateBtn.addEventListener('click', () => {
+    aWrap.hidden = false; aDateBtn.hidden = true;
+    if (!aDate.value) aDate.value = TODAY;
+    aDate.focus();
+    if (aDate.showPicker) { try { aDate.showPicker(); } catch (_) {} }
+  });
+  document.getElementById('aDateClear').addEventListener('click', () => {
+    aDate.value = ''; aWrap.hidden = true; aDateBtn.hidden = false;
+  });
+
+  // Pick the right action right before submitting: add | add_event | add_note.
+  document.getElementById('addForm').addEventListener('submit', () => {
+    const kind = document.querySelector('input[name=kindchoice]:checked').value;
+    document.getElementById('aAction').value = kind === 'reminder' ? 'add' : 'add_' + kind;
   });
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----

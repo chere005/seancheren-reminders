@@ -7,9 +7,9 @@
 
 const FOLDER_DEFAULT = 'General';
 
-function folders_load(string $dir): array
+function folders_load(string $dir, ?string $user = null): array
 {
-    $file = user_data_file($dir, 'folders');
+    $file = user_data_file($dir, 'folders', $user);
     $data = store_read($file);
     foreach (['reminders', 'notes'] as $type) {
         if (empty($data[$type]) || !is_array($data[$type])) {
@@ -82,6 +82,43 @@ function render_folder_nav(array $folders, string $active, string $csrf, string 
     <?php
 }
 
+/**
+ * Folder navigator as a dropdown, grouped by owner.
+ * $groups is [ ['label' => 'Sean', 'options' => [ [value, label], … ] ], … ]; a group
+ * with an empty label has its options listed loose at the top.
+ */
+function render_folder_select(array $groups, string $active, string $csrf, string $extra = ''): void
+{
+    ?>
+    <div class="foldernav">
+      <select id="folderSel" class="foldersel" aria-label="Folder">
+        <option value="All"<?= ($active === 'All' || $active === '') ? ' selected' : '' ?>>All</option>
+        <?php foreach ($groups as $g): ?>
+          <?php if (empty($g['options'])) { continue; } ?>
+          <?php if ($g['label'] !== ''): ?><optgroup label="<?= htmlspecialchars($g['label'], ENT_QUOTES) ?>"><?php endif; ?>
+          <?php foreach ($g['options'] as [$val, $label]): ?>
+            <option value="<?= htmlspecialchars($val, ENT_QUOTES) ?>"<?= $active === $val ? ' selected' : '' ?>>
+              <?= htmlspecialchars($label, ENT_QUOTES) ?>
+            </option>
+          <?php endforeach; ?>
+          <?php if ($g['label'] !== ''): ?></optgroup><?php endif; ?>
+        <?php endforeach; ?>
+      </select>
+      <form method="post" action="" class="newfolder" onsubmit="return this.name.value.trim()!==''">
+        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
+        <input type="hidden" name="action" value="add_folder">
+        <input type="text" name="name" placeholder="+ New folder" maxlength="40" autocomplete="off">
+      </form>
+      <?= $extra ?>
+    </div>
+    <script>
+      document.getElementById('folderSel').addEventListener('change', function () {
+        location.href = '?folder=' + encodeURIComponent(this.value);
+      });
+    </script>
+    <?php
+}
+
 function folder_nav_styles(): string
 {
     return <<<CSS
@@ -92,6 +129,12 @@ function folder_nav_styles(): string
     }
     .foldernav .chip:hover { border-color: #666; color: #ddd; }
     .foldernav .chip.active { background: #14251f; border-color: #34d399; color: #34d399; }
+    .foldersel {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 999px; color: #34d399;
+      padding: 0.3rem 0.75rem; font-size: 16px;   /* 16px stops iOS from zooming on focus */
+      font-family: inherit; max-width: 100%;
+    }
+    .foldersel:focus { outline: none; border-color: #34d399; }
     .foldernav .newfolder { margin-left: auto; }
     body:not(.editing) .foldernav .newfolder { display: none; }   /* edit mode only */
     .foldernav .newfolder input {
