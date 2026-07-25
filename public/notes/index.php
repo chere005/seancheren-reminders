@@ -344,7 +344,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
-    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -354,6 +354,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
 
     /* List view — pills sized to match the Calendar's day-panel buttons. */
+    /* The row under the rule starts where Reminders' folder row does. */
+    .foldernav, .listbar { padding-left: 2rem; }
     .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
     /* One height for everything on this row, whichever of them is showing. */
     .listbar .newnote, .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus {
@@ -372,7 +374,6 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       font-family: inherit;
     }
     .listbar .listedit:hover { border-color: #888; color: #fff; }
-    body.editing .listbar .listedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .listbar select {
       padding: 0.5rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 0.9rem; color-scheme: dark; cursor: pointer;
@@ -424,7 +425,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     body.editing .drag-handle { visibility: visible; }
     /* The blank slot swallows the header's gap, so a section's name starts exactly
        where the note titles under it do. */
-    .drag-handle.blank { visibility: hidden; cursor: default; margin-right: -0.5rem; }
+    .drag-handle.blank { visibility: hidden; cursor: default; margin-right: 0.25rem; }
     .drag-handle:active { cursor: grabbing; color: #34d399; }
     ul.nlist li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }

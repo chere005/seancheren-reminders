@@ -412,7 +412,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
       margin-bottom: 0.5rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
     }
-    .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .hleft { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
     .backbtn, .usermenu .who {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;
       border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
@@ -426,7 +426,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
     .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
-    .hright { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+    .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     /* The "⋮" sits against the username, not at the header's own gap. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
     /* Edit (a pencil) beside the username, the same pill and the same size. */

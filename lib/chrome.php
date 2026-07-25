@@ -19,8 +19,8 @@ function chrome_styles(): string
        rule under the lot, and the same small gap under that rule in every app.
        Apps only supply what goes inside. */
     header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; margin-bottom: 0.5rem; }
-    .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-    .hright { display: flex; align-items: center; gap: 0.8rem; flex: 0 0 auto; }
+    .hleft { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+    .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     .backbtn, .titlebtn, .usermenu .who {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;
       border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
