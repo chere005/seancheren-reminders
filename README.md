@@ -54,7 +54,7 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 
 | App | Login | Storage | Highlights |
 |-----|-------|---------|------------|
-| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, Show Completed, undo delete |
+| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, Show Completed |
 | Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, autosave |
 | Calendar | yes | `events-<user>.json` + reminders + notes | month grid, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
 | Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections |
@@ -77,6 +77,9 @@ CONNECT.md             → how to resume the Claude Code session from your phone
   mode only); the default is where new items land while you're viewing "All".
 - Writes are `POST` + CSRF token, then either a redirect or — for the drag/tick
   style interactions — a JSON reply.
+- **Deleting takes two presses.** There is no confirm box and no Undo: the first
+  press turns the button red, the second one goes through, and the server refuses
+  anything destructive that didn't come from that second press.
 
 ## Sharing (sean ⇄ aki)
 

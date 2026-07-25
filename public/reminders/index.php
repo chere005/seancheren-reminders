@@ -653,6 +653,9 @@ $sectionInput =
     }
     .newsection .plus:hover { background: #f7c95a; }
     body:not(.editing) .newsection { display: none !important; }   /* edit mode only */
+    /* A section with nothing in it under the current folder: out of the way normally,
+       visible while editing so you can see the one you just made and fill it. */
+    body:not(.editing) .section-group.folder-empty { display: none; }
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
@@ -692,8 +695,10 @@ $sectionInput =
    <div id="rlist-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
-      <?php if (!$rows && $view !== 'All') continue; // hide empty sections inside a folder view ?>
-      <div class="section-group" data-section="<?= e($sname) ?>">
+      <?php // An empty section is noise inside a folder view, but it still has to be
+            // there while editing — otherwise a section you just added vanishes on the
+            // way back, since it has no rows yet. CSS hides it, edit mode brings it back. ?>
+      <div class="section-group<?= (!$rows && $view !== 'All') ? ' folder-empty' : '' ?>" data-section="<?= e($sname) ?>">
         <div class="section-head">
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= e($sname) ?></span>
