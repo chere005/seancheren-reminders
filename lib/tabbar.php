@@ -26,8 +26,7 @@ function tabbar_styles(): string
       font-size: 0.82rem; font-weight: 600; border-radius: 8px;
       transition: background 0.12s, color 0.12s;
     }
-    .segmented a .ico { font-size: 1.05rem; line-height: 1; }
-    @media (max-width: 380px) { .segmented a { font-size: 0.74rem; gap: 3px; } }
+    .segmented a .ico { font-size: 1.35rem; line-height: 1; }
     .segmented a:hover { color: #ccc; }
     .segmented a.active {
       background: #2a2a2a; color: #34d399;
@@ -47,9 +46,10 @@ function render_tabbar(string $active): void
     echo '<nav class="tabbar"><div class="segmented">';
     foreach ($tabs as $key => $t) {
         $cls = $key === $active ? ' class="active"' : '';
-        echo '<a href="' . $t['href'] . '"' . $cls . '>'
-           . '<span class="ico">' . $t['ico'] . '</span>'
-           . '<span>' . $t['label'] . '</span></a>';
+        // Icon only; the label stays as the accessible name.
+        echo '<a href="' . $t['href'] . '"' . $cls
+           . ' title="' . $t['label'] . '" aria-label="' . $t['label'] . '">'
+           . '<span class="ico">' . $t['ico'] . '</span></a>';
     }
     echo '</div></nav>';
     // iOS home-screen (standalone) apps otherwise open internal links in Safari

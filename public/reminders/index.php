@@ -391,6 +391,8 @@ $sectionInput =
     form.add .editbtn:hover { border-color: #888; color: #fff; }
     form.add #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
     body.can-undo form.add #undoBtn { display: inline-block; }
+    /* Show Completed lives in the add form's second row, wearing the same pill as the others. */
+    form.add .showall { padding: 0.5rem 1rem; font-size: 0.95rem; }
     body.show-done form.add #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
     body:not(.show-done) li.done { display: none; }
@@ -497,7 +499,6 @@ $sectionInput =
       <div>
         <div class="titlebar">
           <h1>Reminders</h1>
-          <button type="button" id="doneBtn" class="showall">Show Completed</button>
         </div>
         <div class="meta"><?= e($view) ?> &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
@@ -520,6 +521,7 @@ $sectionInput =
     </span>
     <button type="submit">Add</button>
     <span class="rowbreak"></span>
+    <button type="button" id="doneBtn" class="showall">Show Completed</button>
     <?php if ($sections): ?>
       <select name="section" class="secsel" title="Add to section">
         <option value="">Reminders</option>
