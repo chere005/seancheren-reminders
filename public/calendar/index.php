@@ -302,7 +302,12 @@ $calColor = array_merge($calColor, array_column($sharedCals, 'color', 'id'));
 if (isset($_GET['cal'])) { $_SESSION['cal_view'] = (string) $_GET['cal']; }
 $calView     = (string) ($_SESSION['cal_view'] ?? 'all');
 $visibleCals = null;                                  // null = show every calendar
-if (in_array($calView, $pickIds, true)) {
+$onlyFolder  = null;                                  // set = show just this shared folder's reminders
+if (strncmp($calView, 'f:', 2) === 0) {
+    $f = substr($calView, 2);
+    if (in_array($f, $sharedFolders, true)) { $onlyFolder = $f; $visibleCals = []; }   // no events at all
+    else { $calView = 'all'; }
+} elseif (in_array($calView, $pickIds, true)) {
     $visibleCals = [$calView];
 } elseif ($calView !== 'all') {
     foreach ($setsOnly as $s) {
@@ -315,7 +320,7 @@ if (in_array($calView, $pickIds, true)) {
 $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
-foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
+foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
     if (empty($r['due'])) { continue; }
     if (in_array($r['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)) { continue; }   // folder switched off
     $done = !empty($r['done']);                                    // done are hidden until "Show Completed"
@@ -344,7 +349,9 @@ if ($partner) {
     foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders', $partner)) as $r) {
         if (empty($r['due'])) { continue; }
         $f = $r['folder'] ?? FOLDER_DEFAULT;
-        if (!in_array($f, $sharedFolders, true) || in_array($f, $hidShared, true)) { continue; }
+        if (!in_array($f, $sharedFolders, true)) { continue; }
+        // Picking a folder in the dropdown overrides the show/hide checkboxes.
+        if ($onlyFolder !== null ? $f !== $onlyFolder : in_array($f, $hidShared, true)) { continue; }
         $done = !empty($r['done']);
         $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
         if (strpos($eff, $monthPrefix) === 0) {
@@ -370,7 +377,7 @@ if ($partner) {
     }
 }
 
-foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes')) as $n) {
+foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'notes')) : [] as $n) {
     if (!empty($n['date']) && strpos($n['date'], $monthPrefix) === 0) {
         $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note', 'done' => false];
     }
@@ -679,20 +686,25 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <div class="calpick">
     <select id="calSel" aria-label="Visible calendar">
       <option value="all"<?= $calView === 'all' ? ' selected' : '' ?>>All calendars</option>
-      <?php foreach ($calsOnly as $c): ?>
-        <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
-      <?php endforeach; ?>
-      <?php if ($sharedCals): ?>
-        <optgroup label="<?= e(share_name($partner)) ?>&rsquo;s calendars">
-          <?php foreach ($sharedCals as $c): ?>
-            <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
-          <?php endforeach; ?>
-        </optgroup>
-      <?php endif; ?>
+      <optgroup label="<?= e(share_name($me)) ?>">
+        <?php foreach ($calsOnly as $c): ?>
+          <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+        <?php endforeach; ?>
+      </optgroup>
       <?php if ($setsOnly): ?>
         <optgroup label="Calendar sets">
           <?php foreach ($setsOnly as $s): ?>
             <option value="<?= e($s['id']) ?>"<?= $calView === $s['id'] ? ' selected' : '' ?>><?= e($s['name']) ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+      <?php endif; ?>
+      <?php if ($sharedCals || $sharedFolders): ?>
+        <optgroup label="<?= e(share_name($partner)) ?>">
+          <?php foreach ($sharedCals as $c): ?>
+            <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+          <?php endforeach; ?>
+          <?php foreach ($sharedFolders as $f): ?>
+            <option value="f:<?= e($f) ?>"<?= $calView === 'f:' . $f ? ' selected' : '' ?>><?= e($f) ?></option>
           <?php endforeach; ?>
         </optgroup>
       <?php endif; ?>
