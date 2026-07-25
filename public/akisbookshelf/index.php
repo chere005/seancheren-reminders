@@ -397,7 +397,7 @@ function books_header(string $titleHtml): void
     /* Same top bar as the rest of the suite: everything 32px on one line, rule under it. */
     header {
       display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-      margin-bottom: 1.1rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
+      margin-bottom: 1rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
     }
     .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
     .backbtn, .usermenu .who {
@@ -921,7 +921,7 @@ function books_header(string $titleHtml): void
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_note">
       <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-      <button class="addbook" type="submit">+ New note</button>
+      <button class="addbook" type="submit">+ Note</button>
     </form>
   </div>
   <form class="setcoverform" id="setCoverForm" method="post" action="" hidden>
@@ -976,11 +976,11 @@ function books_header(string $titleHtml): void
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="add_bsection">
     <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-    <input type="text" name="name" placeholder="+ New section" maxlength="60" autocomplete="off">
+    <input type="text" name="name" placeholder="+ Section" maxlength="60" autocomplete="off">
   </form>
 
   <?php if (!$bNoteRows && !$bSections): ?>
-    <p class="empty">No notes for this book yet. Tap <strong>+ New note</strong> to start.</p>
+    <p class="empty">No notes for this book yet. Tap <strong>+ Note</strong> to start.</p>
   <?php else: ?>
    <div id="bnotes-root">
     <?php $renderBNotes($ungroupedN, ''); ?>

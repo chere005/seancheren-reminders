@@ -17,7 +17,7 @@ function chrome_styles(): string
     /* The top bar: back, the app's name, its one round button, then the username on
        the right. Everything on it is 32px tall and sits on the same line, with a
        rule under the lot. Apps only supply what goes inside. */
-    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; }
+    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; margin-bottom: 1rem; }
     .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
     .hright { display: flex; align-items: center; gap: 0.8rem; flex: 0 0 auto; }
     .backbtn, .titlebtn, .usermenu .who {
