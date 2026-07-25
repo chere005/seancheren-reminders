@@ -115,7 +115,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if ($action === 'cal_add' && $name !== '') {
             $calList[] = ['id' => bin2hex(random_bytes(6)), 'name' => $name,
                           'color' => CAL_COLORS[count($calIdsNow) % count(CAL_COLORS)], 'created' => time()];
-        } elseif ($action === 'cal_delete' && count($calIdsNow) > 1) {
+        } elseif ($action === 'cal_delete' && count($calIdsNow) > 1 && !empty($_POST['confirm'])) {
             $calList = array_values(array_filter($calList, fn($c) => is_calset($c) || ($c['id'] ?? '') !== $id));
             foreach ($calList as &$s) {   // drop it from any set that listed it
                 if (is_calset($s)) { $s['cals'] = array_values(array_filter($s['cals'] ?? [], fn($c) => $c !== $id)); }
@@ -145,7 +145,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $calList[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'set', 'name' => $name,
                           'color' => CAL_COLORS[count($calList) % count(CAL_COLORS)],
                           'cals' => [], 'created' => time()];
-        } elseif ($action === 'set_delete') {
+        } elseif ($action === 'set_delete' && !empty($_POST['confirm'])) {
             $calList = array_values(array_filter($calList, fn($c) => !(is_calset($c) && ($c['id'] ?? '') === $id)));
         } elseif ($action === 'cal_default') {
             // Which calendar new events land in. Kept in calprefs, not the calendar list.
@@ -266,7 +266,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($it);
         save_json_list($file, $list);
-    } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== '') {
+    } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== ''
+              && !empty($_POST['confirm'])) {   // only the confirmed second press deletes
         $file = user_data_file($cfg['data_dir'], $spec['base']);
         $list = load_json_list($file);
         $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
@@ -983,6 +984,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <form id="delItemForm" method="post" action="" style="display:none">
   <input type="hidden" name="csrf" value="<?= $csrf ?>">
   <input type="hidden" name="action" value="delete_item">
+  <input type="hidden" name="confirm" value="1">   <!-- only reachable via the armed second press -->
   <input type="hidden" name="kind" id="diKind" value="">
   <input type="hidden" name="id" id="diId" value="">
   <input type="hidden" name="ym" value="<?= e($ym) ?>">
@@ -1345,7 +1347,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
         del.dataset.confirm = 'Delete?';
         del.addEventListener('click', () => {
-          calApi('cal_delete', { id: c.id });   // second press: the arming already confirmed it
+          calApi('cal_delete', { id: c.id, confirm: 1 });   // the arming already confirmed it
         });
         li.appendChild(del);
       }
@@ -1397,7 +1399,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       del.dataset.confirm = 'Delete?';
       del.addEventListener('click', e => {
         e.stopPropagation();
-        calApi('set_delete', { id: s.id });   // second press: the arming already confirmed it
+        calApi('set_delete', { id: s.id, confirm: 1 });   // the arming already confirmed it
       });
       li.append(sw, name, count, del);
       li.addEventListener('click', () => openSetPicker(s));

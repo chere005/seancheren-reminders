@@ -118,7 +118,17 @@ function confirm_delete_script(): string
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('.needs-confirm');
     if (!b) { disarm(); return; }          // tapping anything else calls it off
-    if (b === armed) { disarm(); return; } // second press: let the click through
+    if (b === armed) {                     // second press: let the click through
+      // Tell the server this was confirmed. Destructive handlers refuse without it,
+      // so a stale or broken page can't delete anything on a single tap.
+      if (b.form && !b.form.querySelector('input[name="confirm"]')) {
+        var c = document.createElement('input');
+        c.type = 'hidden'; c.name = 'confirm'; c.value = '1';
+        b.form.appendChild(c);
+      }
+      disarm();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     disarm();

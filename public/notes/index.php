@@ -73,6 +73,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit('Bad request (invalid CSRF token).');
     }
 
+    // Nothing destructive happens without the confirmed second press.
+    if (in_array($_POST['action'], ['delete', 'delete_section', 'delete_folder'], true)
+        && empty($_POST['confirm'])) {
+        header('Location: ' . $listUrl . '&edit=1');
+        exit;
+    }
+
     // Folder actions.
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
@@ -226,6 +233,7 @@ $sectionInput =
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
   . '<input type="text" name="name" placeholder="+ New section" maxlength="40" autocomplete="off">'
+  . '<button type="submit" class="plus" title="Add section">+</button>'
   . '</form>';
 
 if (!$editing) {
@@ -408,8 +416,13 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .editor button.del:hover { color: #f66; }
     .editor .meta { font-size: 0.72rem; color: #666; }
 <?= folder_nav_styles() ?>
-    .newsection { margin: 0 0 0.6rem; }
-    body:not(.editing) .newsection { display: none; }   /* edit mode only */
+    .newsection { margin: 0 0 0.6rem; display: flex; gap: 0.4rem; align-items: center; }
+    .newsection .plus {
+      flex: 0 0 auto; width: 34px; background: #f0b429; color: #241a00; border: none;
+      border-radius: 999px; font-size: 1.05rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .newsection .plus:hover { background: #f7c95a; }
+    body:not(.editing) .newsection { display: none !important; }   /* edit mode only */
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
