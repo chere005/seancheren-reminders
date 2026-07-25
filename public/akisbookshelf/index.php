@@ -5,6 +5,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
+require_once $__libDir . '/chrome.php';   // for the shared two-press delete helper
 require_login("Aki's Bookshelf");
 // Standalone, private app — only aki may use it. The site login session is
 // shared, so we don't destroy it; we just refuse others and offer a log out.
@@ -101,7 +102,7 @@ function render_book_card(array $b, string $csrf, string $shelf): void
         <input type="hidden" name="action" value="delete_book">
         <input type="hidden" name="book" value="<?= e($b['id']) ?>">
         <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
-        <button class="bdel" type="submit" title="Remove book">&times;</button>
+        <button class="bdel needs-confirm" data-confirm="Delete?" type="submit" title="Remove book">&times;</button>
       </form>
     </div>
     <?php
@@ -230,97 +231,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($books as $b) { if (($b['id'] ?? '') === $bookId) { $bk = $b; break; } }
         $books = array_values(array_filter($books, fn($b) => ($b['id'] ?? '') !== $bookId));
         books_save($booksFile, $books);
-        // Also remove this book's notes (kept for undo so nothing is lost).
+        // Its notes go with it.
         $nmap    = bnotes_load($notesFile);
         $bknotes = $nmap[$bookId] ?? null;
         if ($bknotes !== null) { unset($nmap[$bookId]); bnotes_save($notesFile, $nmap); }
-        $_SESSION['undo_book'] = ['id' => $bookId, 'book' => $bk, 'notes' => $bknotes];
-        header('Location: ' . $shelfUrl . '&undo=1');
+        header('Location: ' . $shelfUrl . '&edit=1');
         exit;
     }
-    if ($action === 'undo_book') {
-        $u = $_SESSION['undo_book'] ?? null;
-        if (!empty($u['book'])) {
-            $books   = books_load($booksFile);
-            $books[] = $u['book'];
-            books_save($booksFile, $books);
-            if (!empty($u['notes'])) {                       // reattach the notes to the same book id
-                $nmap        = bnotes_load($notesFile);
-                $nmap[$u['id']] = $u['notes'];
-                bnotes_save($notesFile, $nmap);
-            }
-            unset($_SESSION['undo_book']);
-        }
-        header('Location: ' . $shelfUrl);
-        exit;
-    }
-    // Rating + shelf flags (AJAX from the book page).
-    if ($action === 'set_rating') {
-        $r     = max(0, min(5, (int) ($_POST['rating'] ?? 0)));
-        $books = books_load($booksFile);
-        foreach ($books as &$b) {
-            if (($b['id'] ?? '') === $bookId) {
-                $wasRead = ((int) ($b['rating'] ?? 0)) > 0;
-                $b['rating'] = $r;
-                if ($r > 0 && !$wasRead) { $b['read_at'] = time(); }   // a rating marks it read
-                elseif ($r === 0)        { $b['read_at'] = null; }     // cleared -> no longer read
-                break;
-            }
-        }
-        unset($b);
-        books_save($booksFile, $books);
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'rating' => $r]);
-        exit;
-    }
-    if (in_array($action, ['set_want', 'set_past'], true)) {
-        $field = ['set_want' => 'want', 'set_past' => 'past'][$action];
-        $val   = !empty($_POST['value']);
-        $books = books_load($booksFile);
-        foreach ($books as &$b) { if (($b['id'] ?? '') === $bookId) { $b[$field] = $val; break; } }
-        unset($b);
-        books_save($booksFile, $books);
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'value' => $val]);
-        exit;
-    }
-    if ($action === 'set_cover') {
-        $u = trim((string) ($_POST['cover_url'] ?? ''));
-        if ($u !== '' && !preg_match('#^https?://#i', $u)) { $u = ''; }   // http(s) only
-        $books = books_load($booksFile);
-        foreach ($books as &$b) {
-            if (($b['id'] ?? '') === $bookId) {
-                $b['cover_url'] = $u !== '' ? mb_substr($u, 0, 600) : null;
-                $b['cover']     = null;   // a manual URL overrides any resolved cover id
-                break;
-            }
-        }
-        unset($b);
-        books_save($booksFile, $books);
-        header('Location: ' . $bookUrl);
-        exit;
-    }
-    if ($action === 'add_to_folder' || $action === 'remove_from_folder') {
-        $fname = trim((string) ($_POST['folder'] ?? ''));
-        $books = books_load($booksFile);
-        foreach ($books as &$b) {
-            if (($b['id'] ?? '') === $bookId) {
-                $fl = array_values(array_filter(array_map('strval', $b['folders'] ?? []), fn($x) => $x !== ''));
-                if ($action === 'add_to_folder') {
-                    if ($fname !== '' && !in_array($fname, $fl, true)) { $fl[] = mb_substr($fname, 0, 60); }
-                } else {
-                    $fl = array_values(array_filter($fl, fn($x) => $x !== $fname));
-                }
-                $b['folders'] = $fl;
-                break;
-            }
-        }
-        unset($b);
-        books_save($booksFile, $books);
-        header('Location: ' . $bookUrl);
-        exit;
-    }
-
     // ----- Per-book notes (completely separate from the Notes tab) -----
     $map   = bnotes_load($notesFile);
     $notes = $map[$bookId] ?? [];
@@ -384,75 +301,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($action === 'delete_note') {
         $nid = (string) ($_POST['id'] ?? '');
         $ret = ($_POST['ret'] ?? '') === 'chapters' ? '&view=chapters' : '';
-        foreach ($notes as $x) { if (($x['id'] ?? '') === $nid) { $_SESSION['undo_bnote'] = ['book' => $bookId, 'note' => $x]; break; } }
         $notes = array_values(array_filter($notes, fn($n) => ($n['id'] ?? '') !== $nid));
         $map[$bookId] = $notes;
         bnotes_save($notesFile, $map);
-        header('Location: ' . $bookUrl . $ret . '&undo=1');
+        header('Location: ' . $bookUrl . $ret . '&edit=1');
         exit;
     }
-    if ($action === 'undo_note') {
-        $ret = ($_POST['ret'] ?? '') === 'chapters' ? '&view=chapters' : '';
-        if (!empty($_SESSION['undo_bnote']) && ($_SESSION['undo_bnote']['book'] ?? '') === $bookId) {
-            $notes[]      = $_SESSION['undo_bnote']['note'];
-            $map[$bookId] = $notes;
-            unset($_SESSION['undo_bnote']);
-            bnotes_save($notesFile, $map);
-        }
-        header('Location: ' . $bookUrl . $ret);
-        exit;
-    }
-    if ($action === 'add_bsection') {
-        $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
-        if ($name !== '') {
-            $dup = false;
-            foreach ($notes as $it) { if (is_bsection($it) && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; } }
-            if (!$dup) {
-                $notes[]      = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => mb_substr($name, 0, 60), 'created' => time()];
-                $map[$bookId] = $notes;
-                bnotes_save($notesFile, $map);
-            }
-        }
-        header('Location: ' . $bookUrl);
-        exit;
-    }
-    if ($action === 'delete_bsection') {
-        $name  = (string) ($_POST['name'] ?? '');
-        $notes = array_values(array_filter($notes, fn($it) => !(is_bsection($it) && ($it['name'] ?? '') === $name)));
-        foreach ($notes as &$n) {
-            if (!is_bsection($n) && ($n['section'] ?? '') === $name) { $n['section'] = ''; }
-        }
-        unset($n);
-        $map[$bookId] = $notes;
-        bnotes_save($notesFile, $map);
-        header('Location: ' . $bookUrl);
-        exit;
-    }
-    if ($action === 'reorder_notes') {   // drag reorder (AJAX): order = [{id, section}, …]
-        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
-        if (!is_array($order)) { $order = []; }
-        $secSet = [];
-        foreach ($notes as $it) { if (is_bsection($it)) { $secSet[$it['name']] = true; } }
-        $sections = array_values(array_filter($notes, fn($it) => is_bsection($it)));
-        $chapters = array_values(array_filter($notes, fn($it) => !is_bsection($it) && !empty($it['chapter'])));
-        $byId     = [];
-        foreach ($notes as $it) { if (!is_bsection($it) && empty($it['chapter'])) { $byId[(string) ($it['id'] ?? '')] = $it; } }
-        $newNotes = []; $used = [];
-        foreach ($order as $o) {
-            $nid = (string) ($o['id'] ?? '');
-            if ($nid === '' || !isset($byId[$nid]) || isset($used[$nid])) { continue; }
-            $sec = (string) ($o['section'] ?? '');
-            if ($sec !== '' && !isset($secSet[$sec])) { $sec = ''; }
-            $it = $byId[$nid]; $it['section'] = $sec; $newNotes[] = $it; $used[$nid] = true;
-        }
-        foreach ($byId as $nid => $it) { if (!isset($used[$nid])) { $newNotes[] = $it; } }   // keep any not posted
-        $map[$bookId] = array_merge($sections, $chapters, $newNotes);
-        bnotes_save($notesFile, $map);
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => true]);
-        exit;
-    }
-
     header('Location: ' . $listUrl);
     exit;
 }
@@ -588,8 +442,6 @@ function books_header(string $titleHtml): void
     }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .bar #undoBtn { display: none; }
-    body.can-undo .bar #undoBtn { display: inline-block; }
     .listbar .sortwrap { position: relative; margin-right: auto; }   /* sort/filter off to the left */
     #sortBtn { white-space: nowrap; }
     .sortmenu {
@@ -783,6 +635,7 @@ function books_header(string $titleHtml): void
       white-space: nowrap; pointer-events: none; text-align: center;
     }
     .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+<?= confirm_delete_styles() ?>
   </style>
 </head>
 <body>
@@ -847,7 +700,6 @@ function books_header(string $titleHtml): void
         <a href="<?= e(sf_url($sfBase, $curSort, 'unrated')) ?>" class="<?= $curMin === 'unrated' ? 'on' : '' ?>">Unrated</a>
       </div>
     </div>
-    <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="addBookBtn" class="addbook">+ Add book</button>
   </div>
@@ -915,11 +767,6 @@ function books_header(string $titleHtml): void
     </div>
   <?php endif; ?>
 
-  <form id="undoForm" method="post" action="" style="display:none">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="undo_book">
-    <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
-  </form>
 
   <!-- Hidden form that actually adds the chosen search result -->
   <form id="addForm" method="post" action="" style="display:none">
@@ -966,7 +813,6 @@ function books_header(string $titleHtml): void
   </div>
 
   <div class="bar">
-    <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -992,19 +838,13 @@ function books_header(string $titleHtml): void
             <input type="hidden" name="book" value="<?= e($book['id']) ?>">
             <input type="hidden" name="id" value="<?= e($n['id']) ?>">
             <input type="hidden" name="ret" value="chapters">
-            <button class="del" type="submit" title="Delete chapter">&times;</button>
+            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete chapter">&times;</button>
           </form>
         </li>
       <?php endforeach; ?>
     </ul>
   <?php endif; ?>
 
-  <form id="undoForm" method="post" action="" style="display:none">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="undo_note">
-    <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-    <input type="hidden" name="ret" value="chapters">
-  </form>
 
 <?php elseif ($book && $curNote === null): ?>
   <!-- ===================== BOOK PAGE (rating + notes) ===================== -->
@@ -1060,7 +900,6 @@ function books_header(string $titleHtml): void
     <div class="setcoverwrap">
       <button type="button" id="setCoverBtn" class="editbtn">Set cover</button>
     </div>
-    <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
     <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -1105,7 +944,7 @@ function books_header(string $titleHtml): void
               <input type="hidden" name="action" value="delete_note">
               <input type="hidden" name="book" value="<?= e($book['id']) ?>">
               <input type="hidden" name="id" value="<?= e($n['id']) ?>">
-              <button class="del" type="submit" title="Delete note">&times;</button>
+              <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete note">&times;</button>
             </form>
           </li>
         <?php }
@@ -1137,7 +976,7 @@ function books_header(string $titleHtml): void
           <input type="hidden" name="action" value="delete_bsection">
           <input type="hidden" name="book" value="<?= e($book['id']) ?>">
           <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del" type="submit" title="Delete section">&times;</button>
+          <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
       <?php $renderBNotes($groupedN[$sname] ?? [], $sname); ?>
@@ -1145,11 +984,6 @@ function books_header(string $titleHtml): void
    </div>
   <?php endif; ?>
 
-  <form id="undoForm" method="post" action="" style="display:none">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="undo_note">
-    <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-  </form>
 
 <?php else: ?>
   <!-- ===================== BOOK NOTE EDITOR ===================== -->
@@ -1181,7 +1015,7 @@ function books_header(string $titleHtml): void
     <textarea name="body" placeholder="Notes on this book…"><?= e($curNote['body'] ?? '') ?></textarea>
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
-      <button class="del" type="submit" name="action" value="delete_note">Delete</button>
+      <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete_note">Delete</button>
     </div>
   </form>
 <?php endif; ?>
@@ -1229,21 +1063,12 @@ function books_header(string $titleHtml): void
     });
   }
 
-  // ---- Undo appears only right after a delete (server redirects with ?undo=1) ----
-  const undoBtn = document.getElementById('undoBtn');
-  if (undoBtn) undoBtn.addEventListener('click', () => document.getElementById('undoForm').submit());
-  if (new URLSearchParams(location.search).get('undo') === '1') {
-    document.body.classList.add('can-undo');
-    const u = new URL(location.href); u.searchParams.delete('undo');
-    history.replaceState(null, '', u);
-  }
 
   // ---- Edit mode (reveals delete controls) ----
   const editBtn = document.getElementById('editBtn');
   if (editBtn) {
     const setEdit = (on) => {
       document.body.classList.toggle('editing', on);
-      if (!on) document.body.classList.remove('can-undo');   // tapping Done clears Undo
       editBtn.textContent = on ? 'Done' : 'Edit';
     };
     // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
@@ -1440,5 +1265,6 @@ function books_header(string $titleHtml): void
     root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
   })();
 </script>
+<?= confirm_delete_script() ?>
 </body>
 </html>

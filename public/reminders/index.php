@@ -167,7 +167,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="id" value="<?= e($r['id']) ?>">
-            <button class="del" type="submit" title="Delete">&times;</button>
+            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete">&times;</button>
           </form>
         </li>
         <?php
@@ -317,8 +317,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     $list        = load_reminders($dataFile);
     $sectionSet  = [];
+    // Edit mode rides along on the POST, so anything done from within it lands back
+    // in it. The forms only carry this field while editing (see the submit hook).
+    $stay        = !empty($_POST['edit']) ? '&edit=1' : '';
     foreach ($list as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
-    $undoFlag = '';   // set after a delete so the page shows the Undo button
 
     switch ($_POST['action']) {
         case 'add':
@@ -364,13 +366,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
         case 'delete':
             $id = (string) ($_POST['id'] ?? '');
-            foreach ($list as $r) { if (!is_section($r) && ($r['id'] ?? '') === $id) { $_SESSION['undo_rem'] = $r; break; } }
             $list = array_values(array_filter($list, fn($r) => is_section($r) || ($r['id'] ?? '') !== $id));
-            $undoFlag = '&undo=1&edit=1';   // deleting is an edit-mode action; stay in it
-            break;
-
-        case 'undo':
-            if (!empty($_SESSION['undo_rem'])) { $list[] = $_SESSION['undo_rem']; unset($_SESSION['undo_rem']); }
+            $stay = '&edit=1';   // deleting is an edit-mode action; stay in it
             break;
 
         case 'clear_done':
@@ -383,7 +380,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
 
     save_reminders($dataFile, $list);
-    header('Location: ' . $backUrl . $undoFlag);
+    header('Location: ' . $backUrl . $stay);
     exit;
 }
 
@@ -478,20 +475,14 @@ $sectionInput =
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* Show Completed, plus Undo after a delete. Adding happens per section now.
-       Pills sized to match the Calendar's day-panel buttons. */
-    .addbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1.25rem; }
-    .addbar button {
-      padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.9rem;
-      cursor: pointer; font-family: inherit;
+    /* Show Completed sits on the folder-dropdown row, sized to match it. */
+    .foldernav .showall {
+      background: none; color: #888; border: 1px solid #333; border-radius: 999px;
+      padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
+      white-space: nowrap;
     }
-    .addbar .showall { background: none; color: #888; border: 1px solid #333; }
-    .addbar .showall:hover { border-color: #888; color: #ccc; }
-    body.show-done .addbar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .addbar .editbtn { background: none; border: 1px solid #444; color: #ccc; }
-    .addbar .editbtn:hover { border-color: #888; color: #fff; }
-    .addbar #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
-    body.can-undo .addbar #undoBtn { display: inline-block; }
+    .foldernav .showall:hover { border-color: #888; color: #ccc; }
+    body.show-done .foldernav #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
 
     /* The + on each section header, and the row it opens. */
     .sec-add {
@@ -665,27 +656,15 @@ $sectionInput =
                     title="Manage folders" aria-label="Manage folders">+</button>
           <?php endif; ?>
         </div>
-        <div class="meta"><?= $isShared ? e(share_name($owner)) . ' &middot; ' : '' ?><?= e($viewFolder) ?>
-          &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
       </div>
     </div>
     <?= render_user_menu(true) ?>
   </header>
 
-  <?php render_folder_select($folderGroups, $view); ?>
-
-  <div class="addbar">
-    <button type="button" id="doneBtn" class="showall">Show Completed</button>
-    <button type="button" id="undoBtn" class="editbtn">Undo</button>
-  </div>
+  <?php render_folder_select($folderGroups, $view,
+        '<button type="button" id="doneBtn" class="showall">Show Completed</button>'); ?>
 
   <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to'); } ?>
-
-  <form id="undoForm" method="post" action="" style="display:none">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="undo">
-    <input type="hidden" name="view" value="<?= e($view) ?>">
-  </form>
 
   <?= $sectionInput ?>
 
@@ -705,7 +684,7 @@ $sectionInput =
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="name" value="<?= e($sname) ?>">
-            <button class="section-del" type="submit" title="Delete section">&times;</button>
+            <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
         <?php render_section_add_row($sname, $csrf, $view); ?>
@@ -770,37 +749,32 @@ $sectionInput =
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   const editBtn = document.getElementById('editBtn');
   const doneBtn = document.getElementById('doneBtn');
-  // Editing temporarily forces "show all" on, but the saved preference (remShowDone)
-  // is untouched — so tapping Done restores whatever Show Completed state you had before Edit.
-  let editShowDone = true;   // transient view state while editing
+  // While editing, "show all" is a transient view state; the saved preference
+  // (remShowDone) is untouched, so leaving edit restores whatever you had before.
+  const savedShowDone = () => localStorage.getItem('remShowDone') === '1';
+  let editShowDone = savedShowDone();
   const applyShowDone = () => {
-    const on = document.body.classList.contains('editing')
-      ? editShowDone
-      : (localStorage.getItem('remShowDone') === '1');
+    const on = document.body.classList.contains('editing') ? editShowDone : savedShowDone();
     document.body.classList.toggle('show-done', on);
   };
-  const setEdit = (on) => {
+  // The header button also reveals completed items, since that's the "sort everything
+  // out" mode. The section pencils just turn the controls on and leave the view alone.
+  const setEdit = (on, revealDone) => {
     document.body.classList.toggle('editing', on);
-    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
-    if (on) { editShowDone = true; }                       // entering edit auto-shows completed (view only)
+    editShowDone = on ? (revealDone || editShowDone) : savedShowDone();
     applyShowDone();
   };
+  const editing = () => document.body.classList.contains('editing');
   // Always start out of edit mode. The only exception is a structural change that
   // redirects back here (?edit=1), so adding a folder or section doesn't kick you out.
-  setEdit(new URLSearchParams(location.search).get('edit') === '1');
+  setEdit(new URLSearchParams(location.search).get('edit') === '1', false);
   if (new URLSearchParams(location.search).get('edit') === '1') {
     const u = new URL(location.href); u.searchParams.delete('edit');
     history.replaceState(null, '', u);
   }
-  // Undo shows only immediately after a delete (server redirects back with ?undo=1).
-  if (new URLSearchParams(location.search).get('undo') === '1') {
-    document.body.classList.add('can-undo');
-    const u = new URL(location.href); u.searchParams.delete('undo');
-    history.replaceState(null, '', u);
-  }
-  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
-  document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
+  editBtn.addEventListener('click', () => setEdit(!editing(), true));
+  window.sectionEditToggle = () => setEdit(!editing(), false);
   doneBtn.addEventListener('click', () => {
     if (document.body.classList.contains('editing')) {
       editShowDone = !editShowDone;                        // transient toggle while editing

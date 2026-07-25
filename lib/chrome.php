@@ -50,7 +50,8 @@ function chrome_styles(): string
     }
     .sec-edit:hover { border-color: #888; color: #ccc; }
     body.editing .sec-edit { background: #34d399; border-color: #34d399; color: #06251b; }
-    CSS;
+    CSS
+    . confirm_delete_styles();
 }
 
 function back_button(): string
@@ -86,12 +87,82 @@ function section_edit_button(): string
     return '<button type="button" class="sec-edit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>';
 }
 
+/**
+ * Two-press delete, used everywhere instead of a confirm() box or an Undo button.
+ * Mark any delete control `needs-confirm`: the first press arms it (fills red), the
+ * second goes through. Arming disarms itself after a few seconds, and only one
+ * control is ever armed, so a stray tap can't leave a landmine somewhere off screen.
+ *
+ * Emit these in pages that don't already use chrome_styles()/chrome_script().
+ */
+function confirm_delete_styles(): string
+{
+    return <<<CSS
+    .needs-confirm.armed {
+      background: #b3261e; border-color: #f66; color: #fff; font-weight: 700;
+    }
+    .needs-confirm.armed:hover { background: #d0342c; border-color: #f88; color: #fff; }
+    CSS;
+}
+
+function confirm_delete_script(): string
+{
+    // Capture phase, so this runs before the page's own submit/click handlers.
+    return <<<'JS'
+<script>(function () {
+  var armed = null, timer = null;
+  function disarm() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (armed) { armed.classList.remove('armed'); armed.textContent = armed.dataset.label; armed = null; }
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('.needs-confirm');
+    if (!b) { disarm(); return; }          // tapping anything else calls it off
+    if (b === armed) { disarm(); return; } // second press: let the click through
+    e.preventDefault();
+    e.stopPropagation();
+    disarm();
+    armed = b;
+    b.dataset.label = b.textContent;
+    if (b.dataset.confirm) { b.textContent = b.dataset.confirm; }
+    b.classList.add('armed');
+    timer = setTimeout(disarm, 4000);
+  }, true);
+})();</script>
+JS;
+}
+
+/**
+ * Carry edit mode through a POST. Any form submitted while editing picks up an
+ * `edit` field, so the handler's redirect can hand edit mode back and you aren't
+ * dropped out of it just for adding something.
+ */
+function keep_edit_script(): string
+{
+    return <<<'JS'
+<script>document.addEventListener('submit', function (e) {
+  var f = e.target;
+  if (!f || f.tagName !== 'FORM') { return; }
+  if (!document.body.classList.contains('editing')) { return; }
+  if (f.querySelector('input[name="edit"]')) { return; }
+  var i = document.createElement('input');
+  i.type = 'hidden'; i.name = 'edit'; i.value = '1';
+  f.appendChild(i);
+}, true);</script>
+JS;
+}
+
 function chrome_script(): string
 {
     return "<script>(function(){var b=document.getElementById('userBtn'),m=document.getElementById('userMenu');"
          . "if(b&&m){b.addEventListener('click',function(e){e.stopPropagation();m.hidden=!m.hidden;});"
          . "document.addEventListener('click',function(e){if(!m.hidden&&!m.contains(e.target)){m.hidden=true;}});}"
+         // A page can define window.sectionEditToggle to treat the section pencils
+         // differently from the header button; otherwise they just click it.
          . "var eb=document.getElementById('editBtn');if(eb){"
          . "document.querySelectorAll('.sec-edit').forEach(function(s){"
-         . "s.addEventListener('click',function(){eb.click();});});}})();</script>";
+         . "s.addEventListener('click',function(){"
+         . "if(window.sectionEditToggle){window.sectionEditToggle();}else{eb.click();}});});}})();</script>"
+         . confirm_delete_script()
+         . keep_edit_script();
 }
