@@ -361,7 +361,11 @@ if (!in_array($curMin, ['', '5', '4', '3', '2', '1', 'unrated'], true)) { $curMi
 $sfBase  = '?shelf=' . urlencode($shelf) . (($shelf === 'library' && $folder !== '') ? '&folder=' . urlencode($folder) : '');
 
 /** Consistent header: ‹ back (top-left) + title, and a username dropdown on the right. */
-function books_header(string $titleHtml): void
+/**
+ * The top bar. $withEdit puts the Edit toggle next to the username, the same size as
+ * it — the screens that have nothing to edit (the note editor) leave it off.
+ */
+function books_header(string $titleHtml, bool $withEdit = false): void
 {
     ?>
     <header>
@@ -369,9 +373,14 @@ function books_header(string $titleHtml): void
         <button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>
         <div class="htitle"><?= $titleHtml ?></div>
       </div>
-      <div class="usermenu">
-        <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
-        <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+      <div class="hright">
+        <?php if ($withEdit): ?>
+          <button type="button" class="hedit" id="editBtn">Edit</button>
+        <?php endif; ?>
+        <div class="usermenu">
+          <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
+          <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+        </div>
       </div>
     </header>
     <?php
@@ -413,6 +422,15 @@ function books_header(string $titleHtml): void
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
     .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
+    .hright { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+    /* Edit beside the username, the same pill and the same size. */
+    .hedit {
+      height: 32px; display: inline-flex; align-items: center; padding: 0 0.8rem;
+      background: none; border: 1px solid #333; border-radius: 999px; color: #ccc;
+      font-size: 0.85rem; font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
+    }
+    .hedit:hover { border-color: #888; color: #fff; }
+    body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .usermenu .who:hover { border-color: #34d399; }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
@@ -453,7 +471,6 @@ function books_header(string $titleHtml): void
       border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
     .bar .editbtn:hover { border-color: #888; color: #fff; }
-    body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .listbar .sortwrap { position: relative; margin-right: auto; }   /* sort/filter off to the left */
     #sortBtn { white-space: nowrap; }
     .sortmenu {
@@ -465,7 +482,19 @@ function books_header(string $titleHtml): void
     .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: #eee; text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
     .sortmenu a:hover { background: #2a2a2a; }
     .sortmenu a.on { color: #34d399; font-weight: 700; }
-    .setcoverwrap { margin-right: auto; }   /* Set cover sits off to the left */
+    /* Set cover sits to the right of the book's details, level with the middle of the
+       cover, and only while editing. */
+    .bh-cover-edit { display: none; margin-left: auto; align-self: flex-start; }
+    /* Spans exactly the cover's height (84px wide at 2/3), so the button lands level
+       with the middle of the cover rather than the middle of the taller text column. */
+    body.editing .bh-cover-edit {
+      display: flex; align-items: center; height: calc(84px * 3 / 2);
+    }
+    .bh-cover-edit .editbtn {
+      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      border-radius: 999px; font-size: 0.95rem; cursor: pointer; font-family: inherit; white-space: nowrap;
+    }
+    .bh-cover-edit .editbtn:hover { border-color: #888; color: #fff; }
     .setcoverform { display: flex; gap: 0.5rem; margin: -0.6rem 0 1.25rem; }
     .setcoverform[hidden] { display: none; }   /* make the hidden attribute win over display:flex */
     .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 16px; }
@@ -659,7 +688,7 @@ function books_header(string $titleHtml): void
 <div class="wrap">
 <?php if (!$book): ?>
   <!-- ===================== BOOKS LIST ===================== -->
-  <?php books_header('<h1>Aki&rsquo;s Bookshelf</h1>'); ?>
+  <?php books_header('<h1>Aki&rsquo;s Bookshelf</h1>', true); ?>
 
   <?php if ($shelf === 'data'): ?>
     <?php
@@ -716,7 +745,6 @@ function books_header(string $titleHtml): void
         <a href="<?= e(sf_url($sfBase, $curSort, 'unrated')) ?>" class="<?= $curMin === 'unrated' ? 'on' : '' ?>">Unrated</a>
       </div>
     </div>
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <button type="button" id="addBookBtn" class="addbook">+ Add book</button>
   </div>
 
@@ -822,14 +850,13 @@ function books_header(string $titleHtml): void
         return $an !== $bn ? $an <=> $bn : (($a['created'] ?? 0) <=> ($b['created'] ?? 0));
     });
   ?>
-  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
+  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>', true); ?>
   <div class="folderback">
     <a href="?book=<?= urlencode($book['id']) ?>">&larr; <?= e($book['title'] ?? 'Book') ?></a>
     <span class="folder-h chapters-h">&#128278; Chapters</span>
   </div>
 
   <div class="bar">
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_chapter">
@@ -864,7 +891,7 @@ function books_header(string $titleHtml): void
 
 <?php elseif ($book && $curNote === null): ?>
   <!-- ===================== BOOK PAGE (rating + notes) ===================== -->
-  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>'); ?>
+  <?php books_header('<div class="ht-sub">' . e($book['title'] ?? 'Book') . '</div>', true); ?>
   <div class="bookhead">
     <span class="coverbox">
       <span class="ph"><?= e($book['title'] ?? '') ?></span>
@@ -887,6 +914,10 @@ function books_header(string $titleHtml): void
         </div>
         <div class="flaghint">Rate it above to mark it read.</div>
       </div>
+    </div>
+    <?php // Only while editing, and centred against the cover rather than the text. ?>
+    <div class="bh-cover-edit">
+      <button type="button" id="setCoverBtn" class="editbtn">Set cover</button>
     </div>
   </div>
 
@@ -913,10 +944,6 @@ function books_header(string $titleHtml): void
   </div>
 
   <div class="bar">
-    <div class="setcoverwrap">
-      <button type="button" id="setCoverBtn" class="editbtn">Set cover</button>
-    </div>
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
     <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_note">
