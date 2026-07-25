@@ -41,6 +41,38 @@ function app_users(array $cfg): array
     return [];
 }
 
+/**
+ * Passwords people have changed themselves, keyed by username.
+ *
+ * config.php seeds the accounts, but it is hand-kept on the server and deliberately
+ * never deployed — so a change lands in the encrypted data directory instead, and
+ * wins over the config entry. Deleting passwords.json falls back to config.
+ */
+function auth_passwords_file(array $cfg): string
+{
+    return rtrim($cfg['data_dir'], '/') . '/passwords.json';
+}
+
+/** The password to check $user against: their own if they've set one, else config's. */
+function auth_password_for(array $cfg, string $user): ?string
+{
+    $users = app_users($cfg);
+    if (!isset($users[$user])) {
+        return null;                       // not an account at all
+    }
+    $own = store_read(auth_passwords_file($cfg));
+    return isset($own[$user]) ? (string) $own[$user] : (string) $users[$user];
+}
+
+/** Store a new password for $user. */
+function auth_password_set(array $cfg, string $user, string $password): void
+{
+    $file = auth_passwords_file($cfg);
+    $own  = store_read($file);
+    $own[$user] = $password;
+    store_write($file, $own);
+}
+
 /** Username of the signed-in user (null if not logged in). */
 function current_user(): ?string
 {
@@ -74,7 +106,6 @@ function require_login(string $area = 'App'): void
     }
 
     $cfg = app_config();
-    $users = app_users($cfg);
 
     // Login submission
     $error = '';
@@ -82,7 +113,8 @@ function require_login(string $area = 'App'): void
         && isset($_POST['username'], $_POST['password'])) {
         $u = (string) $_POST['username'];
         $p = (string) $_POST['password'];
-        if (isset($users[$u]) && hash_equals((string) $users[$u], $p)) {
+        $want = auth_password_for($cfg, $u);
+        if ($want !== null && hash_equals($want, $p)) {
             session_regenerate_id(true);
             $_SESSION['auth'] = true;
             $_SESSION['user'] = $u;
@@ -94,6 +126,35 @@ function require_login(string $area = 'App'): void
 
     if (empty($_SESSION['auth'])) {
         render_login($area, $error);
+        exit;
+    }
+
+    if (empty($_SESSION['csrf'])) {
+        $_SESSION['csrf'] = bin2hex(random_bytes(16));
+    }
+
+    // The settings window's password change. It's handled here rather than in each
+    // app because the window rides in the top bar of every one of them.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+        && ($_POST['action'] ?? '') === 'change_password') {
+        header('Content-Type: application/json');
+        if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Bad request.']);
+            exit;
+        }
+        $me  = (string) current_user();
+        $cur = (string) ($_POST['current'] ?? '');
+        $new = (string) ($_POST['new'] ?? '');
+        $want = auth_password_for($cfg, $me);
+        if ($want === null || !hash_equals($want, $cur)) {
+            echo json_encode(['ok' => false, 'error' => 'That is not your current password.']);
+        } elseif (strlen($new) < 6) {
+            echo json_encode(['ok' => false, 'error' => 'Use at least 6 characters.']);
+        } else {
+            auth_password_set($cfg, $me, $new);
+            echo json_encode(['ok' => true]);
+        }
         exit;
     }
 }

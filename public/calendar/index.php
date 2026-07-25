@@ -461,7 +461,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .daypanel .wrap { max-width: 640px; margin: 0 auto; }
     .wrap { max-width: 640px; margin: 0 auto; }
     header {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;
+      display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
@@ -481,7 +481,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
     /* Visible-calendar picker, under the back button / title. Hand-built rather than a
        <select> so each entry can carry its calendar's colour dot. */
-    .calpick { margin: -0.5rem 0 0.9rem; position: relative; }
+    .calpick { margin: 0 0 0.9rem; position: relative; }
     .calpick-btn {
       display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
       background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px;
@@ -568,17 +568,19 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
     .dp-head .dp-gap { flex: 1; }          /* pushes Completed/Edit/Add to the right */
-    /* Completed, Edit and + Add are one size — set here so they can't drift apart. */
+    /* Completed, Edit and + Add share a height — set here so they can't drift apart. */
     .dp-head button {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; line-height: 1.2; border-radius: 999px;
       font-family: inherit; white-space: nowrap; cursor: pointer;
     }
-    /* Completed sits just left of + Add, at the same size. */
+    /* Completed sits just left of + Add — an icon, so narrower than the text buttons. */
     .dp-head #calShowAll {
       background: none; border: 1px solid #333; color: #888; border-radius: 999px;
-      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit; white-space: nowrap;
+      padding: 0.35rem 0.6rem; font-size: 0.95rem; cursor: pointer; font-family: inherit; white-space: nowrap;
     }
     .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
+    /* Edit is an icon too, so it doesn't need the text buttons' side padding. */
+    .dp-head .hedit { padding: 0.35rem 0.6rem; font-size: 0.95rem; }
     body.show-done .dp-head #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
     .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
@@ -886,8 +888,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
     <span class="dp-gap"></span>
-    <button type="button" id="calShowAll">Completed</button>
-    <button type="button" class="hedit" id="dpEdit">Edit</button>
+    <button type="button" id="calShowAll" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
+    <button type="button" class="hedit" id="dpEdit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
@@ -1319,11 +1321,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     const u = new URL(location.href); u.searchParams.delete('edit');
     history.replaceState(null, '', u);
   }
-  dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
-  dpEdit.addEventListener('click', () => {
-    const on = document.body.classList.toggle('editing');
-    dpEdit.textContent = on ? 'Done' : 'Edit';
-  });
+  // The pencil says which state you're in by going green, so it keeps its icon.
+  dpEdit.addEventListener('click', () => { document.body.classList.toggle('editing'); });
 
   // ---- Calendars & calendar sets ----
   const CSRF     = '<?= $csrf ?>';

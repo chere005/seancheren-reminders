@@ -487,7 +487,7 @@ $sectionInput =
     .wrap { max-width: 640px; margin: 0 auto; }
     /* Tight bottom margin: the folder dropdown sits directly under this. */
     header {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
+      display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
@@ -598,7 +598,7 @@ $sectionInput =
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
-    .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
     .section-del {
@@ -647,9 +647,15 @@ $sectionInput =
     .drag-handle, .sec-handle { visibility: hidden; }
     body.editing .drag-handle, body.editing .sec-handle { visibility: visible; }
     .drag-handle, .sec-handle {
-      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 1.4rem;
-      color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none;
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 1rem;
+      color: #666; font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none;
     }
+    /* The permanent groups can't be dragged, but they keep the slot so their titles
+       line up with every other section's. */
+    .sec-handle.blank { cursor: default; }
+    /* The rows put a wider gap after their handle; match it so a section's name
+       starts where the checkboxes under it do. */
+    .section-head .sec-handle { margin-right: 0.25rem; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     .section-group.dragging { opacity: 0.9; }
@@ -711,7 +717,7 @@ $sectionInput =
 
   <?php // Completed and Section ride on the folder row, same size, in that order.
         render_folder_select($folderGroups, $view,
-        '<button type="button" id="doneBtn" class="showall">Completed</button>'
+        '<button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>'
       . '<button type="button" id="newSecBtn" class="showall">+ Section</button>'
       . $sectionInput); ?>
 
@@ -750,6 +756,7 @@ $sectionInput =
     <!-- Permanent "Calendar" group: undated items here ride along on the Calendar under today. -->
     <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
       <div class="section-head">
+        <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
         <?php render_section_add_button(CALENDAR_SECTION); ?>
         <?= section_edit_button() ?>
@@ -761,6 +768,7 @@ $sectionInput =
     <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
     <div class="section-group default-group" data-section="">
       <div class="section-head">
+        <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
         <?php render_section_add_button(''); ?>
         <?= section_edit_button() ?>
@@ -913,7 +921,7 @@ $sectionInput =
 
   document.addEventListener('pointerdown', (e) => {
     if (!document.body.classList.contains('editing')) return;
-    const secHandle = e.target.closest('.sec-handle');
+    const secHandle = e.target.closest('.sec-handle:not(.blank)');
     const remHandle = e.target.closest('.drag-handle');
     pid = e.pointerId; sx = e.clientX; sy = e.clientY;
     if (secHandle) {
@@ -941,7 +949,7 @@ $sectionInput =
   // pointerdown. Claiming the touch on the handles makes the grab feel immediate.
   document.addEventListener('touchstart', (e) => {
     if (!document.body.classList.contains('editing')) return;
-    if (e.target.closest('.drag-handle, .sec-handle')) e.preventDefault();
+    if (e.target.closest('.drag-handle, .sec-handle:not(.blank)')) e.preventDefault();
   }, { passive: false });
 
   document.addEventListener('pointermove', (e) => {

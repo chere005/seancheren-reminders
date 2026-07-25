@@ -5,7 +5,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
-require_once $__libDir . '/chrome.php';     // for the shared two-press delete helper
+require_once $__libDir . '/chrome.php';     // two-press delete + the settings window
 require_once $__libDir . '/richtext.php';   // note-body toolbar + sanitiser
 require_login("Aki's Bookshelf");
 // Standalone, private app — only aki may use it. The site login session is
@@ -375,12 +375,14 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       </div>
       <div class="hright">
         <?php if ($withEdit): ?>
-          <button type="button" class="hedit" id="editBtn">Edit</button>
+          <button type="button" class="hedit" id="editBtn" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
         <?php endif; ?>
+        <?= settings_button() ?>
         <div class="usermenu">
           <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
           <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
         </div>
+        <?= settings_modal_html() ?>
       </div>
     </header>
     <?php
@@ -406,7 +408,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     /* Same top bar as the rest of the suite: everything 32px on one line, rule under it. */
     header {
       display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-      margin-bottom: 1rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
+      margin-bottom: 0.5rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
     }
     .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
     .backbtn, .usermenu .who {
@@ -414,7 +416,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
       font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
-    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0 0.1rem 0.15rem 0; }
+    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
     .htitle h1 { font-size: 1.35rem; }
     .htitle .ht-sub { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
@@ -423,11 +425,12 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .usermenu { position: relative; flex: 0 0 auto; }
     .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
     .hright { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
-    /* Edit beside the username, the same pill and the same size. */
+    /* Edit (a pencil) beside the username, the same pill and the same size. */
     .hedit {
-      height: 32px; display: inline-flex; align-items: center; padding: 0 0.8rem;
-      background: none; border: 1px solid #333; border-radius: 999px; color: #ccc;
-      font-size: 0.85rem; font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
+      height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      padding: 0 0.6rem; background: none; border: 1px solid #333; border-radius: 999px;
+      color: #ccc; font-size: 0.95rem; font-family: inherit; line-height: 1;
+      cursor: pointer; flex: 0 0 auto;
     }
     .hedit:hover { border-color: #888; color: #fff; }
     body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
@@ -569,16 +572,6 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .folderback a { color: #34d399; text-decoration: none; font-size: 0.9rem; }
     .folderback .folder-h { font-weight: 700; color: #f0b429; }
 
-    .bh-folders { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 1.25rem; }
-    .bh-folders .flabel { font-size: 0.78rem; color: #777; }
-    .bh-folders .ftag { display: inline-flex; align-items: center; gap: 0.3rem; background: #17140f; border: 1px solid #3a3320; color: #f0b429; border-radius: 999px; padding: 0.2rem 0.6rem; font-size: 0.82rem; }
-    .bh-folders .ftag-x { background: none; border: none; color: #a08a3a; cursor: pointer; font-size: 0.95rem; line-height: 1; padding: 0; }
-    .bh-folders .ftag-x:hover { color: #f66; }
-    .bh-folders .addfolder { margin: 0; }
-    .bh-folders .addfolder input { width: 130px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a3320; border-radius: 999px; color: #f0b429; font-size: 16px; }
-    .bh-folders .addfolder input::placeholder { color: #a08a3a; }
-    .bh-folders .addfolder input:focus { outline: none; border-style: solid; border-color: #f0b429; }
-
     /* Search modal */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 60; display: none; align-items: flex-start; justify-content: center; padding: 1.2rem 1rem; }
     .modal-backdrop.open { display: flex; }
@@ -625,7 +618,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 
     /* Drag-to-reorder notes (edit mode) */
     /* Hidden, not gone: taking the handle out of the flow shifted every title sideways. */
-    .nlist .drag-handle { visibility: hidden; flex: 0 0 auto; width: 1.5rem; display: inline-flex; align-items: center; justify-content: center; color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none; }
+    .nlist .drag-handle { visibility: hidden; flex: 0 0 auto; width: 1rem; display: inline-flex; align-items: center; justify-content: center; color: #666; font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none; }
     body.editing .nlist .drag-handle { visibility: visible; }
     .nlist .drag-handle:active { cursor: grabbing; color: #8b6ef0; }
     .nlist li.dragging { background: #1b1726; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
@@ -653,7 +646,10 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     /* Same side padding as a note row, so the section's X sits under the rows' Xs. */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
-    .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    /* A section can't be dragged here, but it keeps the handle's slot so its name
+       starts level with the note titles under it. */
+    .section-head .sec-handle { flex: 0 0 auto; width: 1rem; margin-right: -0.5rem; }
     .section-del { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; }
     body.editing .section-del { display: inline-block; }
     .section-del:hover { border-color: #f66; color: #f66; }
@@ -679,6 +675,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       white-space: nowrap; pointer-events: none; text-align: center;
     }
     .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+<?= settings_modal_styles() ?>
 <?= confirm_delete_styles() ?>
 <?= rt_styles() ?>
   </style>
@@ -921,28 +918,6 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     </div>
   </div>
 
-  <div class="bh-folders">
-    <span class="flabel">Folders:</span>
-    <?php foreach (($book['folders'] ?? []) as $fn): ?>
-      <span class="ftag"><?= e($fn) ?>
-        <form method="post" action="" style="display:inline;margin:0">
-          <input type="hidden" name="csrf" value="<?= $csrf ?>">
-          <input type="hidden" name="action" value="remove_from_folder">
-          <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-          <input type="hidden" name="folder" value="<?= e($fn) ?>">
-          <button type="submit" class="ftag-x" title="Remove from folder">&times;</button>
-        </form>
-      </span>
-    <?php endforeach; ?>
-    <form method="post" action="" class="addfolder" onsubmit="return this.folder.value.trim()!==''">
-      <input type="hidden" name="csrf" value="<?= $csrf ?>">
-      <input type="hidden" name="action" value="add_to_folder">
-      <input type="hidden" name="book" value="<?= e($book['id']) ?>">
-      <input type="text" name="folder" placeholder="+ folder" maxlength="60" autocomplete="off" list="folderlist">
-    </form>
-    <datalist id="folderlist"><?php foreach ($allFolders as $fn): ?><option value="<?= e($fn) ?>"></option><?php endforeach; ?></datalist>
-  </div>
-
   <div class="bar">
     <form method="post" action="" style="margin:0">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -1013,6 +988,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     <?php $renderBNotes($ungroupedN, ''); ?>
     <?php foreach ($bSections as $sname): ?>
       <div class="section-head">
+        <span class="sec-handle" aria-hidden="true"></span>
         <span class="section-title"><?= e($sname) ?></span>
         <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -1311,6 +1287,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
   })();
 </script>
+<?= settings_modal_script() ?>
 <?= confirm_delete_script() ?>
 <?= rt_script() ?>
 </body>
