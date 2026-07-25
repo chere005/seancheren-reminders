@@ -409,15 +409,17 @@ $sectionInput =
     }
     .wrap { max-width: 640px; margin: 0 auto; }
     header {
-      display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem;
+      display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem;
     }
+    /* The dropdown lives in the title column now, so the row is tall — top-align it. */
+    header .hleft { align-items: flex-start; }
+    header .backbtn { align-self: flex-start; }
     header h1 { font-size: 1.5rem; }
     header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
-    .showall { background: none; color: #888; border: 1px solid #333; border-radius: 999px;
-      padding: 0.15rem 0.7rem; font-size: 0.78rem; cursor: pointer; }
-    .showall:hover { border-color: #888; color: #ccc; }
-    body.show-done .showall { color: #34d399; border-color: #34d399; font-weight: 700; }
     header .meta { font-size: 0.8rem; color: #888; }
+    /* Title column: name, count, then the folder dropdown right beneath them. */
+    header .htitle { min-width: 0; }
+    header .htitle .foldernav { margin: 0.55rem 0 0; }
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
     header a:hover { color: #fff; }
     header .who {
@@ -425,18 +427,21 @@ $sectionInput =
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* The bar above the list: Add, Show Completed, and Undo after a delete. */
-    .addbar { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; align-items: center; }
-    .addbar button {
-      padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.95rem;
+    /* Add (+ Undo after a delete), then Show Completed on its own row beneath.
+       Pills sized to match the Calendar's day-panel buttons. */
+    .addbar, .donebar { display: flex; gap: 0.5rem; align-items: center; }
+    .addbar { margin-bottom: 0.5rem; }
+    .donebar { margin-bottom: 1.5rem; }
+    .addbar button, .donebar button {
+      padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.9rem;
       cursor: pointer; font-family: inherit;
     }
     .addbar .addopen { background: #34d399; color: #06251b; border: none; font-weight: 700; }
     .addbar .addopen:hover { background: #52e0ac; }
-    .addbar .showall { background: none; color: #888; border: 1px solid #333; }
-    .addbar .showall:hover { border-color: #888; color: #ccc; }
-    body.show-done .addbar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .addbar .editbtn { background: none; border: 1px solid #333; color: #ccc; }
+    .donebar .showall { background: none; color: #888; border: 1px solid #333; }
+    .donebar .showall:hover { border-color: #888; color: #ccc; }
+    body.show-done .donebar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .addbar .editbtn { background: none; border: 1px solid #444; color: #ccc; }
     .addbar .editbtn:hover { border-color: #888; color: #fff; }
     .addbar #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
     body.can-undo .addbar #undoBtn { display: inline-block; }
@@ -578,23 +583,28 @@ $sectionInput =
   <header>
     <div class="hleft">
       <?= back_button() ?>
-      <div>
+      <div class="htitle">
         <div class="titlebar">
           <h1>Reminders</h1>
+          <?php if (!$isShared): ?>
+            <button type="button" id="folderMgr" class="folderplus"
+                    title="Manage folders" aria-label="Manage folders">+</button>
+          <?php endif; ?>
         </div>
         <div class="meta"><?= $isShared ? e(share_name($owner)) . ' &middot; ' : '' ?><?= e($viewFolder) ?>
           &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
+        <?php render_folder_select($folderGroups, $view); ?>
       </div>
     </div>
     <?= render_user_menu(true) ?>
   </header>
 
-  <?php render_folder_select($folderGroups, $view, $csrf); ?>
-
   <div class="addbar">
     <button type="button" id="addBtn" class="addopen">+ Add</button>
-    <button type="button" id="doneBtn" class="showall">Show Completed</button>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
+  </div>
+  <div class="donebar">
+    <button type="button" id="doneBtn" class="showall">Show Completed</button>
   </div>
 
   <!-- New item, the same window the Calendar uses — but starting on Reminder. -->
@@ -634,6 +644,8 @@ $sectionInput =
       </div>
     </form>
   </div>
+  <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view); } ?>
+
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="undo">
@@ -902,6 +914,7 @@ $sectionInput =
   document.addEventListener('pointercancel', endDrag);
   document.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
 </script>
+<?= folder_modal_script() ?>
 <?= chrome_script() ?>
 </body>
 </html>

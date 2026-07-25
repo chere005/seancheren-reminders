@@ -60,9 +60,9 @@ function folders_delete(string $dir, string $type, string $name): void
 
 /**
  * Render a folder navigator bar. $active is the selected folder ('' or 'All' = show all).
- * $extra is optional trailing HTML (e.g. a "+ New section" control) rendered inside the bar.
+ * Folders are added and removed in the manager window — see render_folder_modal().
  */
-function render_folder_nav(array $folders, string $active, string $csrf, string $extra = ''): void
+function render_folder_nav(array $folders, string $active): void
 {
     ?>
     <div class="foldernav">
@@ -72,12 +72,6 @@ function render_folder_nav(array $folders, string $active, string $csrf, string 
           <?= htmlspecialchars($f, ENT_QUOTES) ?>
         </a>
       <?php endforeach; ?>
-      <form method="post" action="" class="newfolder" onsubmit="return this.name.value.trim()!==''">
-        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
-        <input type="hidden" name="action" value="add_folder">
-        <input type="text" name="name" placeholder="+ New folder" maxlength="40" autocomplete="off">
-      </form>
-      <?= $extra ?>
     </div>
     <?php
 }
@@ -87,7 +81,7 @@ function render_folder_nav(array $folders, string $active, string $csrf, string 
  * $groups is [ ['label' => 'Sean', 'options' => [ [value, label], … ] ], … ]; a group
  * with an empty label has its options listed loose at the top.
  */
-function render_folder_select(array $groups, string $active, string $csrf, string $extra = ''): void
+function render_folder_select(array $groups, string $active): void
 {
     ?>
     <div class="foldernav">
@@ -104,12 +98,6 @@ function render_folder_select(array $groups, string $active, string $csrf, strin
           <?php if ($g['label'] !== ''): ?></optgroup><?php endif; ?>
         <?php endforeach; ?>
       </select>
-      <form method="post" action="" class="newfolder" onsubmit="return this.name.value.trim()!==''">
-        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
-        <input type="hidden" name="action" value="add_folder">
-        <input type="text" name="name" placeholder="+ New folder" maxlength="40" autocomplete="off">
-      </form>
-      <?= $extra ?>
     </div>
     <script>
       document.getElementById('folderSel').addEventListener('change', function () {
@@ -117,6 +105,62 @@ function render_folder_select(array $groups, string $active, string $csrf, strin
       });
     </script>
     <?php
+}
+
+/**
+ * The folder manager the "+" beside the app title opens — the same shape as the
+ * Calendar's manage-calendars window: an add row, then every folder with an X.
+ * It posts the add_folder / delete_folder actions the pages already handle, so
+ * each change is an ordinary POST -> redirect, not AJAX.
+ */
+function render_folder_modal(array $folders, string $csrf, string $view = 'All'): void
+{
+    $csrf = htmlspecialchars($csrf, ENT_QUOTES);
+    ?>
+    <div class="modal-backdrop" id="folderModal">
+      <div class="foldermodal">
+        <h2>Folders</h2>
+        <form class="addrow" method="post" action="" onsubmit="return this.name.value.trim()!==''">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="add_folder">
+          <input type="text" name="name" placeholder="New folder" maxlength="40" autocomplete="off">
+          <button type="submit" class="plus" title="Add folder">+</button>
+        </form>
+        <ul class="flist">
+          <?php foreach ($folders as $f): ?>
+            <li>
+              <span class="fname"><?= htmlspecialchars($f, ENT_QUOTES) ?></span>
+              <?php if ($f !== FOLDER_DEFAULT): ?>
+                <form method="post" action="" style="display:inline"
+                      onsubmit="return confirm('Delete the folder &quot;<?= htmlspecialchars($f, ENT_QUOTES) ?>&quot;? Its items move to <?= FOLDER_DEFAULT ?>.')">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="action" value="delete_folder">
+                  <input type="hidden" name="view" value="<?= htmlspecialchars($view, ENT_QUOTES) ?>">
+                  <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
+                  <button type="submit" class="fdel" title="Delete folder">&times;</button>
+                </form>
+              <?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
+        <button type="button" class="fdone" id="folderDone">Done</button>
+      </div>
+    </div>
+    <?php
+}
+
+/** Wire the "+" beside the title to the manager window. */
+function folder_modal_script(): string
+{
+    return "<script>(function(){var b=document.getElementById('folderMgr'),m=document.getElementById('folderModal'),"
+         . "d=document.getElementById('folderDone');if(!b||!m)return;"
+         . "var close=function(){m.classList.remove('open');};"
+         . "b.addEventListener('click',function(){m.classList.add('open');"
+         . "var i=m.querySelector('.addrow input[type=text]');if(i)i.focus();});"
+         . "if(d)d.addEventListener('click',close);"
+         . "m.addEventListener('click',function(e){if(e.target===m)close();});"
+         . "document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();</script>";
 }
 
 function folder_nav_styles(): string
@@ -135,13 +179,53 @@ function folder_nav_styles(): string
       font-family: inherit; max-width: 100%;
     }
     .foldersel:focus { outline: none; border-color: #34d399; }
-    .foldernav .newfolder { margin-left: auto; }
-    body:not(.editing) .foldernav .newfolder { display: none; }   /* edit mode only */
-    .foldernav .newfolder input {
-      width: 150px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a5a4d;
-      border-radius: 999px; color: #34d399; font-size: 16px;   /* 16px stops iOS from zooming on focus */
+
+    /* The "+" beside the app title — edit mode only, like the Calendar's. */
+    .folderplus {
+      display: none; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      width: 26px; height: 26px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
-    .foldernav .newfolder input::placeholder { color: #34d399; opacity: 0.8; }
-    .foldernav .newfolder input:focus { outline: none; border-style: solid; border-color: #34d399; }
+    body.editing .folderplus { display: inline-flex; align-items: center; justify-content: center; }
+    .folderplus:hover { border-color: #34d399; color: #34d399; }
+
+    /* Folder manager window */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 60;
+      display: none; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-backdrop.open { display: flex; }
+    .foldermodal {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      width: 100%; max-width: 380px; padding: 1.25rem; max-height: 85vh; overflow-y: auto;
+    }
+    .foldermodal h2 { font-size: 1.05rem; margin-bottom: 0.8rem; }
+    .foldermodal .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    .foldermodal .addrow input[type=text] {
+      flex: 1; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px;   /* 16px stops iOS from zooming on focus */
+    }
+    .foldermodal .addrow input:focus { outline: none; border-color: #888; }
+    .foldermodal .addrow .plus {
+      flex: 0 0 auto; width: 40px; background: #34d399; color: #06251b; border: none;
+      border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .foldermodal .addrow .plus:hover { background: #52e0ac; }
+    .foldermodal .flist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+    .foldermodal .flist li {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
+      background: #222; border: 1px solid #333; border-radius: 8px;
+    }
+    .foldermodal .flist .fname { flex: 1; font-size: 0.95rem; word-break: break-word; }
+    .foldermodal .flist .fdel {
+      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
+    .foldermodal .fhint { color: #777; font-size: 0.78rem; margin: 0.8rem 0 0; }
+    .foldermodal .fdone {
+      display: block; margin: 1.1rem 0 0 auto; padding: 0.55rem 1.1rem; border: none;
+      border-radius: 6px; background: #34d399; color: #06251b; font-size: 0.95rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
     CSS;
 }
