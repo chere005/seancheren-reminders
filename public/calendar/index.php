@@ -561,6 +561,18 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-head .dp-add:hover { background: #52e0ac; }
     .dp-head .dp-add[disabled] { opacity: 0.4; cursor: default; }
     .dp-list { display: flex; flex-direction: column; gap: 0.4rem; }
+    /* Kind groups: a small heading with a chevron that folds the list under it. */
+    .dp-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    .dp-ghead {
+      display: flex; align-items: center; gap: 0.35rem; align-self: flex-start;
+      background: none; border: none; padding: 0.2rem 0; cursor: pointer; font-family: inherit;
+      color: #777; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .dp-ghead:hover { color: #aaa; }
+    .dp-gchev { display: inline-block; transform: rotate(90deg); transition: transform 0.12s; font-size: 0.85rem; }
+    .dp-group.folded .dp-gchev { transform: rotate(0deg); }
+    .dp-glist { display: flex; flex-direction: column; gap: 0.4rem; }
+    .dp-group.folded .dp-glist { display: none; }
     .dp-item {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem;
       background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: pointer;
@@ -1091,6 +1103,36 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       dpList.appendChild(p);
       return;
     }
+    // One collapsible group per kind. Built up front in a fixed order so the panel
+    // doesn't reshuffle depending on what the day happens to hold. Whether a group is
+    // folded is a display preference, so it's remembered per kind.
+    const showDone = document.body.classList.contains('show-done');
+    const groups   = {};
+    for (const kind of ['reminder', 'event', 'note']) {
+      if (!items.some(it => it.kind === kind && (showDone || !it.done))) continue;
+      const wrap = document.createElement('div');
+      wrap.className = 'dp-group';
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'dp-ghead';
+      const chev = document.createElement('span');
+      chev.className = 'dp-gchev';
+      chev.textContent = '›';                // ›, rotated down by CSS when open
+      const label = document.createElement('span');
+      label.textContent = { reminder: 'Reminders', event: 'Events', note: 'Notes' }[kind];
+      head.append(chev, label);
+      const body = document.createElement('div');
+      body.className = 'dp-glist';
+      if (localStorage.getItem('calFold_' + kind) === '1') wrap.classList.add('folded');
+      head.addEventListener('click', () => {
+        const folded = wrap.classList.toggle('folded');
+        localStorage.setItem('calFold_' + kind, folded ? '1' : '0');
+      });
+      wrap.append(head, body);
+      dpList.appendChild(wrap);
+      groups[kind] = body;
+    }
+
     for (const it of items) {
       if (it.done && !document.body.classList.contains('show-done')) continue;   // hidden unless "Show Completed"
       const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
@@ -1167,7 +1209,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           openEdit(it.id, it.kind, it.text, date, it.time || '', it.cal || '');
         });
       }
-      dpList.appendChild(row);
+      groups[it.kind].appendChild(row);
+    }
+    // Everything on the day may have been filtered out (all done, "Show Completed" off).
+    if (!dpList.children.length) {
+      const p = document.createElement('p');
+      p.className = 'dp-empty';
+      p.textContent = 'Nothing to show on this day.';
+      dpList.appendChild(p);
     }
   };
 
