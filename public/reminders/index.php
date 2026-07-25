@@ -48,8 +48,9 @@ if ($partner && preg_match('/^@([A-Za-z0-9_-]+):(.*)$/s', $view, $m)
 $dataFile = user_data_file($cfg['data_dir'], 'reminders', $isShared ? $owner : null);
 $folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['reminders'] : $myFolders;
 
-// New items land in the viewed folder, or General when viewing All.
-$addTarget = $viewFolder === 'All' ? FOLDER_DEFAULT : $viewFolder;
+// New items land in the viewed folder, or the chosen default when viewing All.
+$defFolder = folder_default_get($cfg['data_dir'], 'reminders');
+$addTarget = $viewFolder === 'All' ? $defFolder : $viewFolder;
 $backUrl   = _self_path() . '?folder=' . urlencode($view);
 
 function e(?string $s): string
@@ -170,6 +171,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'reminders', $name);
         header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All'));
+        exit;
+    }
+    if ($_POST['action'] === 'set_default_folder') {
+        folder_default_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''));
+        header('Location: ' . $backUrl);
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -408,18 +414,14 @@ $sectionInput =
       min-height: 100vh; padding: 2rem 1rem;
     }
     .wrap { max-width: 640px; margin: 0 auto; }
+    /* Tight bottom margin: the folder dropdown sits directly under this. */
     header {
-      display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem;
+      display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.75rem;
     }
-    /* The dropdown lives in the title column now, so the row is tall — top-align it. */
-    header .hleft { align-items: flex-start; }
-    header .backbtn { align-self: flex-start; }
     header h1 { font-size: 1.5rem; }
     header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
     header .meta { font-size: 0.8rem; color: #888; }
-    /* Title column: name, count, then the folder dropdown right beneath them. */
     header .htitle { min-width: 0; }
-    header .htitle .foldernav { margin: 0.55rem 0 0; }
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
     header a:hover { color: #fff; }
     header .who {
@@ -593,11 +595,12 @@ $sectionInput =
         </div>
         <div class="meta"><?= $isShared ? e(share_name($owner)) . ' &middot; ' : '' ?><?= e($viewFolder) ?>
           &middot; <?= $openCount ?> open<?= $doneCount ? " &middot; {$doneCount} done" : '' ?></div>
-        <?php render_folder_select($folderGroups, $view); ?>
       </div>
     </div>
     <?= render_user_menu(true) ?>
   </header>
+
+  <?php render_folder_select($folderGroups, $view); ?>
 
   <div class="addbar">
     <button type="button" id="addBtn" class="addopen">+ Add</button>
@@ -644,7 +647,7 @@ $sectionInput =
       </div>
     </form>
   </div>
-  <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view); } ?>
+  <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to'); } ?>
 
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
