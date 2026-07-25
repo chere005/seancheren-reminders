@@ -134,9 +134,18 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
-    .wrap { max-width: 720px; margin: 0 auto; }
+    .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
     header h1 { font-size: 1.5rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
+    /* The pencil beside the title, the size of the "+" the other apps wear there. */
+    .titleedit {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      width: 26px; height: 26px; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    .titleedit:hover { border-color: #34d399; color: #34d399; }
+    body.editing .titleedit { background: #34d399; border-color: #34d399; color: #06251b; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -152,10 +161,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     }
     .bar input::placeholder { color: #b9a7f5; opacity: 0.75; }
     .bar input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
-    .bar .editbtn { padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 0.95rem; cursor: pointer; }
-    .bar .editbtn:hover { border-color: #888; color: #fff; }
     .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
-    body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
 
     /* + New section — left-aligned amber pill above the day grid. */
     .newsection { margin: 0 0 1.1rem; }
@@ -219,9 +225,12 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <header>
     <div class="hleft">
       <?= back_button() ?>
-      <h1>Habits</h1>
+      <div class="titlebar">
+        <h1>Habits</h1>
+        <button type="button" id="editBtn" class="titleedit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
+      </div>
     </div>
-    <?= render_user_menu(true) ?>
+    <?= render_user_menu() ?>
   </header>
 
   <div class="bar">
@@ -282,10 +291,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
 
   // Edit mode (persisted, like the other tabs).
   const editBtn = document.getElementById('editBtn');
-  const setEdit = (on) => {
-    document.body.classList.toggle('editing', on);
-    editBtn.textContent = on ? 'Done' : 'Edit';
-  };
+  const setEdit = (on) => document.body.classList.toggle('editing', on);
   // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
   setEdit(new URLSearchParams(location.search).get('edit') === '1');
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
