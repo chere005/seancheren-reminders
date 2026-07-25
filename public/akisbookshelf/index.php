@@ -187,6 +187,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $shelfUrl = $listUrl . '?shelf=' . urlencode($shelf);
     $bookUrl  = $listUrl . '?book=' . urlencode($bookId);
 
+    // Anything that changes a book — including writing its notes — counts as editing it,
+    // which is what the "Recently edited" sort orders by. Stamped in one place so no
+    // handler can quietly forget to.
+    if ($bookId !== '' && $action !== 'add_book' && $action !== 'delete_book') {
+        $bl      = books_load($booksFile);
+        $touched = false;
+        foreach ($bl as &$tb) {
+            if (($tb['id'] ?? '') === $bookId) { $tb['updated'] = time(); $touched = true; break; }
+        }
+        unset($tb);
+        if ($touched) { books_save($booksFile, $bl); }
+    }
+
     // ----- Book cards -----
     if ($action === 'add_book') {
         $title = trim((string) ($_POST['title'] ?? ''));
@@ -204,6 +217,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 'want'    => $shelf === 'want',
                 'past'    => false,
                 'created' => time(),
+                'updated' => time(),
             ];
             books_save($booksFile, $books);
         }
@@ -478,7 +492,7 @@ natcasesort($allFolders);
 $allFolders = array_values($allFolders);
 
 // Sort + rating filter (applies to the shelf/folder being viewed).
-$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added', 'rated'], true) ? (string) $_GET['sort'] : 'added';
+$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added', 'rated', 'edited'], true) ? (string) $_GET['sort'] : 'edited';
 $curMin  = (string) ($_GET['min'] ?? '');
 if (!in_array($curMin, ['', '5', '4', '3', '2', '1', 'unrated'], true)) { $curMin = ''; }
 $sfBase  = '?shelf=' . urlencode($shelf) . (($shelf === 'library' && $folder !== '') ? '&folder=' . urlencode($folder) : '');
@@ -819,6 +833,7 @@ function books_header(string $titleHtml): void
       <button type="button" id="sortBtn" class="editbtn">&#8645; Sort / Filter</button>
       <div class="sortmenu" id="sortMenu" hidden>
         <div class="smhead">Sort by</div>
+        <a href="<?= e(sf_url($sfBase, 'edited', $curMin)) ?>" class="<?= $curSort === 'edited' ? 'on' : '' ?>">Recently edited</a>
         <a href="<?= e(sf_url($sfBase, 'stars', $curMin)) ?>" class="<?= $curSort === 'stars' ? 'on' : '' ?>">&#9733; Stars</a>
         <a href="<?= e(sf_url($sfBase, 'title', $curMin)) ?>" class="<?= $curSort === 'title' ? 'on' : '' ?>">Title</a>
         <a href="<?= e(sf_url($sfBase, 'author', $curMin)) ?>" class="<?= $curSort === 'author' ? 'on' : '' ?>">Author</a>
@@ -855,16 +870,20 @@ function books_header(string $titleHtml): void
     } elseif ($curMin !== '') {
         $shown = array_values(array_filter($shown, fn($b) => ((int) ($b['rating'] ?? 0)) >= (int) $curMin));
     }
-    // Sort (default: date added, newest first)
+    // Sort (default: recently edited, newest first)
     usort($shown, function ($a, $b) use ($curSort) {
         if ($curSort === 'title')  { return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         if ($curSort === 'author') { $c = strcasecmp((string) ($a['author'] ?? ''), (string) ($b['author'] ?? '')); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         if ($curSort === 'rated')  { $c = ((int) ($b['read_at'] ?? 0)) <=> ((int) ($a['read_at'] ?? 0)); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
+        if ($curSort === 'added')  { return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0)); }
         if ($curSort === 'stars')  {
             $r = ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0));
             return $r !== 0 ? $r : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
         }
-        return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0));
+        // Books from before this field existed fall back to when they were added.
+        $au = (int) ($a['updated'] ?? $a['created'] ?? 0);
+        $bu = (int) ($b['updated'] ?? $b['created'] ?? 0);
+        return $bu <=> $au ?: strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
     });
   ?>
   <?php if ($inFolder): ?>
@@ -1226,9 +1245,9 @@ function books_header(string $titleHtml): void
       document.body.classList.toggle('editing', on);
       if (!on) document.body.classList.remove('can-undo');   // tapping Done clears Undo
       editBtn.textContent = on ? 'Done' : 'Edit';
-      localStorage.setItem('booksEditing', on ? '1' : '0');
     };
-    setEdit(localStorage.getItem('booksEditing') === '1');
+    // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
+    setEdit(new URLSearchParams(location.search).get('edit') === '1');
     editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   }
   // Don't navigate into a book while editing (so the × can be tapped).
