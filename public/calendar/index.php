@@ -446,7 +446,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Top: the calendar */
     .cal-top {
       flex: 0 0 auto; max-height: 60vh; overflow-y: auto;
-      padding: 1.25rem 1rem 0.5rem;
+      padding: 1.5rem 1rem 0.5rem;   /* same top offset as the other apps */
     }
     .cal-top .wrap { max-width: 640px; margin: 0 auto; }
     /* Bottom: the selected-day agenda */

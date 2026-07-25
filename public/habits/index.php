@@ -155,7 +155,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .bar input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
     .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
 
-    /* + New section — left-aligned amber pill above the day grid. */
+    /* + Section — left-aligned amber pill above the day grid. */
     .newsection { margin: 0 0 1.1rem; }
     body:not(.editing) .newsection { display: none; }   /* edit mode only */
     .newsection input {
@@ -244,7 +244,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==''">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="add_section">
-    <input type="text" name="name" placeholder="+ New section" maxlength="40" autocomplete="off">
+    <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
   </form>
 
   <?php if (!$habitItems && !$sections): ?>

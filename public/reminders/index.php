@@ -454,14 +454,14 @@ if ($sharedFolders) {
                        'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f], $sharedFolders)];
 }
 
-// The "+ New section" control that sits next to "+ New folder".
+// The "+ Section" control that sits on the folder row.
 $sectionInput =
     '<form method="post" action="" class="newsection" id="newSecForm" hidden'
   . ' onsubmit="return this.name.value.trim()!==\'\'">'
   . '<input type="hidden" name="csrf" value="' . $csrf . '">'
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
-  . '<input type="text" name="name" placeholder="+ New section" maxlength="40" autocomplete="off">'
+  . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
   . '<button type="submit" class="plus" title="Add section">+</button>'
   . '</form>';
 ?><!DOCTYPE html>
@@ -482,7 +482,7 @@ $sectionInput =
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, sans-serif; background: #111; color: #eee;
-      min-height: 100vh; padding: 2rem 1rem;
+      min-height: 100vh; padding: 1.5rem 1rem;   /* same top offset as the other apps */
     }
     .wrap { max-width: 640px; margin: 0 auto; }
     /* Tight bottom margin: the folder dropdown sits directly under this. */
@@ -490,7 +490,7 @@ $sectionInput =
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
-    header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header .meta { font-size: 0.8rem; color: #888; }
     header .htitle { min-width: 0; }
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
@@ -709,10 +709,10 @@ $sectionInput =
     <?= render_user_menu() ?>
   </header>
 
-  <?php // Completed and New section ride on the folder row, same size, in that order.
+  <?php // Completed and Section ride on the folder row, same size, in that order.
         render_folder_select($folderGroups, $view,
         '<button type="button" id="doneBtn" class="showall">Completed</button>'
-      . '<button type="button" id="newSecBtn" class="showall">+ New section</button>'
+      . '<button type="button" id="newSecBtn" class="showall">+ Section</button>'
       . $sectionInput); ?>
 
   <?php if (!$isShared) {
@@ -830,7 +830,7 @@ $sectionInput =
   window.sectionEditToggle = () => setEdit(!editing());
   document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
 
-  // "+ New section" becomes the field it's asking for, and goes back if left empty.
+  // "+ Section" becomes the field it's asking for, and goes back if left empty.
   const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
   if (newSecBtn && newSecForm) {
     const secInput = newSecForm.querySelector('input[type=text]');

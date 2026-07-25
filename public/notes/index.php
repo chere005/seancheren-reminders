@@ -228,14 +228,14 @@ $editing = $current !== null;
 $csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today = date('Y-m-d');
 
-// The "+ New section" control for the list view.
+// The "+ Section" control for the list view.
 $sectionInput =
     '<form method="post" action="" class="newsection" id="newSecForm" hidden'
   . ' onsubmit="return this.name.value.trim()!==\'\'">'
   . '<input type="hidden" name="csrf" value="' . $csrf . '">'
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
-  . '<input type="text" name="name" placeholder="+ New section" maxlength="40" autocomplete="off">'
+  . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
   . '<button type="submit" class="plus" title="Add section">+</button>'
   . '</form>';
 
@@ -329,7 +329,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       font-family: inherit;
     }
     .listbar .newnote:hover { background: #52e0ac; }
-    /* Edit sits beside New note, wearing the same size. */
+    /* "+ Section" sits beside "+ Note", wearing the same size. */
     .listbar .listedit {
       background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
@@ -488,16 +488,16 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <input type="hidden" name="action" value="add">
       <input type="hidden" name="view" value="<?= e($view) ?>">
       <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
-      <button class="newnote" type="submit">+ New note</button>
+      <button class="newnote" type="submit">+ Note</button>
     </form>
-    <button type="button" id="newSecBtn" class="listedit">+ New section</button>
+    <button type="button" id="newSecBtn" class="listedit">+ Section</button>
     <?= $sectionInput ?>
   </div>
 
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
 
   <?php if (!$noteRows && !$sections): ?>
-    <p class="empty">No notes yet. Tap <strong>+ New note</strong> to start.</p>
+    <p class="empty">No notes yet. Tap <strong>+ Note</strong> to start.</p>
   <?php else: ?>
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
@@ -635,7 +635,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   window.sectionEditToggle = () => setEdit(!document.body.classList.contains('editing'));
   document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
 
-  // "+ New section" turns into the field it's asking for, and turns back if you
+  // "+ Section" turns into the field it's asking for, and turns back if you
   // leave it empty — the same shape as the "+" on a section header.
   const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
   if (newSecBtn && newSecForm) {
