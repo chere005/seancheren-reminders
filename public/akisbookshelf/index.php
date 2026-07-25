@@ -478,7 +478,7 @@ natcasesort($allFolders);
 $allFolders = array_values($allFolders);
 
 // Sort + rating filter (applies to the shelf/folder being viewed).
-$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added', 'rated'], true) ? (string) $_GET['sort'] : 'stars';
+$curSort = in_array((string) ($_GET['sort'] ?? ''), ['stars', 'title', 'author', 'added', 'rated'], true) ? (string) $_GET['sort'] : 'added';
 $curMin  = (string) ($_GET['min'] ?? '');
 if (!in_array($curMin, ['', '5', '4', '3', '2', '1', 'unrated'], true)) { $curMin = ''; }
 $sfBase  = '?shelf=' . urlencode($shelf) . (($shelf === 'library' && $folder !== '') ? '&folder=' . urlencode($folder) : '');
@@ -855,14 +855,16 @@ function books_header(string $titleHtml): void
     } elseif ($curMin !== '') {
         $shown = array_values(array_filter($shown, fn($b) => ((int) ($b['rating'] ?? 0)) >= (int) $curMin));
     }
-    // Sort (default: stars, high -> low)
+    // Sort (default: date added, newest first)
     usort($shown, function ($a, $b) use ($curSort) {
         if ($curSort === 'title')  { return strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
         if ($curSort === 'author') { $c = strcasecmp((string) ($a['author'] ?? ''), (string) ($b['author'] ?? '')); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
-        if ($curSort === 'added')  { return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0)); }
         if ($curSort === 'rated')  { $c = ((int) ($b['read_at'] ?? 0)) <=> ((int) ($a['read_at'] ?? 0)); return $c !== 0 ? $c : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? '')); }
-        $r = ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0));
-        return $r !== 0 ? $r : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+        if ($curSort === 'stars')  {
+            $r = ((int) ($b['rating'] ?? 0)) <=> ((int) ($a['rating'] ?? 0));
+            return $r !== 0 ? $r : strcasecmp((string) ($a['title'] ?? ''), (string) ($b['title'] ?? ''));
+        }
+        return ((int) ($b['created'] ?? 0)) <=> ((int) ($a['created'] ?? 0));
     });
   ?>
   <?php if ($inFolder): ?>
