@@ -92,17 +92,20 @@ function rt_toolbar_html(bool $withEntry = false): string
         return '<button type="button" class="rt-btn ' . $cls . '" data-cmd="' . $cmd . '" title="' . $title
              . '" aria-label="' . $title . '">' . $label . '</button>';
     };
+    // Quote first, then the bookshelf's quote window right beside it — they're the
+    // same idea, one by hand and one filled in.
     $html = '<div class="rt-toolbar" role="toolbar" aria-label="Formatting">'
-          . $b('quote', '+&rdquo;', 'Quote what you type next')
-          . $b('bold', '<b>B</b>', 'Bold')
-          . $b('italic', '<i>I</i>', 'Italic')
-          . $b('underline', '<u>U</u>', 'Underline')
-          . $b('insertUnorderedList', '&bull;&nbsp;List', 'Bullet points');
+          . $b('quote', '&rdquo;', 'Quote (press again to unquote this line)');
     if ($withEntry) {
         $html .= '<button type="button" class="rt-btn rt-entry" id="rtEntryBtn" title="Add a quote with a note"'
                . ' aria-label="Add a quote with a note">+&#9998;&#65038;</button>';
     }
-    return $html . '</div>';
+    return $html
+         . $b('bold', '<b>B</b>', 'Bold')
+         . $b('italic', '<i>I</i>', 'Italic')
+         . $b('underline', '<u>U</u>', 'Underline')
+         . $b('insertUnorderedList', '&bull;&nbsp;List', 'Bullet points')
+         . '</div>';
 }
 
 /** The quote window: quote, my note about it, page, and an optional date stamp. */
@@ -138,7 +141,6 @@ function rt_styles(): string
     }
     .rt-btn:hover { border-color: #888; color: #fff; }
     .rt-btn.on { background: #06251b; border-color: #34d399; color: #34d399; font-weight: 700; }
-    .rt-btn.rt-entry { margin-left: auto; }
     /* The body itself: a contenteditable wearing the textarea's old clothes. */
     .rt-body {
       width: 100%; min-height: 40vh; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
@@ -206,10 +208,50 @@ function rt_script(): string
     document.execCommand('insertText', false, t);
   });
 
-  const inQuote = () => {
+  // The blockquote the caret is in, if any.
+  const quoteAt = () => {
     let n = document.getSelection().anchorNode;
-    while (n && n !== body) { if (n.nodeName === 'BLOCKQUOTE') { return true; } n = n.parentNode; }
-    return false;
+    while (n && n !== body) { if (n.nodeName === 'BLOCKQUOTE') { return n; } n = n.parentNode; }
+    return null;
+  };
+  const inQuote = () => quoteAt() !== null;
+
+  /**
+   * Take the caret's line back out of the quote. execCommand('formatBlock','div') is
+   * supposed to do this and doesn't reliably strip a blockquote, so the line is lifted
+   * out by hand: anything above and below it stays quoted, the line itself doesn't.
+   */
+  const unquote = () => {
+    const bq = quoteAt();
+    if (!bq) { return false; }
+    const sel = document.getSelection();
+    // Which of the quote's own children holds the caret? (No element child = the
+    // whole quote is one line.)
+    let line = sel.anchorNode;
+    while (line && line.parentNode !== bq) { line = line.parentNode; }
+    const kids = [...bq.childNodes];
+
+    const out = document.createElement('div');
+    if (!line || kids.length <= 1) {          // one line: the whole quote comes out
+      while (bq.firstChild) { out.appendChild(bq.firstChild); }
+      bq.replaceWith(out);
+    } else {
+      const i = kids.indexOf(line);
+      const rest = kids.slice(i + 1);
+      out.appendChild(line);
+      bq.after(out);
+      if (rest.length) {                      // keep what was below it quoted
+        const tail = document.createElement('blockquote');
+        rest.forEach(n => tail.appendChild(n));
+        out.after(tail);
+      }
+      if (!bq.childNodes.length) { bq.remove(); }
+    }
+    const r = document.createRange();
+    r.selectNodeContents(out);
+    r.collapse(false);
+    sel.removeAllRanges(); sel.addRange(r);
+    return true;
   };
 
   const toolbar = document.querySelector('.rt-toolbar');
@@ -218,7 +260,7 @@ function rt_script(): string
     const btn = e.target.closest('.rt-btn[data-cmd]');
     if (!btn) { return; }
     body.focus();
-    if (btn.dataset.cmd === 'quote') { document.execCommand('formatBlock', false, inQuote() ? 'div' : 'blockquote'); }
+    if (btn.dataset.cmd === 'quote') { if (!unquote()) { document.execCommand('formatBlock', false, 'blockquote'); } }
     else { document.execCommand(btn.dataset.cmd, false, null); }
     sync(); refresh();
   });
