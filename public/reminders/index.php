@@ -456,7 +456,8 @@ if ($sharedFolders) {
 
 // The "+ New section" control that sits next to "+ New folder".
 $sectionInput =
-    '<form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==\'\'">'
+    '<form method="post" action="" class="newsection" id="newSecForm" hidden'
+  . ' onsubmit="return this.name.value.trim()!==\'\'">'
   . '<input type="hidden" name="csrf" value="' . $csrf . '">'
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
@@ -488,7 +489,7 @@ $sectionInput =
     header {
       display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.75rem;
     }
-    header h1 { font-size: 1.5rem; }
+    header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
     header .meta { font-size: 0.8rem; color: #888; }
     header .htitle { min-width: 0; }
@@ -507,7 +508,6 @@ $sectionInput =
     }
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
     body.show-done .foldernav #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    body.editing .foldernav #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
 
     /* The + on each section header, and the row it opens. */
     .sec-add {
@@ -658,13 +658,13 @@ $sectionInput =
     }
     footer button:hover { color: #f66; }
 <?= folder_nav_styles() ?>
-    .newsection { margin: 0 0 0.6rem; display: flex; gap: 0.4rem; align-items: center; }
+    .newsection { margin: 0; display: flex; gap: 0.4rem; align-items: center; }
+    .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     .newsection .plus {
       flex: 0 0 auto; width: 34px; background: #f0b429; color: #241a00; border: none;
       border-radius: 999px; font-size: 1.05rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .newsection .plus:hover { background: #f7c95a; }
-    body:not(.editing) .newsection { display: none !important; }   /* edit mode only */
     /* A section with nothing in it under the current folder: out of the way normally,
        visible while editing so you can see the one you just made and fill it. */
     body:not(.editing) .section-group.folder-empty { display: none; }
@@ -698,18 +698,17 @@ $sectionInput =
     <?= render_user_menu() ?>
   </header>
 
-  <?php // Completed and Edit ride on the folder row, same size, in that order.
+  <?php // Completed and New section ride on the folder row, same size, in that order.
         render_folder_select($folderGroups, $view,
         '<button type="button" id="doneBtn" class="showall">Completed</button>'
-      . '<button type="button" id="editBtn" class="showall">Edit</button>'); ?>
+      . '<button type="button" id="newSecBtn" class="showall">+ New section</button>'
+      . $sectionInput); ?>
 
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
                             $partner ? share_button_html() : '');
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
-
-  <?= $sectionInput ?>
 
   <?php // The permanent groups always render, so there's always a + to add against. ?>
    <div id="rlist-root">
@@ -792,7 +791,7 @@ $sectionInput =
   });
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
-  const editBtn = document.getElementById('editBtn');
+  // There's no Edit button any more; the pencil on each section header is the way in.
   const doneBtn = document.getElementById('doneBtn');
   // While editing, "show all" is a transient view state; the saved preference
   // (remShowDone) is untouched, so leaving edit restores whatever you had before.
@@ -802,24 +801,33 @@ $sectionInput =
     const on = document.body.classList.contains('editing') ? editShowDone : savedShowDone();
     document.body.classList.toggle('show-done', on);
   };
-  // The header button also reveals completed items, since that's the "sort everything
-  // out" mode. The section pencils just turn the controls on and leave the view alone.
-  const setEdit = (on, revealDone) => {
+  // The pencils turn the controls on and leave the view alone; "Completed" is its
+  // own button, so edit mode never quietly changes what you're looking at.
+  const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
-    editBtn.textContent = on ? 'Done' : 'Edit';
-    editShowDone = on ? (revealDone || editShowDone) : savedShowDone();
+    editShowDone = on ? editShowDone : savedShowDone();
     applyShowDone();
   };
   const editing = () => document.body.classList.contains('editing');
   // Always start out of edit mode. The only exception is a structural change that
   // redirects back here (?edit=1), so adding a folder or section doesn't kick you out.
-  setEdit(new URLSearchParams(location.search).get('edit') === '1', false);
+  setEdit(new URLSearchParams(location.search).get('edit') === '1');
   if (new URLSearchParams(location.search).get('edit') === '1') {
     const u = new URL(location.href); u.searchParams.delete('edit');
     history.replaceState(null, '', u);
   }
-  editBtn.addEventListener('click', () => setEdit(!editing(), true));
-  window.sectionEditToggle = () => setEdit(!editing(), false);
+  window.sectionEditToggle = () => setEdit(!editing());
+  document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
+
+  // "+ New section" becomes the field it's asking for, and goes back if left empty.
+  const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
+  if (newSecBtn && newSecForm) {
+    const secInput = newSecForm.querySelector('input[type=text]');
+    const closeSec = () => { newSecForm.hidden = true; newSecBtn.hidden = false; secInput.value = ''; };
+    newSecBtn.addEventListener('click', () => { newSecBtn.hidden = true; newSecForm.hidden = false; secInput.focus(); });
+    secInput.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeSec(); } });
+    secInput.addEventListener('blur', () => { if (secInput.value.trim() === '') { closeSec(); } });
+  }
   doneBtn.addEventListener('click', () => {
     if (document.body.classList.contains('editing')) {
       editShowDone = !editShowDone;                        // transient toggle while editing
