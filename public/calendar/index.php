@@ -468,12 +468,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
     body:not(.editing) header .widgetlink { display: none; }   /* edit mode only */
-    /* + beside the word Calendar — manage calendars, edit mode only. */
+    /* + beside the word Calendar — manage calendars. Always there: it's how you get
+       to the calendar list and the share window, neither of which is destructive. */
     .calplus {
-      display: none; background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
       width: 26px; height: 26px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
-    body.editing .calplus { display: inline-flex; align-items: center; justify-content: center; }
     .calplus:hover { border-color: #34d399; color: #34d399; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -570,7 +571,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
-    .dp-head .dp-gap { flex: 1; }          /* pushes Undo/Edit/Add to the right */
+    .dp-head .dp-gap { flex: 1; }          /* pushes Show Completed/Edit/Add to the right */
+    .dp-head .hedit { white-space: nowrap; }
     /* Show Completed sits just left of + Add, at the same size. */
     .dp-head #calShowAll {
       background: none; border: 1px solid #333; color: #888; border-radius: 999px;
@@ -768,7 +770,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     </div>
     <div class="hright">
       <a class="widgetlink" href="/calendar/feed.php">Widget</a>
-      <?= render_user_menu(true, 'dpEdit') ?>
+      <?= render_user_menu() ?>
     </div>
   </header>
 
@@ -886,6 +888,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <span class="dp-date" id="dpDate">Select a day</span>
     <span class="dp-gap"></span>
     <button type="button" id="calShowAll">Show Completed</button>
+    <button type="button" class="hedit" id="dpEdit">Edit</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
