@@ -395,6 +395,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .editor .meta { font-size: 0.72rem; color: #666; }
 <?= folder_nav_styles() ?>
     .newsection { margin: 0 0 0.6rem; }
+    body:not(.editing) .newsection { display: none; }   /* edit mode only */
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
