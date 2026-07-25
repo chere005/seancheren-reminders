@@ -831,17 +831,27 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <div class="cell<?= $isToday ? ' today' : '' ?>" data-date="<?= $ymd ?>" role="button" tabindex="0">
         <div class="num"><?= $day ?></div>
         <div class="dots">
+          <?php
+            // Events get a dot each, first and in their calendar's colour, so the row
+            // reads as "how much is on today". Reminders and notes are only ever one
+            // dot apiece — a long list shouldn't crowd the events out of the cell.
+            $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
+            $hasNote = (bool) array_filter($events, fn($ev) => $ev['kind'] === 'note');
+            // The single reminder dot takes the worst state of the day's reminders:
+            // overdue beats open, and it only goes grey once every one of them is ticked.
+            $remCls = '';
+            if ($remDots) {
+                $open    = array_filter($remDots, fn($ev) => !$ev['done']);
+                $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
+                $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
+            }
+          ?>
           <?php foreach ($events as $ev): ?>
-            <?php
-              $dcls = $ev['kind'];
-              if ($ev['kind'] === 'reminder') {
-                  $dcls .= $ev['done'] ? ' done' : (($ymd < $todayYmd || !empty($ev['rolled'])) ? ' overdue' : '');
-              }
-              // Events are tinted with their calendar's colour.
-              $dsty = $ev['kind'] === 'event' ? ' style="background:' . e($ev['color']) . '"' : '';
-            ?>
-            <span class="dot <?= $dcls ?>"<?= $dsty ?>></span>
+            <?php if ($ev['kind'] !== 'event') { continue; } ?>
+            <span class="dot event" style="background:<?= e($ev['color']) ?>"></span>
           <?php endforeach; ?>
+          <?php if ($remDots): ?><span class="dot reminder<?= $remCls ?>"></span><?php endif; ?>
+          <?php if ($hasNote): ?><span class="dot note"></span><?php endif; ?>
         </div>
       </div>
     <?php endfor; ?>
