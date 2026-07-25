@@ -280,6 +280,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;
     }
     header h1 { font-size: 1.5rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -288,11 +289,12 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* List view */
+    /* List view — pills sized to match the Calendar's day-panel buttons. */
     .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
     .listbar .newnote {
-      margin-left: auto; padding: 0.5rem 1rem; background: #34d399; color: #06251b; border: none;
-      border-radius: 999px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      padding: 0.35rem 0.9rem; background: #34d399; color: #06251b; border: none;
+      border-radius: 999px; font-size: 0.9rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      font-family: inherit;
     }
     .listbar .newnote:hover { background: #52e0ac; }
     .listbar select {
@@ -325,8 +327,9 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
     .listbar .undo {
-      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
-      border-radius: 999px; font-size: 0.95rem; cursor: pointer; display: none;
+      padding: 0.35rem 0.9rem; background: none; border: 1px solid #444; color: #ccc;
+      border-radius: 999px; font-size: 0.9rem; cursor: pointer; display: none; font-family: inherit;
+      margin-left: auto;   /* sits opposite + New note */
     }
     .listbar .undo:hover { border-color: #888; color: #fff; }
     body.can-undo .listbar .undo { display: inline-block; }   /* only right after a delete */
@@ -405,25 +408,33 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <header>
     <div class="hleft">
       <?= back_button() ?>
-      <h1>Notes</h1>
+      <div class="titlebar">
+        <h1>Notes</h1>
+        <?php if (!$editing): ?>
+          <button type="button" id="folderMgr" class="folderplus"
+                  title="Manage folders" aria-label="Manage folders">+</button>
+        <?php endif; ?>
+      </div>
     </div>
     <?= render_user_menu(!$editing) ?>
   </header>
 
 <?php if (!$editing): ?>
   <!-- ===== LIST VIEW ===== -->
-  <?php render_folder_nav($folders, $view, $csrf); ?>
+  <?php render_folder_nav($folders, $view); ?>
 
   <div class="listbar">
-    <button type="button" id="undoBtn" class="undo">Undo</button>
-    <form method="post" action="" style="margin-left:auto">
+    <form method="post" action="">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add">
       <input type="hidden" name="view" value="<?= e($view) ?>">
       <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
       <button class="newnote" type="submit">+ New note</button>
     </form>
+    <button type="button" id="undoBtn" class="undo">Undo</button>
   </div>
+
+  <?php render_folder_modal($folders, $csrf, $view); ?>
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="hidden" name="action" value="undo">
@@ -579,6 +590,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   }
 
 </script>
+<?= folder_modal_script() ?>
 <?= chrome_script() ?>
 </body>
 </html>
