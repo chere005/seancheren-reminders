@@ -204,17 +204,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // --- Share one of my calendars / reminder folders with the other person ---
     if ($action === 'share_set' && $partner) {
-        $kind = (string) ($_POST['kind'] ?? '');
-        $key  = (string) ($_POST['key'] ?? '');
-        $pool = $kind === 'calendar'
-            ? array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id')
-            : $remFolders;
-        if (in_array($kind, ['calendar', 'folder'], true) && in_array($key, $pool, true)) {
-            $myShares = shares_toggle($cfg['data_dir'], $me, $kind, $key, !empty($_POST['on']));
-        }
-        header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'shares' => $myShares]);
-        exit;
+        share_handle_set($cfg['data_dir'], $me,
+                         array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id'),
+                         $remFolders);
     }
 
     // An event's calendar, ignored unless it names one that exists.
@@ -758,6 +750,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0; }
 <?= tabbar_styles() ?>
 <?= kind_color_css() ?>
+<?= share_modal_styles() ?>
 <?= chrome_styles() ?>
     body { padding-bottom: 0; }   /* panel handles the tab-bar clearance */
   </style>
@@ -993,30 +986,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <ul class="callist" id="folderRows"></ul>
     <div class="buttons" style="margin-top:1.1rem">
       <?php if ($partner): ?>
-        <button type="button" class="share" id="shareBtn">Share</button>
+        <?= share_button_html() ?>
       <?php endif; ?>
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
   </div>
 </div>
 
-<?php if ($partner): ?>
-<!-- What I let the other person see -->
-<div class="modal-backdrop" id="shareModal">
-  <div class="modal calmodal">
-    <h2>Shared with <?= e(share_name($partner)) ?></h2>
-    <p class="chint">Ticked calendars and folders show up on <?= e(share_name($partner)) ?>&rsquo;s calendar.</p>
-    <h2>Calendars</h2>
-    <ul class="callist" id="shareCals"></ul>
-    <hr class="cdiv">
-    <h2>Reminders</h2>
-    <ul class="callist" id="shareFolders"></ul>
-    <div class="buttons" style="margin-top:1.1rem">
-      <button type="button" class="ok" id="shareDone">Done</button>
-    </div>
-  </div>
-</div>
-<?php endif; ?>
+<?php if ($partner) { echo share_modal_html($partner); } ?>
 
 <!-- Which calendars belong to a set -->
 <div class="modal-backdrop" id="setModal">
@@ -1506,25 +1483,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
   }
 
-  // What I let the other person see. Ticking posts straight away.
-  function renderShare() {
-    if (!PARTNER) return;
-    const cals = document.getElementById('shareCals');
-    const fols = document.getElementById('shareFolders');
-    cals.innerHTML = ''; fols.innerHTML = '';
-    onlyCals().forEach(c => cals.appendChild(
-      checkRow(c.name, (SHARES.calendars || []).indexOf(c.id) !== -1,
-               on => calApi('share_set', { kind: 'calendar', key: c.id, on: on ? 1 : 0 }))));
-    FOLDERS.forEach(f => fols.appendChild(
-      checkRow(f, (SHARES.folders || []).indexOf(f) !== -1,
-               on => calApi('share_set', { kind: 'folder', key: f, on: on ? 1 : 0 }))));
-  }
-  if (PARTNER) {
-    const shareModal = document.getElementById('shareModal');
-    document.getElementById('shareBtn').addEventListener('click', () => { renderShare(); shareModal.classList.add('open'); });
-    document.getElementById('shareDone').addEventListener('click', () => shareModal.classList.remove('open'));
-    shareModal.addEventListener('click', e => { if (e.target === shareModal) shareModal.classList.remove('open'); });
-  }
+  // The share window itself lives in lib/sharing.php — the Reminders "+" opens the
+  // same one. It asks for the current lists through this, so adding a calendar and
+  // then opening Share shows it straight away.
+  window.shareData = () => ({
+    cals: onlyCals().map(c => [c.id, c.name]),
+    folders: FOLDERS,
+    shares: SHARES
+  });
+  window.onSharesChanged = (s) => { SHARES = s; calDirty = true; window.shareRender(); };
+  const renderShare = () => { if (window.shareRender) { window.shareRender(); } };
 
   // Colour palette popover, anchored to the swatch that opened it.
   function openSwatches(anchor, id) {
@@ -1747,5 +1715,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   });
 </script>
 <?= chrome_script() ?>
+<?php if ($partner) { echo share_modal_script($csrf); } ?>
 </body>
 </html>

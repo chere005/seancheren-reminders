@@ -163,7 +163,8 @@ function render_folder_select(array $groups, string $active, string $extra = '')
  * each change is an ordinary POST -> redirect, not AJAX.
  */
 function render_folder_modal(array $folders, string $csrf, string $view = 'All',
-                             string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to'): void
+                             string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
+                             string $extraButton = ''): void
 {
     $csrf = htmlspecialchars($csrf, ENT_QUOTES);
     $vw   = htmlspecialchars($view, ENT_QUOTES);
@@ -208,7 +209,7 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
           </select>
         </form>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
-        <button type="button" class="fdone" id="folderDone">Done</button>
+        <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
     </div>
     <?php
@@ -294,8 +295,9 @@ function folder_nav_styles(): string
     }
     .foldermodal .defrow select:focus { outline: none; border-color: #888; }
     .foldermodal .fhint { color: #777; font-size: 0.78rem; margin: 0.8rem 0 0; }
+    .foldermodal .frow { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.1rem; }
     .foldermodal .fdone {
-      display: block; margin: 1.1rem 0 0 auto; padding: 0.55rem 1.1rem; border: none;
+      display: block; margin: 0 0 0 auto; padding: 0.55rem 1.1rem; border: none;
       border-radius: 6px; background: #34d399; color: #06251b; font-size: 0.95rem;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
