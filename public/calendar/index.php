@@ -210,26 +210,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $evCal   = (string) ($_POST['cal'] ?? '');
     $evCalOk = in_array($evCal, $calIds, true) ? $evCal : '';
 
+    // "Dinner 8/3 7pm" -> text "Dinner", date 2026-08-03, time 19:00. An explicit
+    // date or time from the window always wins over what was typed.
+    [$ptext, $pdate, $ptime] = parse_when_from_text($text);
+    $effDate = $dateOk ? $date : $pdate;
+
     if ($action === 'add_event' && $text !== '') {
-        [$etext, $ptime] = parse_time_from_text($text);   // "Dinner 7pm" -> text "Dinner", time 19:00
         $file = user_data_file($cfg['data_dir'], 'events');
         $list = load_json_list($file);
-        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($etext, 0, 500),
-                   'date' => $dateOk ? $date : null, 'time' => $timeOk ? $time : $ptime,
+        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
+                   'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
                    'cal' => $evCalOk, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
         $file = user_data_file($cfg['data_dir'], 'reminders');
         $list = load_json_list($file);
-        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
-                   'due' => $dateOk ? $date : null, 'done' => false, 'created' => time()];
+        $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
+                   'due' => $effDate, 'time' => $ptime, 'done' => false, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_note' && $text !== '') {
         $file  = user_data_file($cfg['data_dir'], 'notes');
         $list  = load_json_list($file);
         $newId = bin2hex(random_bytes(6));
-        $list[] = ['id' => $newId, 'title' => mb_substr($text, 0, 200),
-                   'date' => $dateOk ? $date : null, 'body' => '', 'created' => time(), 'updated' => time()];
+        $list[] = ['id' => $newId, 'title' => mb_substr($ptext, 0, 200),
+                   'date' => $effDate, 'body' => '', 'created' => time(), 'updated' => time()];
         save_json_list($file, $list);
         header('Location: /notes/?id=' . $newId);   // jump straight to the note editor
         exit;
@@ -314,8 +318,12 @@ $calColor = array_column($calsOnly, 'color', 'id');
 $pickIds  = array_merge($calIds, $sharedIds);
 $calColor = array_merge($calColor, array_column($sharedCals, 'color', 'id'));
 
-if (isset($_GET['cal'])) { $_SESSION['cal_view'] = (string) $_GET['cal']; }
-$calView     = (string) ($_SESSION['cal_view'] ?? 'all');
+// The choice sticks in calprefs, so it survives closing the app — not just the session.
+if (isset($_GET['cal'])) {
+    $calPrefs['last_cal'] = (string) $_GET['cal'];
+    store_write($prefFile, $calPrefs);
+}
+$calView     = (string) ($calPrefs['last_cal'] ?? 'all');
 $visibleCals = null;                                  // null = show every calendar
 $onlyFolder  = null;                                  // set = show just this shared folder's reminders
 if (strncmp($calView, 'f:', 2) === 0) {
@@ -337,13 +345,18 @@ $monthPrefix = sprintf('%04d-%02d', $year, $month);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
 foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
-    if (empty($r['due'])) { continue; }
+    // Undated items in the permanent "Calendar" section ride along under today.
+    $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
+    if (empty($r['due']) && !$rides) { continue; }
     if (in_array($r['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)) { continue; }   // folder switched off
     $done = !empty($r['done']);                                    // done are hidden until "Show Completed"
-    $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];   // overdue rolls onto today; done/future stay
+    $eff  = $rides ? $todayYmd
+          : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);   // overdue rolls onto today; done/future stay
     if (strpos($eff, $monthPrefix) === 0) {
+        // A riding item isn't late — it just lives on today — so don't mark it overdue.
         $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                          'done' => $done, 'rolled' => ($eff !== $r['due']), 'due' => $r['due']];
+                          'done' => $done, 'rolled' => (!$rides && $eff !== $r['due']),
+                          'due' => $r['due'] ?? null];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
@@ -485,6 +498,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .monthnav a:hover { border-color: #34d399; color: #34d399; }
     .monthnav a:active { background: #242424; }
     .monthnav .label { font-size: 1.05rem; color: #ddd; font-weight: 600; }
+    /* Today sits just left of the month name. */
+    .monthnav .mlabel { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+    .monthnav .todaybtn {
+      flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      padding: 0.2rem 0.7rem; font-size: 0.78rem; text-decoration: none; line-height: 1.3;
+    }
+    .monthnav .todaybtn:hover { border-color: #34d399; color: #34d399; background: #14251f; }
 
     .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
     .dow { margin-bottom: 4px; }
@@ -738,7 +758,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   <div class="monthnav">
     <a href="?ym=<?= $prev ?>" title="Previous month">&#8592;</a>
-    <span class="label"><?= e($monthName) ?></span>
+    <div class="mlabel">
+      <a class="todaybtn" href="?ym=<?= date('Y-m') ?>&amp;day=<?= $todayYmd ?>" title="Jump to today">Today</a>
+      <span class="label"><?= e($monthName) ?></span>
+    </div>
     <a href="?ym=<?= $next ?>" title="Next month">&#8594;</a>
   </div>
 
@@ -1052,7 +1075,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   const prettyDate = ymd => {
     const d = new Date(ymd + 'T00:00:00');
-    return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
   const renderPanel = date => {
@@ -1176,14 +1199,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   });
 
   // Day-panel Edit mode: reveal × to quick-delete items.
+  // Always starts off — opening the app or switching tabs never lands you in edit mode.
   const dpEdit = document.getElementById('dpEdit');
-  if (localStorage.getItem('calEditing') === '1') document.body.classList.add('editing');
-  dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
+  dpEdit.textContent = 'Edit';
   dpEdit.addEventListener('click', () => {
     const on = document.body.classList.toggle('editing');
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     dpEdit.textContent = on ? 'Done' : 'Edit';
-    localStorage.setItem('calEditing', on ? '1' : '0');
   });
   // Undo shows only right after a delete (server redirects back with ?undo=1).
   if (new URLSearchParams(location.search).get('undo') === '1') {

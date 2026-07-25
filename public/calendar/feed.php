@@ -22,20 +22,61 @@ function safe_user(string $u): string { return preg_replace('/[^A-Za-z0-9_-]/', 
 function ufile(string $dir, string $user, string $base): string { return "$dir/{$base}-" . safe_user($user) . ".json"; }
 function loadlist(string $f): array { return store_read($f); }
 
+/**
+ * Which calendars and reminder folders the widget should show — the same choices
+ * the Calendar page is currently on, so the widget mirrors what you last looked at.
+ * Returns [visible calendar ids or null for all, hidden folder names].
+ */
+function feed_scope(string $dir, string $user): array {
+    $prefs  = loadlist(ufile($dir, $user, 'calprefs'));
+    $hidden = array_values(array_filter((array) ($prefs['hidden_folders'] ?? []), 'is_string'));
+    $view   = (string) ($prefs['last_cal'] ?? 'all');
+
+    $list   = loadlist(ufile($dir, $user, 'calendars'));
+    $calIds = [];
+    $sets   = [];
+    foreach ($list as $c) {
+        if (($c['type'] ?? '') === 'set') { $sets[$c['id'] ?? ''] = (array) ($c['cals'] ?? []); }
+        else { $calIds[] = (string) ($c['id'] ?? ''); }
+    }
+
+    if ($view === 'all' || strncmp($view, 'f:', 2) === 0) { return [null, $hidden]; }
+    if (in_array($view, $calIds, true))  { return [[$view], $hidden]; }
+    if (isset($sets[$view]))             { return [array_values(array_intersect($calIds, $sets[$view])), $hidden]; }
+    return [null, $hidden];   // stale id — fall back to everything
+}
+
 /** Upcoming reminders (open, overdue rolled to today) + events + dated notes, next 21 days. */
 function build_feed(string $dir, string $user): array {
     $today = date('Y-m-d');
     $until = date('Y-m-d', strtotime('+21 days'));
     $items = [];
+    [$visibleCals, $hidFolders] = feed_scope($dir, $user);
+    $defCal = null;
 
     foreach (loadlist(ufile($dir, $user, 'reminders')) as $r) {
-        if (($r['type'] ?? '') === 'section' || empty($r['due']) || !empty($r['done'])) { continue; }
-        $eff = ($r['due'] < $today) ? $today : $r['due'];         // overdue rolls onto today
+        if (($r['type'] ?? '') === 'section' || !empty($r['done'])) { continue; }
+        if (in_array($r['folder'] ?? 'General', $hidFolders, true)) { continue; }   // folder switched off
+        // Undated items in the permanent "Calendar" section ride along under today.
+        $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
+        if (empty($r['due']) && !$rides) { continue; }
+        $eff = $rides ? $today : (($r['due'] < $today) ? $today : $r['due']);
         if ($eff >= $today && $eff <= $until) {
-            $items[] = ['date' => $eff, 'kind' => 'reminder', 'text' => (string) ($r['text'] ?? ''), 'overdue' => ($eff !== $r['due'])];
+            $items[] = ['date' => $eff, 'kind' => 'reminder', 'text' => (string) ($r['text'] ?? ''),
+                        'time' => (string) ($r['time'] ?? ''), 'overdue' => (!$rides && $eff !== $r['due'])];
         }
     }
     foreach (loadlist(ufile($dir, $user, 'events')) as $e) {
+        if ($visibleCals !== null) {
+            if ($defCal === null) {                       // an event with no calendar belongs to the first one
+                $cals   = array_values(array_filter(loadlist(ufile($dir, $user, 'calendars')),
+                                                    fn($c) => ($c['type'] ?? '') !== 'set'));
+                $defCal = (string) ($cals[0]['id'] ?? '');
+            }
+            $ec = (string) ($e['cal'] ?? '');
+            if ($ec === '') { $ec = $defCal; }
+            if (!in_array($ec, $visibleCals, true)) { continue; }
+        }
         $d = (string) ($e['date'] ?? '');
         if ($d >= $today && $d <= $until) { $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''), 'time' => (string) ($e['time'] ?? ''), 'overdue' => false]; }
     }
