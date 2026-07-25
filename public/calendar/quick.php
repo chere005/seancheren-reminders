@@ -17,19 +17,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     $text = trim((string) ($_POST['text'] ?? ''));
     $act  = (string) ($_POST['action'] ?? '');
     $flash = '';
+    // "Vet 8/3 2pm" -> text "Vet", date 2026-08-03, time 14:00; no date means today.
+    [$ptext, $pdate, $ptime] = parse_when_from_text($text);
+    $when = $pdate ?? $today;
     if ($text !== '' && $act === 'add_reminder') {
         $f = user_data_file($cfg['data_dir'], 'reminders');
         $l = store_read($f);
-        $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
-                'due' => $today, 'done' => false, 'folder' => 'General', 'section' => '', 'created' => time()];
+        $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
+                'due' => $when, 'time' => $ptime, 'done' => false,
+                'folder' => 'General', 'section' => '', 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Reminder added';
     } elseif ($text !== '' && $act === 'add_event') {
-        [$etext, $ptime] = parse_time_from_text($text);
         $f = user_data_file($cfg['data_dir'], 'events');
         $l = store_read($f);
-        $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($etext, 0, 500),
-                'date' => $today, 'time' => $ptime, 'created' => time()];
+        $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
+                'date' => $when, 'time' => $ptime, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Event added' . ($ptime ? ' · ' . date('g:ia', strtotime($ptime)) : '');
     }
