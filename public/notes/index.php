@@ -8,6 +8,7 @@ require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
+require_once $__libDir . '/richtext.php';   // note-body toolbar + sanitiser
 require_login('Notes');
 
 $cfg      = app_config();
@@ -174,7 +175,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 if (!is_section($n) && $n['id'] === $id) {
                     $n['title']   = $title === '' ? (date('m/d/Y h:i a', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
                     $n['date']    = preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? $date : null;
-                    $n['body']    = mb_substr($body, 0, 20000);
+                    // The body is HTML now, so it only ever gets stored sanitised.
+                    $n['body']    = mb_substr(rt_sanitize($body), 0, 20000);
                     $n['folder']  = $folder;
                     $n['section'] = $section;
                     $n['updated'] = time();
@@ -367,9 +369,17 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .empty { color: #666; text-align: center; padding: 2rem 0; }
 
     /* Editor view */
-    .backbar { margin-bottom: 1rem; }
-    .backbar a { color: #34d399; text-decoration: none; font-size: 0.9rem; }
+    .backbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .backbar a { color: #34d399; text-decoration: none; font-size: 0.9rem; margin-right: 0.25rem; }
     .backbar a:hover { text-decoration: underline; }
+    /* The folder/section pickers wear the Edit button's pill (.hedit in chrome.php). */
+    .backbar select {
+      margin: 0; color: #ccc; font-size: 0.8rem; background: none; border: 1px solid #333;
+      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
+      color-scheme: dark;
+    }
+    .backbar select:hover { border-color: #888; color: #fff; }
+    .backbar select.secsel { border-color: #4a3f2a; color: #f0b429; }
     .editor { display: flex; flex-direction: column; gap: 0.6rem; }
     .editor .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     .editor input[type=text] {
@@ -431,6 +441,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
+<?= rt_styles() ?>
   </style>
 </head>
 <body>
@@ -499,7 +510,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
 
 <?php else: ?>
   <!-- ===== EDITOR VIEW ===== -->
-  <div class="backbar"><a href="<?= e($listUrl) ?>">&larr; All notes</a></div>
   <?php
     $hasDate     = !empty($current['date']);
     $noteDefault = date('m/d/Y h:i a', (int) ($current['created'] ?? time())) . ' - Note';
@@ -509,17 +519,10 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <input type="hidden" name="action" value="save">
     <input type="hidden" name="view" value="<?= e($view) ?>">
     <input type="hidden" name="id" value="<?= e($current['id']) ?>">
-    <div class="row">
-      <input type="text" name="title" placeholder="Title" maxlength="200"
-             value="<?= e($current['title'] ?? '') ?>" data-default="<?= e($noteDefault) ?>" required>
-      <button type="button" class="adddate" id="addDateBtn" <?= $hasDate ? 'hidden' : '' ?>>+ Add date</button>
-      <span class="datewrap" id="dateWrap" <?= $hasDate ? '' : 'hidden' ?>>
-        <input type="date" name="date" id="dateInput" title="Optional date"
-               value="<?= e($current['date'] ?? '') ?>">
-        <button type="button" class="cleardate" id="clearDateBtn" title="Remove date">&times;</button>
-      </span>
-    </div>
-    <div class="row">
+    <?php // The pickers ride in the back bar, wearing the Edit button's pill. They have
+          // to stay inside the form to post, so the bar lives here rather than above it. ?>
+    <div class="backbar">
+      <a href="<?= e($listUrl) ?>">&larr; All notes</a>
       <select name="folder" title="Folder">
         <?php foreach ($folders as $f): ?>
           <option value="<?= e($f) ?>" <?= ($current['folder'] ?? FOLDER_DEFAULT) === $f ? 'selected' : '' ?>><?= e($f) ?></option>
@@ -532,7 +535,19 @@ function render_note_rows(array $rows, string $view, string $csrf): void
         <?php endforeach; ?>
       </select>
     </div>
-    <textarea name="body" placeholder="Write your note…"><?= e($current['body'] ?? '') ?></textarea>
+    <div class="row">
+      <input type="text" name="title" placeholder="Title" maxlength="200"
+             value="<?= e($current['title'] ?? '') ?>" data-default="<?= e($noteDefault) ?>" required>
+      <button type="button" class="adddate" id="addDateBtn" <?= $hasDate ? 'hidden' : '' ?>>+ Add date</button>
+      <span class="datewrap" id="dateWrap" <?= $hasDate ? '' : 'hidden' ?>>
+        <input type="date" name="date" id="dateInput" title="Optional date"
+               value="<?= e($current['date'] ?? '') ?>">
+        <button type="button" class="cleardate" id="clearDateBtn" title="Remove date">&times;</button>
+      </span>
+    </div>
+    <?= rt_toolbar_html() ?>
+    <div class="rt-body" contenteditable="true" data-placeholder="Write your note&hellip;"><?= rt_body_html($current['body'] ?? '') ?></div>
+    <input type="hidden" class="rt-value" name="body" value="<?= e(rt_body_html($current['body'] ?? '')) ?>">
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
       <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete">Delete</button>
@@ -610,5 +625,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
+<?= rt_script() ?>
 </body>
 </html>
