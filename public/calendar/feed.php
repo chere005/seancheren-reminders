@@ -22,22 +22,43 @@ function safe_user(string $u): string { return preg_replace('/[^A-Za-z0-9_-]/', 
 function ufile(string $dir, string $user, string $base): string { return "$dir/{$base}-" . safe_user($user) . ".json"; }
 function loadlist(string $f): array { return store_read($f); }
 
+/** This user's own calendar ids (sets excluded). */
+function feed_cal_ids(string $dir, string $user): array {
+    $ids = [];
+    foreach (loadlist(ufile($dir, $user, 'calendars')) as $c) {
+        if (($c['type'] ?? '') !== 'set') { $ids[] = (string) ($c['id'] ?? ''); }
+    }
+    return $ids;
+}
+
 /**
- * Which calendars and reminder folders the widget should show — the same choices
- * the Calendar page is currently on, so the widget mirrors what you last looked at.
+ * Which calendars and reminder folders the widget should show.
+ *
+ * $pin is the `cals` parameter baked into the feed URL when the script was made:
+ * `all`, or a comma-separated list of calendar ids. It fixes the widget to the
+ * calendars that were selected at that moment, so later browsing on the Calendar
+ * page doesn't quietly change what the home screen shows. Without it (an older
+ * script, or an id that no longer exists) the scope falls back to whatever the
+ * page is on now. Reminder folders always follow the page — they aren't pinned.
+ *
  * Returns [visible calendar ids or null for all, hidden folder names].
  */
-function feed_scope(string $dir, string $user): array {
+function feed_scope(string $dir, string $user, ?string $pin = null): array {
     $prefs  = loadlist(ufile($dir, $user, 'calprefs'));
     $hidden = array_values(array_filter((array) ($prefs['hidden_folders'] ?? []), 'is_string'));
-    $view   = (string) ($prefs['last_cal'] ?? 'all');
+    $calIds = feed_cal_ids($dir, $user);
 
-    $list   = loadlist(ufile($dir, $user, 'calendars'));
-    $calIds = [];
-    $sets   = [];
-    foreach ($list as $c) {
+    if ($pin !== null) {
+        if ($pin === 'all') { return [null, $hidden]; }
+        // Only ever narrows, and only to calendars this user still owns.
+        $picked = array_values(array_intersect($calIds, explode(',', $pin)));
+        if ($picked) { return [$picked, $hidden]; }
+    }
+
+    $view = (string) ($prefs['last_cal'] ?? 'all');
+    $sets = [];
+    foreach (loadlist(ufile($dir, $user, 'calendars')) as $c) {
         if (($c['type'] ?? '') === 'set') { $sets[$c['id'] ?? ''] = (array) ($c['cals'] ?? []); }
-        else { $calIds[] = (string) ($c['id'] ?? ''); }
     }
 
     if ($view === 'all' || strncmp($view, 'f:', 2) === 0) { return [null, $hidden]; }
@@ -47,11 +68,11 @@ function feed_scope(string $dir, string $user): array {
 }
 
 /** Upcoming reminders (open, overdue rolled to today) + events + dated notes, next 21 days. */
-function build_feed(string $dir, string $user): array {
+function build_feed(string $dir, string $user, ?string $pin = null): array {
     $today = date('Y-m-d');
     $until = date('Y-m-d', strtotime('+21 days'));
     $items = [];
-    [$visibleCals, $hidFolders] = feed_scope($dir, $user);
+    [$visibleCals, $hidFolders] = feed_scope($dir, $user, $pin);
     $defCal = null;
 
     foreach (loadlist(ufile($dir, $user, 'reminders')) as $r) {
@@ -103,7 +124,8 @@ if (isset($_GET['token'])) {
         }
     }
     if ($owner === null) { http_response_code(403); echo json_encode(['error' => 'invalid token']); exit; }
-    echo json_encode(build_feed($dataDir, $owner), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $pin = isset($_GET['cals']) ? (string) $_GET['cals'] : null;
+    echo json_encode(build_feed($dataDir, $owner, $pin), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -117,8 +139,22 @@ if (empty($t['token'])) {
     $t = ['token' => bin2hex(random_bytes(16))];
     store_write($tokenFile, $t);
 }
-$token   = $t['token'];
-$feedUrl = 'https://seancheren.com/calendar/feed.php?token=' . $token;
+$token = $t['token'];
+
+// Freeze the calendars the page is on right now into the URL, so the script you
+// copy keeps showing these however you browse afterwards. Come back and copy it
+// again to re-point the widget.
+[$scopeCals] = feed_scope($dataDir, $user);
+$pin      = $scopeCals === null ? 'all' : implode(',', $scopeCals);
+$feedUrl  = 'https://seancheren.com/calendar/feed.php?token=' . $token . '&cals=' . rawurlencode($pin);
+
+$calNames = [];
+foreach (loadlist(ufile($dataDir, $user, 'calendars')) as $c) {
+    if (($c['type'] ?? '') !== 'set') { $calNames[(string) ($c['id'] ?? '')] = (string) ($c['name'] ?? ''); }
+}
+$scopeLabel = $scopeCals === null
+    ? 'every calendar'
+    : implode(', ', array_map(fn($id) => $calNames[$id] ?? $id, $scopeCals));
 
 $script = str_replace('__FEED_URL__', $feedUrl, <<<'JS'
 // seancheren calendar — Scriptable widget
@@ -205,6 +241,8 @@ JS);
     button { margin-top: 0.5rem; padding: 0.55rem 1rem; background: #34d399; color: #06251b; border: none;
       border-radius: 6px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
     .warn { color: #f0b429; font-size: 0.8rem; margin-top: 0.75rem; }
+    .scope { font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; }
+    .scope strong { color: #7dd3fc; }
     nav a { color: #888; text-decoration: none; }
   </style>
 </head>
@@ -218,6 +256,7 @@ JS);
   <ol><li>Get the free <strong>Scriptable</strong> app from the App Store.</li></ol>
 
   <h2>2. Add the script</h2>
+  <p class="scope">This script is set to <strong><?= htmlspecialchars($scopeLabel, ENT_QUOTES) ?></strong> — whatever the calendar was showing when you opened this page. To point the widget somewhere else, pick it on the calendar, come back here, and copy the script again.</p>
   <ol>
     <li>Open Scriptable → tap <strong>+</strong> (new script).</li>
     <li>Delete the sample, then <strong>paste everything below</strong>:</li>
