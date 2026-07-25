@@ -36,7 +36,7 @@ function kind_spec(string $kind): ?array
 }
 
 /** Palette offered when tapping a calendar's colour square. */
-const CAL_COLORS = ['#38bdf8', '#34d399', '#f0a860', '#f472b6', '#8b6ef0',
+const CAL_COLORS = [KIND_BLUE, '#34d399', '#f0a860', '#f472b6', '#8b6ef0',
                     '#facc15', '#fb7185', '#22d3ee', '#a3e635', '#94a3b8'];
 
 /**
@@ -50,6 +50,8 @@ function is_calset(array $it): bool { return ($it['type'] ?? '') === 'set'; }
 function load_calendars(string $file): array
 {
     $list = store_read($file);
+    foreach ($list as &$it) { if (isset($it['color'])) { $it['color'] = cal_color_fix($it['color']); } }
+    unset($it);
     foreach ($list as $it) { if (!is_calset($it)) { return $list; } }
     $list[] = ['id' => bin2hex(random_bytes(6)), 'name' => 'Personal', 'color' => CAL_COLORS[0], 'created' => time()];
     store_write($file, array_values($list));
@@ -469,7 +471,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     header h1 { font-size: 1.35rem; }
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
     header .widgetlink {
-      color: #38bdf8; text-decoration: none; font-size: 0.78rem;
+      color: var(--k-event); text-decoration: none; font-size: 0.78rem;
       border: 1px solid #24506a; border-radius: 999px; padding: 0.12rem 0.6rem;
     }
     header .widgetlink:hover { background: #10222e; color: #7dd3fc; }
@@ -503,7 +505,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #555;
     }
     .calpick .cdot.all {
-      background: conic-gradient(#38bdf8, #34d399, #facc15, #f472b6, #38bdf8);
+      background: conic-gradient(var(--k-event), var(--k-reminder), #facc15, #f472b6, var(--k-event));
     }
     .calpick-menu {
       position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 210px;
@@ -558,20 +560,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell.selected { border-color: #eee; background: #22262a; }
     .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
     .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
-    .cell .dot.reminder { background: #34d399; }
-    .cell .dot.reminder.overdue { background: #f0a860; }
-    .cell .dot.reminder.done { background: #555; }
+    .cell .dot.reminder { background: var(--k-reminder); }
+    .cell .dot.reminder.overdue { background: var(--k-overdue); }
+    .cell .dot.reminder.done { background: var(--k-done); }
     body:not(.show-done) .cell .dot.reminder.done { display: none; }
-    .cell .dot.note { background: #8b6ef0; }
-    .cell .dot.event { background: #38bdf8; }
+    .cell .dot.note { background: var(--k-note); }
+    .cell .dot.event { background: var(--k-event); }
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
     .cell.wk-hide { display: none; }
     body.weekmode .legend, body.weekmode .calpick { display: none; }
     .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
     .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-    .legend .dot.reminder { background: #34d399; }
-    .legend .dot.event { background: #38bdf8; }
-    .legend .dot.note { background: #8b6ef0; }
+    .legend .dot.reminder { background: var(--k-reminder); }
+    .legend .dot.event { background: var(--k-event); }
+    .legend .dot.note { background: var(--k-note); }
 
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
@@ -616,14 +618,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
       padding: 0.15rem 0.4rem; border-radius: 4px; white-space: nowrap;
     }
-    .dp-item .tag.reminder { color: #34d399; background: #14332a; }
-    .dp-item .tag.event { color: #7dd3fc; background: #0c2a3a; }
-    .dp-item .tag.note { color: #b9a7f5; background: #241a3a; }
+    .dp-item .tag.reminder { color: var(--k-reminder); background: var(--k-reminder-soft); }
+    .dp-item .tag.event { color: var(--k-event-soft); background: var(--k-event-bg); }
+    .dp-item .tag.note { color: var(--k-note-soft); background: var(--k-note-bg); }
     .dp-item .dp-check { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .dp-item .cdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
-    .dp-item .evtime { font-size: 0.75rem; color: #7dd3fc; font-weight: 600; white-space: nowrap; }
+    .dp-item .evtime { font-size: 0.75rem; color: var(--k-event-soft); font-weight: 600; white-space: nowrap; }
     .dp-item.done .txt { color: #666; text-decoration: line-through; }
     .dp-item .chev { color: #555; font-size: 0.9rem; }
     /* Someone else's item, shown here but owned (and edited) over in their app. */
@@ -755,6 +757,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .swatches[hidden] { display: none; }
     .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0; }
 <?= tabbar_styles() ?>
+<?= kind_color_css() ?>
 <?= chrome_styles() ?>
     body { padding-bottom: 0; }   /* panel handles the tab-bar clearance */
   </style>

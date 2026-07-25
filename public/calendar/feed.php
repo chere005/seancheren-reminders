@@ -156,11 +156,11 @@ $scopeLabel = $scopeCals === null
     ? 'every calendar'
     : implode(', ', array_map(fn($id) => $calNames[$id] ?? $id, $scopeCals));
 
-$script = str_replace('__FEED_URL__', $feedUrl, <<<'JS'
+$script = str_replace(['__FEED_URL__', '__BLUE__'], [$feedUrl, KIND_BLUE], <<<'JS'
 // seancheren calendar — Scriptable widget
 const FEED = "__FEED_URL__";
 const OPEN = "https://seancheren.com/calendar/quick.php";
-const COLORS = { reminder: "#34d399", event: "#38bdf8", note: "#8b6ef0" };
+const COLORS = { reminder: "#34d399", event: "__BLUE__", note: "#8b6ef0" };
 
 let data;
 try { data = await new Request(FEED).loadJSON(); }

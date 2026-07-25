@@ -611,9 +611,9 @@ $sectionInput =
       font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap;
       color: #888; background: #222;
     }
-    .due.past   { color: #f0a860; background: #3a2410; }   /* gone by */
-    .due.today  { color: #34d399; background: #06251b; }   /* due today */
-    .due.future { color: #7dd3fc; background: #0c2a3a; }   /* still ahead */
+    .due.past   { color: var(--k-overdue); background: var(--k-overdue-bg); }   /* gone by */
+    .due.today  { color: var(--k-reminder); background: var(--k-reminder-bg); }   /* due today */
+    .due.future { color: var(--k-event-soft); background: var(--k-event-bg); }   /* still ahead */
     .check, .del {
       background: none; border: 1px solid #444; color: #ccc; cursor: pointer;
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
@@ -662,6 +662,7 @@ $sectionInput =
     }
     .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
     .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+<?= kind_color_css() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
