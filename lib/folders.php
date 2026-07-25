@@ -73,6 +73,29 @@ function folder_default_set(string $dir, string $type, string $name): void
     folders_save($dir, $data);
 }
 
+/**
+ * The folder view you were last on, so the app opens where you left it.
+ * Stored raw (it may be a "@partner:Folder" shared view) and re-validated by the
+ * caller, which is the only place that knows what's still legal to show.
+ */
+function folder_last_get(string $dir, string $type, ?string $user = null): string
+{
+    return (string) (folders_load($dir, $user)['last'][$type] ?? 'All');
+}
+
+function folder_last_set(string $dir, string $type, string $view): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) {
+        return;
+    }
+    $data = folders_load($dir);
+    if ((string) ($data['last'][$type] ?? '') === $view) {
+        return;   // nothing changed, don't rewrite the file on every page view
+    }
+    $data['last'][$type] = $view;
+    folders_save($dir, $data);
+}
+
 function folders_delete(string $dir, string $type, string $name): void
 {
     if ($name === FOLDER_DEFAULT || !in_array($type, ['reminders', 'notes'], true)) {

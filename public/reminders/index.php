@@ -34,7 +34,8 @@ $sharedFolders = $partner
  * Which folder is being viewed? 'All', one of mine, or '@<partner>:<folder>' for
  * a shared one — in which case every read and write goes to their file instead.
  */
-$view       = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
+// No folder in the URL means "carry on where I left off".
+$view       = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? folder_last_get($cfg['data_dir'], 'reminders'));
 $owner      = $me;
 $viewFolder = $view;
 $isShared   = false;
@@ -45,6 +46,9 @@ if ($partner && preg_match('/^@([A-Za-z0-9_-]+):(.*)$/s', $view, $m)
     $view = $viewFolder = 'All';
 }
 
+// Remember it (post-validation, so a stale one can't stick around).
+folder_last_set($cfg['data_dir'], 'reminders', $view);
+
 $dataFile = user_data_file($cfg['data_dir'], 'reminders', $isShared ? $owner : null);
 $folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['reminders'] : $myFolders;
 
@@ -52,6 +56,9 @@ $folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['reminders'] : $m
 $defFolder = folder_default_get($cfg['data_dir'], 'reminders');
 $addTarget = $viewFolder === 'All' ? $defFolder : $viewFolder;
 $backUrl   = _self_path() . '?folder=' . urlencode($view);
+// Structural changes (folders, sections, deletes) are only reachable from edit mode,
+// so they hand it back on the way through — everything else lands out of edit mode.
+$editBack  = $backUrl . '&edit=1';
 
 function e(?string $s): string
 {
@@ -67,23 +74,61 @@ function is_section(array $it): bool
 function load_reminders(string $file): array { return store_read($file); }
 function save_reminders(string $file, array $list): void { store_write($file, array_values($list)); }
 
-/** Default order for a group: open first, then by due date (nulls last), then newest. */
+/**
+ * Display order inside a section: undated first, then by due date, soonest first.
+ * Ties keep the stored (drag) order, so dragging still decides who sits where among
+ * items that share a date. Completed items sink to the bottom either way (CSS order).
+ */
 function sort_by_date(array $rows): array
 {
+    $i = 0;
+    foreach ($rows as &$r) { $r['_seq'] = $i++; }   // usort isn't stable enough on its own
+    unset($r);
     usort($rows, function ($a, $b) {
-        if ((!empty($a['done'])) !== (!empty($b['done']))) {
-            return !empty($a['done']) ? 1 : -1;
-        }
-        $ad = $a['due'] ?? null;
-        $bd = $b['due'] ?? null;
-        if ($ad !== $bd) {
-            if ($ad === null) return 1;
-            if ($bd === null) return -1;
-            return strcmp($ad, $bd);
-        }
-        return ($b['created'] ?? 0) <=> ($a['created'] ?? 0);
+        $ad = ($a['due'] ?? '') ?: '';   // '' (undated) sorts before any real date
+        $bd = ($b['due'] ?? '') ?: '';
+        return $ad !== $bd ? strcmp($ad, $bd) : ($a['_seq'] <=> $b['_seq']);
     });
+    foreach ($rows as &$r) { unset($r['_seq']); }
+    unset($r);
     return $rows;
+}
+
+/** Stable DOM id tying a section's "+" button to the row it opens. */
+function section_add_id(string $name): string
+{
+    return 'secadd-' . substr(md5($name), 0, 8);
+}
+
+/** The "+" that sits on a section header. */
+function render_section_add_button(string $name): void
+{
+    $label = e($name === '' ? DEFAULT_SECTION : $name);
+    ?>
+    <button type="button" class="sec-add" data-target="<?= section_add_id($name) ?>"
+            title="Add to <?= $label ?>" aria-label="Add to <?= $label ?>">+</button>
+    <?php
+}
+
+/**
+ * The row that "+" reveals. Typing here adds straight to the end of that section —
+ * no window — and the text is scanned for a date and a time ("Vet 8/3 2pm") the same
+ * way the Calendar's quick add is.
+ */
+function render_section_add_row(string $name, string $csrf, string $view): void
+{
+    $label = e($name === '' ? DEFAULT_SECTION : $name);
+    ?>
+    <form method="post" action="" class="secadd-row" id="<?= section_add_id($name) ?>" hidden
+          onsubmit="return this.text.value.trim()!==''">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="add">
+      <input type="hidden" name="view" value="<?= e($view) ?>">
+      <input type="hidden" name="section" value="<?= e($name) ?>">
+      <input type="text" name="text" placeholder="Add to <?= $label ?>&hellip;" maxlength="500" autocomplete="off">
+      <button type="submit" class="plus" title="Add">+</button>
+    </form>
+    <?php
 }
 
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
@@ -111,6 +156,9 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             <button class="check" type="submit" title="Toggle done"><?= $done ? '&#10003;' : '&nbsp;&nbsp;' ?></button>
           </form>
           <span class="text"><?= e($r['text']) ?></span>
+          <?php if (!empty($r['time'])): ?>
+            <span class="attime"><?= e(date('g:ia', strtotime($r['time']))) ?></span>
+          <?php endif; ?>
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $overdue ? 'overdue' : '' ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
@@ -141,41 +189,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit('That belongs to ' . htmlspecialchars(share_name($owner), ENT_QUOTES) . '.');
     }
 
-    // The New-item window can also make an event or a note; those live in their own files.
-    if ($_POST['action'] === 'add_event' || $_POST['action'] === 'add_note') {
-        $text = trim((string) ($_POST['text'] ?? ''));
-        $due  = trim((string) ($_POST['due'] ?? ''));
-        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $due) ? $due : null;
-        if ($text === '') { header('Location: ' . $backUrl); exit; }
-        if ($_POST['action'] === 'add_event') {
-            $file = user_data_file($cfg['data_dir'], 'events');
-            $list = store_read($file);
-            $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($text, 0, 500),
-                       'date' => $date, 'time' => null, 'cal' => '', 'created' => time()];
-            store_write($file, array_values($list));
-            header('Location: /calendar/' . ($date ? '?day=' . $date . '&ym=' . substr($date, 0, 7) : ''));
-            exit;
-        }
-        $file  = user_data_file($cfg['data_dir'], 'notes');
-        $list  = store_read($file);
-        $newId = bin2hex(random_bytes(6));
-        $list[] = ['id' => $newId, 'title' => mb_substr($text, 0, 200), 'date' => $date,
-                   'body' => '', 'created' => time(), 'updated' => time()];
-        store_write($file, array_values($list));
-        header('Location: /notes/?id=' . $newId);
-        exit;
-    }
 
     // Folder actions don't touch the reminders list.
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'reminders', $name);
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All'));
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . '&edit=1');
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . $backUrl);
+        header('Location: ' . $editBack);
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -188,14 +212,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($r);
         save_reminders($dataFile, $list);
-        header('Location: ' . _self_path() . '?folder=All');
+        header('Location: ' . _self_path() . '?folder=All&edit=1');
         exit;
     }
 
     // Section actions. Sections are bold headers that group reminders (orthogonal to folders).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0) {   // "Reminders" is reserved for the default group
+        // "Reminders" and "Calendar" are the two permanent groups — neither can be recreated.
+        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0
+            && strcasecmp($name, CALENDAR_SECTION) !== 0) {
             $list = load_reminders($dataFile);
             $dup  = false;
             foreach ($list as $it) {
@@ -206,11 +232,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 save_reminders($dataFile, $list);
             }
         }
-        header('Location: ' . $backUrl);
+        header('Location: ' . $editBack);
         exit;
     }
     if ($_POST['action'] === 'delete_section') {
         $name = (string) ($_POST['name'] ?? '');
+        if (strcasecmp($name, CALENDAR_SECTION) === 0) {   // permanent, like the default group
+            header('Location: ' . $editBack);
+            exit;
+        }
         $list = load_reminders($dataFile);
         $list = array_filter($list, fn($it) => !(is_section($it) && ($it['name'] ?? '') === $name));
         foreach ($list as &$r) {
@@ -218,7 +248,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($r);
         save_reminders($dataFile, $list);
-        header('Location: ' . $backUrl);
+        header('Location: ' . $editBack);
         exit;
     }
 
@@ -294,15 +324,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         case 'add':
             $text    = trim((string) ($_POST['text'] ?? ''));
             $due     = trim((string) ($_POST['due'] ?? ''));
-            $folder  = (string) ($_POST['folder'] ?? FOLDER_DEFAULT);
-            if (!in_array($folder, $folders, true)) { $folder = FOLDER_DEFAULT; }
+            $folder  = (string) ($_POST['folder'] ?? $addTarget);
+            if (!in_array($folder, $folders, true)) { $folder = $addTarget; }
             $section = (string) ($_POST['section'] ?? '');
-            if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
+            // The two permanent groups are legal targets even though they aren't stored sections.
+            if ($section !== '' && $section !== CALENDAR_SECTION && !isset($sectionSet[$section])) { $section = ''; }
+
+            // A dated field from the window wins; otherwise read the date and time
+            // out of what was typed ("Vet 8/3 2pm").
+            $time = null;
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $due)) {
+                [$text, $parsedDate, $time] = parse_when_from_text($text);
+                $due = $parsedDate ?? '';
+            }
             if ($text !== '') {
                 $list[] = [
                     'id'      => bin2hex(random_bytes(6)),
                     'text'    => mb_substr($text, 0, 500),
                     'due'     => preg_match('/^\d{4}-\d{2}-\d{2}$/', $due) ? $due : null,
+                    'time'    => $time,
                     'done'    => false,
                     'folder'  => $folder,
                     'section' => $section,
@@ -326,7 +366,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $id = (string) ($_POST['id'] ?? '');
             foreach ($list as $r) { if (!is_section($r) && ($r['id'] ?? '') === $id) { $_SESSION['undo_rem'] = $r; break; } }
             $list = array_values(array_filter($list, fn($r) => is_section($r) || ($r['id'] ?? '') !== $id));
-            $undoFlag = '&undo=1';
+            $undoFlag = '&undo=1&edit=1';   // deleting is an edit-mode action; stay in it
             break;
 
         case 'undo':
@@ -350,10 +390,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 // --- Render ---
 $all = load_reminders($dataFile);
 
-// Section names, in creation order (deduped).
+// Section names, in creation order (deduped). "Calendar" is permanent and rendered
+// separately, so it never appears among the user's own sections even if it got stored.
 $sections = [];
 foreach ($all as $it) {
-    if (is_section($it) && !in_array($it['name'], $sections, true)) { $sections[] = $it['name']; }
+    if (is_section($it) && !in_array($it['name'], $sections, true)
+        && strcasecmp((string) $it['name'], CALENDAR_SECTION) !== 0) {
+        $sections[] = $it['name'];
+    }
 }
 
 // Reminder rows, filtered to the viewed folder.
@@ -362,15 +406,20 @@ if ($viewFolder !== 'All') {
     $items = array_values(array_filter($items, fn($r) => ($r['folder'] ?? FOLDER_DEFAULT) === $viewFolder));
 }
 
-// Split into ungrouped + per-section. Stored array order = the manual (drag) order;
-// the JS sort menu can re-sort by date/name on top of it.
+// Split into the permanent Calendar group, the user's sections, and everything else.
+// Each group is then shown undated-first, by date.
 $ungrouped = [];
+$calRows   = [];
 $grouped   = [];
 foreach ($items as $r) {
     $s = (string) ($r['section'] ?? '');
-    if ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
-    else { $ungrouped[] = $r; }
+    if (strcasecmp($s, CALENDAR_SECTION) === 0)      { $calRows[] = $r; }
+    elseif ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
+    else                                              { $ungrouped[] = $r; }
 }
+$ungrouped = sort_by_date($ungrouped);
+$calRows   = sort_by_date($calRows);
+foreach ($grouped as $s => $rows) { $grouped[$s] = sort_by_date($rows); }
 
 $openCount = count(array_filter($items, fn($r) => empty($r['done'])));
 $doneCount = count($items) - $openCount;
@@ -429,24 +478,47 @@ $sectionInput =
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* Add (+ Undo after a delete), then Show Completed on its own row beneath.
+    /* Show Completed, plus Undo after a delete. Adding happens per section now.
        Pills sized to match the Calendar's day-panel buttons. */
-    .addbar, .donebar { display: flex; gap: 0.5rem; align-items: center; }
-    .addbar { margin-bottom: 0.5rem; }
-    .donebar { margin-bottom: 1.5rem; }
-    .addbar button, .donebar button {
+    .addbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1.25rem; }
+    .addbar button {
       padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.9rem;
       cursor: pointer; font-family: inherit;
     }
-    .addbar .addopen { background: #34d399; color: #06251b; border: none; font-weight: 700; }
-    .addbar .addopen:hover { background: #52e0ac; }
-    .donebar .showall { background: none; color: #888; border: 1px solid #333; }
-    .donebar .showall:hover { border-color: #888; color: #ccc; }
-    body.show-done .donebar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    .addbar .showall { background: none; color: #888; border: 1px solid #333; }
+    .addbar .showall:hover { border-color: #888; color: #ccc; }
+    body.show-done .addbar #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .addbar .editbtn { background: none; border: 1px solid #444; color: #ccc; }
     .addbar .editbtn:hover { border-color: #888; color: #fff; }
     .addbar #undoBtn { display: none; margin-left: auto; }   /* only right after a delete */
     body.can-undo .addbar #undoBtn { display: inline-block; }
+
+    /* The + on each section header, and the row it opens. */
+    .sec-add {
+      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
+      border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
+      cursor: pointer; font-family: inherit; display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+    .sec-add:hover { border-color: #34d399; background: #14251f; }
+    .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
+    .secadd-row[hidden] { display: none; }   /* make [hidden] win over flex */
+    .secadd-row input[type=text] {
+      flex: 1; min-width: 0; padding: 0.45rem 0.75rem; background: #1a1a1a;
+      border: 1px solid #3a5a4d; border-radius: 999px; color: #eee;
+      font-size: 16px;   /* 16px stops iOS from zooming on focus */
+    }
+    .secadd-row input:focus { outline: none; border-color: #34d399; }
+    .secadd-row .plus {
+      flex: 0 0 auto; width: 38px; background: #34d399; color: #06251b; border: none;
+      border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .secadd-row .plus:hover { background: #52e0ac; }
+    /* A time picked out of the typed text, e.g. "2pm". */
+    .attime {
+      font-size: 0.75rem; color: #7dd3fc; background: #0c2a3a; padding: 0.15rem 0.5rem;
+      border-radius: 999px; white-space: nowrap;
+    }
     /* Completed reminders + the clear button stay hidden until "Show Completed" is on */
     body:not(.show-done) li.done { display: none; }
     body:not(.show-done) footer { display: none; }
@@ -603,50 +675,10 @@ $sectionInput =
   <?php render_folder_select($folderGroups, $view); ?>
 
   <div class="addbar">
-    <button type="button" id="addBtn" class="addopen">+ Add</button>
+    <button type="button" id="doneBtn" class="showall">Show Completed</button>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
   </div>
-  <div class="donebar">
-    <button type="button" id="doneBtn" class="showall">Show Completed</button>
-  </div>
 
-  <!-- New item, the same window the Calendar uses — but starting on Reminder. -->
-  <div class="modal-backdrop" id="addModal">
-    <form class="modal" method="post" action="" id="addForm">
-      <h2>New item</h2>
-      <input type="hidden" name="csrf" value="<?= $csrf ?>">
-      <input type="hidden" name="action" id="aAction" value="add">
-      <input type="hidden" name="view" value="<?= e($view) ?>">
-      <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
-      <input type="text" name="text" id="aText" placeholder="What is it?" maxlength="500" required>
-      <div class="kind">
-        <label><input type="radio" name="kindchoice" value="reminder" checked><span>&#9745; Reminder</span></label>
-        <label><input type="radio" name="kindchoice" value="event"><span>&#128197; Event</span></label>
-        <label><input type="radio" name="kindchoice" value="note"><span>&#128221; Note</span></label>
-      </div>
-      <div class="daterow">
-        <button type="button" class="adddate" id="aDateBtn">+ Date</button>
-        <span class="datewrap" id="aDateWrap" hidden>
-          <input type="date" name="due" id="aDate">
-          <button type="button" class="cleardate" id="aDateClear" title="Remove date">&times;</button>
-        </span>
-      </div>
-      <?php if ($sections): ?>
-        <div class="secrow" id="aSecRow">
-          <select name="section" class="secsel" title="Add to section">
-            <option value="">Reminders</option>
-            <?php foreach ($sections as $sname): ?>
-              <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-      <?php endif; ?>
-      <div class="buttons">
-        <button type="button" class="cancel" id="aCancel">Cancel</button>
-        <button type="submit" class="ok">Add</button>
-      </div>
-    </form>
-  </div>
   <?php if (!$isShared) { render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to'); } ?>
 
   <form id="undoForm" method="post" action="" style="display:none">
@@ -657,9 +689,7 @@ $sectionInput =
 
   <?= $sectionInput ?>
 
-  <?php if (!$items && !$sections): ?>
-    <p class="empty">Nothing yet. Add your first reminder above.</p>
-  <?php else: ?>
+  <?php // The permanent groups always render, so there's always a + to add against. ?>
    <div id="rlist-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
@@ -668,6 +698,7 @@ $sectionInput =
         <div class="section-head">
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= e($sname) ?></span>
+          <?php render_section_add_button($sname); ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
@@ -676,15 +707,28 @@ $sectionInput =
             <button class="section-del" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
+        <?php render_section_add_row($sname, $csrf, $view); ?>
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
       </div>
     <?php endforeach; ?>
+
+    <!-- Permanent "Calendar" group: undated items here ride along on the Calendar under today. -->
+    <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
+      <div class="section-head">
+        <span class="section-title"><?= CALENDAR_SECTION ?></span>
+        <?php render_section_add_button(CALENDAR_SECTION); ?>
+      </div>
+      <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view); ?>
+      <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
+    </div>
 
     <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
     <div class="section-group default-group" data-section="">
       <div class="section-head">
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
+        <?php render_section_add_button(''); ?>
       </div>
+      <?php render_section_add_row('', $csrf, $view); ?>
       <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
     </div>
    </div>
@@ -699,56 +743,25 @@ $sectionInput =
         </form>
       </footer>
     <?php endif; ?>
-  <?php endif; ?>
 </div>
 <?php render_tabbar('reminders'); ?>
 <script>
   const TODAY = '<?= date('Y-m-d') ?>';
 
-  // ----- New-item window -----
-  const addModal = document.getElementById('addModal');
-  const aText    = document.getElementById('aText');
-  const aDateBtn = document.getElementById('aDateBtn');
-  const aWrap    = document.getElementById('aDateWrap');
-  const aDate    = document.getElementById('aDate');
-  const aSecRow  = document.getElementById('aSecRow');
-
-  // Sections only mean anything for reminders; events and notes go to their own apps.
-  const syncKind = () => {
-    const kind = document.querySelector('input[name=kindchoice]:checked').value;
-    if (aSecRow) aSecRow.hidden = kind !== 'reminder';
-  };
-  document.querySelectorAll('input[name=kindchoice]').forEach(r => r.addEventListener('change', syncKind));
-
-  const closeAdd = () => addModal.classList.remove('open');
-  document.getElementById('addBtn').addEventListener('click', () => {
-    aText.value = ''; aDate.value = ''; aWrap.hidden = true; aDateBtn.hidden = false;
-    document.querySelector('input[name=kindchoice][value=reminder]').checked = true;
-    syncKind();
-    addModal.classList.add('open');
-    setTimeout(() => aText.focus(), 30);
+  // ----- Per-section add: the + on a header opens that section's row -----
+  document.querySelectorAll('.sec-add').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = document.getElementById(btn.dataset.target);
+      if (!row) return;
+      const opening = row.hidden;
+      // Only one row open at a time, so the page doesn't fill up with inputs.
+      document.querySelectorAll('.secadd-row').forEach(r => { r.hidden = true; });
+      row.hidden = !opening;
+      if (opening) { const i = row.querySelector('input[type=text]'); i.value = ''; i.focus(); }
+    });
   });
-  document.getElementById('aCancel').addEventListener('click', closeAdd);
-  addModal.addEventListener('click', e => { if (e.target === addModal) closeAdd(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && addModal.classList.contains('open')) closeAdd();
-  });
-
-  // Optional date: reveal the date picker only when "+ Date" is tapped (defaults to today).
-  aDateBtn.addEventListener('click', () => {
-    aWrap.hidden = false; aDateBtn.hidden = true;
-    if (!aDate.value) aDate.value = TODAY;
-    aDate.focus();
-    if (aDate.showPicker) { try { aDate.showPicker(); } catch (_) {} }
-  });
-  document.getElementById('aDateClear').addEventListener('click', () => {
-    aDate.value = ''; aWrap.hidden = true; aDateBtn.hidden = false;
-  });
-
-  // Pick the right action right before submitting: add | add_event | add_note.
-  document.getElementById('addForm').addEventListener('submit', () => {
-    const kind = document.querySelector('input[name=kindchoice]:checked').value;
-    document.getElementById('aAction').value = kind === 'reminder' ? 'add' : 'add_' + kind;
+    if (e.key === 'Escape') document.querySelectorAll('.secadd-row').forEach(r => { r.hidden = true; });
   });
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
@@ -767,11 +780,16 @@ $sectionInput =
     document.body.classList.toggle('editing', on);
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
-    localStorage.setItem('remEditing', on ? '1' : '0');
     if (on) { editShowDone = true; }                       // entering edit auto-shows completed (view only)
     applyShowDone();
   };
-  setEdit(localStorage.getItem('remEditing') === '1');   // stay in edit mode across folder/section adds
+  // Always start out of edit mode. The only exception is a structural change that
+  // redirects back here (?edit=1), so adding a folder or section doesn't kick you out.
+  setEdit(new URLSearchParams(location.search).get('edit') === '1');
+  if (new URLSearchParams(location.search).get('edit') === '1') {
+    const u = new URL(location.href); u.searchParams.delete('edit');
+    history.replaceState(null, '', u);
+  }
   // Undo shows only immediately after a delete (server redirects back with ?undo=1).
   if (new URLSearchParams(location.search).get('undo') === '1') {
     document.body.classList.add('can-undo');
@@ -865,13 +883,20 @@ $sectionInput =
       if (e.target.closest('.check, .del, form, input')) return;
       const li = e.target.closest('li[data-id]'); if (!li) return;
       tapTextLi = e.target.closest('.text') ? li : null;
-      pressTimer = setTimeout(() => { pressTimer = null; beginItem(li); }, 280);
+      pressTimer = setTimeout(() => { pressTimer = null; beginItem(li); }, 250);
     }
   });
 
+  // iOS likes to sit on a touch deciding whether it's a scroll before it emits
+  // pointerdown. Claiming the touch on the handles makes the grab feel immediate.
+  document.addEventListener('touchstart', (e) => {
+    if (!document.body.classList.contains('editing')) return;
+    if (e.target.closest('.drag-handle, .sec-handle')) e.preventDefault();
+  }, { passive: false });
+
   document.addEventListener('pointermove', (e) => {
     if (pressTimer) {                                  // waiting on a hold: movement = scroll/tap -> cancel
-      if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
+      if (Math.abs(e.clientX - sx) > 14 || Math.abs(e.clientY - sy) > 14) cancelPress();
       return;
     }
     if (!dragLi && !dragSection) return;
