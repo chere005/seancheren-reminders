@@ -8,6 +8,39 @@
  */
 const CALENDAR_SECTION = 'Calendar';
 
+/**
+ * One colour per kind of thing, for every app that draws a dot, a chip or a tag.
+ * Reminders are the suite's green, events blue, notes purple — the blue is a proper
+ * blue rather than a cyan so it can't be mistaken for the green at dot size.
+ * Emit this inside a page's <style> and use var(--k-event) and friends.
+ */
+const KIND_BLUE = '#60a5fa';   // also CAL_COLORS[0]; see cal_color_fix()
+
+function kind_color_css(): string
+{
+    $blue = KIND_BLUE;
+    return <<<CSS
+    :root {
+      --k-reminder: #34d399; --k-reminder-bg: #06251b; --k-reminder-soft: #14332a;
+      --k-event: {$blue};    --k-event-bg: #10233f;    --k-event-soft: #9ec5fb;
+      --k-note: #8b6ef0;     --k-note-bg: #241a3a;     --k-note-soft: #b9a7f5;
+      --k-overdue: #f0a860;  --k-overdue-bg: #3a2410;
+      --k-done: #555;
+    }
+    CSS;
+}
+
+/**
+ * Calendars stored the old cyan before the palette moved to a truer blue. Their colour
+ * is remapped as it's read, so a calendar made back then matches the rest of the suite
+ * and still lines up with a swatch in the picker. The next colour change writes it out.
+ */
+function cal_color_fix(?string $color): string
+{
+    $color = (string) $color;
+    return strcasecmp($color, '#38bdf8') === 0 ? KIND_BLUE : $color;
+}
+
 /** Pull a time like "2pm" / "2:30 pm" out of text; returns [cleanedText, "HH:MM"|null]. */
 function parse_time_from_text(string $text): array
 {
