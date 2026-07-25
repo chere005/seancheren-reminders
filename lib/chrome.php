@@ -14,19 +14,25 @@
 function chrome_styles(): string
 {
     return <<<CSS
+    /* The top bar: back, the app's name, its one round button, then the username on
+       the right. Everything on it is 32px tall and sits on the same line, with a
+       rule under the lot. Apps only supply what goes inside. */
+    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; }
     .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
     .hright { display: flex; align-items: center; gap: 0.8rem; flex: 0 0 auto; }
-    .backbtn {
-      flex: 0 0 auto; align-self: center; background: #1a1a1a; border: 1px solid #333; color: #ccc;
-      cursor: pointer; width: 34px; height: 34px; border-radius: 8px; font-size: 1.5rem; line-height: 1;
-      padding: 0 0 0.15rem; font-family: inherit;
+    .backbtn, .titlebtn, .usermenu .who {
+      height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
+      font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
+    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0 0.1rem 0.15rem 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
+    /* The "+" (or pencil) beside the app's name. */
+    .titlebtn { width: 32px; font-size: 1.05rem; }
+    .titlebtn:hover { border-color: #34d399; color: #34d399; }
+    body.editing .titlebtn.edit-toggle { background: #34d399; border-color: #34d399; color: #06251b; }
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who {
-      margin: 0; color: #34d399; font-size: 0.8rem; background: none; border: 1px solid #2a4a3d;
-      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
-    }
+    .usermenu .who { margin: 0; padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
     .usermenu .who:hover { border-color: #34d399; color: #34d399; }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: #1c1c1c;

@@ -469,14 +469,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       font-weight: 600; line-height: 1.2;
     }
     .modal .buttons .widgetlink:hover { background: #333; color: #fff; }
-    /* + beside the word Calendar — manage calendars. Always there: it's how you get
-       to the calendar list and the share window, neither of which is destructive. */
-    .calplus {
-      display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
-      width: 26px; height: 26px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
-    }
-    .calplus:hover { border-color: #34d399; color: #34d399; }
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
@@ -770,7 +762,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Calendar</h1>
-        <button type="button" id="calMgr" class="calplus" title="Manage calendars" aria-label="Manage calendars">+</button>
+        <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars">+</button>
       </div>
     </div>
     <div class="hright">

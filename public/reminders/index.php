@@ -487,7 +487,7 @@ $sectionInput =
     .wrap { max-width: 640px; margin: 0 auto; }
     /* Tight bottom margin: the folder dropdown sits directly under this. */
     header {
-      display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.75rem;
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: baseline; gap: 0.7rem; }
@@ -501,6 +501,8 @@ $sectionInput =
     }
 
     /* Completed sits on the folder-dropdown row, sized to match it. */
+    /* One height for everything on this row, whichever of them is showing. */
+    .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
       background: none; color: #888; border: 1px solid #333; border-radius: 999px;
       padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
@@ -594,11 +596,15 @@ $sectionInput =
     .modal .buttons .ok { background: #34d399; color: #06251b; }
 
     /* Section headers (bold), grouping reminders */
-    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.25rem; }
+    /* Same side padding as a row, so the handle and the X line up with the rows'. */
+    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
     .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
+    /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
+    .section-head form { margin-left: auto; }
     .section-del {
-      background: none; border: 1px solid #2a2a2a; color: #666; border-radius: 6px;
-      padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; cursor: pointer;
+      background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
+      padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
+      font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
 
@@ -633,12 +639,15 @@ $sectionInput =
     .check:hover { border-color: #7a7; color: #7a7; }
     .del:hover { border-color: #f66; color: #f66; }
 
-    /* Edit mode: the X buttons + drag handles stay hidden until "Edit" is tapped. */
-    .drag-handle, .sec-handle, .del, .section-del { display: none; }
+    /* Edit mode: the X buttons + drag handles stay hidden until the pencil is tapped.
+       The handles keep their column either way — hiding them with display:none nudged
+       every line of text sideways the moment you started editing. */
+    .del, .section-del { display: none; }
     body.editing .del, body.editing .section-del { display: inline-block; }
-    body.editing .drag-handle, body.editing .sec-handle { display: inline-flex; }
+    .drag-handle, .sec-handle { visibility: hidden; }
+    body.editing .drag-handle, body.editing .sec-handle { visibility: visible; }
     .drag-handle, .sec-handle {
-      flex: 0 0 auto; align-items: center; justify-content: center; width: 1.4rem;
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 1.4rem;
       color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none;
     }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
@@ -660,17 +669,19 @@ $sectionInput =
 <?= folder_nav_styles() ?>
     .newsection { margin: 0; display: flex; gap: 0.4rem; align-items: center; }
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
+    /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; background: #f0b429; color: #241a00; border: none;
-      border-radius: 999px; font-size: 1.05rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      flex: 0 0 auto; width: 34px; padding: 0.3rem 0.75rem; background: #f0b429; color: #241a00;
+      border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1.2; font-weight: 700;
+      cursor: pointer; font-family: inherit;
     }
     .newsection .plus:hover { background: #f7c95a; }
     /* A section with nothing in it under the current folder: out of the way normally,
        visible while editing so you can see the one you just made and fill it. */
     body:not(.editing) .section-group.folder-empty { display: none; }
     .newsection input {
-      width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
-      border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
+      width: 190px; max-width: 100%; padding: 0.3rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
+      border-radius: 999px; color: #f0b429; font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
     }
     .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
     .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
@@ -689,7 +700,7 @@ $sectionInput =
         <div class="titlebar">
           <h1>Reminders</h1>
           <?php if (!$isShared): ?>
-            <button type="button" id="folderMgr" class="folderplus"
+            <button type="button" id="folderMgr" class="titlebtn"
                     title="Manage folders" aria-label="Manage folders">+</button>
           <?php endif; ?>
         </div>

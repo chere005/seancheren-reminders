@@ -394,22 +394,25 @@ function books_header(string $titleHtml): void
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
     .wrap { max-width: 760px; margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 1.1rem; }
-    .hleft { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
-    .backbtn {
-      flex: 0 0 auto; background: #1a1a1a; border: 1px solid #333; color: #ccc; cursor: pointer;
-      width: 34px; height: 34px; border-radius: 8px; font-size: 1.5rem; line-height: 1; padding: 0 0 0.15rem;
+    /* Same top bar as the rest of the suite: everything 32px on one line, rule under it. */
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+      margin-bottom: 1.1rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
     }
+    .hleft { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .backbtn, .usermenu .who {
+      height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
+      font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
+    }
+    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0 0.1rem 0.15rem 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
-    .htitle h1 { font-size: 1.5rem; }
+    .htitle h1 { font-size: 1.35rem; }
     .htitle .ht-sub { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
 
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who {
-      color: #34d399; font-size: 0.8rem; background: none; border: 1px solid #2a4a3d;
-      border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer;
-    }
+    .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
     .usermenu .who:hover { border-color: #34d399; }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
@@ -592,8 +595,9 @@ function books_header(string $titleHtml): void
     .ndel .del:hover { border-color: #f66; color: #f66; }
 
     /* Drag-to-reorder notes (edit mode) */
-    .nlist .drag-handle { display: none; flex: 0 0 auto; width: 1.5rem; text-align: center; color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none; }
-    body.editing .nlist .drag-handle { display: inline-flex; align-items: center; justify-content: center; }
+    /* Hidden, not gone: taking the handle out of the flow shifted every title sideways. */
+    .nlist .drag-handle { visibility: hidden; flex: 0 0 auto; width: 1.5rem; display: inline-flex; align-items: center; justify-content: center; color: #666; font-size: 1.05rem; cursor: grab; touch-action: none; user-select: none; }
+    body.editing .nlist .drag-handle { visibility: visible; }
     .nlist .drag-handle:active { cursor: grabbing; color: #8b6ef0; }
     .nlist li.dragging { background: #1b1726; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     body.editing #bnotes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
@@ -617,9 +621,11 @@ function books_header(string $titleHtml): void
     .newsection-form input { width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 16px; }
     .newsection-form input::placeholder { color: #f0b429; opacity: 0.85; }
     .newsection-form input:focus { outline: none; border-style: solid; border-color: #f0b429; }
-    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; }
+    /* Same side padding as a note row, so the section's X sits under the rows' Xs. */
+    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; padding: 0 0.25rem; }
+    .section-head form { margin-left: auto; }
     .section-title { font-weight: 700; font-size: 1.05rem; color: #f0b429; }
-    .section-del { display: none; background: none; border: 1px solid #2a2a2a; color: #666; border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.85rem; line-height: 1; cursor: pointer; }
+    .section-del { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; }
     body.editing .section-del { display: inline-block; }
     .section-del:hover { border-color: #f66; color: #f66; }
     .editor select.secsel { padding: 0.5rem 0.6rem; background: #1a1a1a; border: 1px solid #4a3f2a; border-radius: 6px; color: #f0b429; font-size: 0.9rem; color-scheme: dark; cursor: pointer; align-self: flex-start; }
