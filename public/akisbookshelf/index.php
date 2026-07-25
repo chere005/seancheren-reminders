@@ -377,10 +377,12 @@ function books_header(string $titleHtml, bool $withEdit = false): void
         <?php if ($withEdit): ?>
           <button type="button" class="hedit" id="editBtn" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
         <?php endif; ?>
-        <?= settings_button() ?>
-        <div class="usermenu">
-          <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
-          <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+        <div class="usercol">
+          <?= settings_button() ?>
+          <div class="usermenu">
+            <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
+            <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+          </div>
         </div>
         <?= settings_modal_html() ?>
       </div>
@@ -425,6 +427,8 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .usermenu { position: relative; flex: 0 0 auto; }
     .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
     .hright { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+    /* The "⋮" sits against the username, not at the header's own gap. */
+    .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
     /* Edit (a pencil) beside the username, the same pill and the same size. */
     .hedit {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;

@@ -770,9 +770,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars">+</button>
       </div>
     </div>
-    <div class="hright">
-      <?= render_user_menu() ?>
-    </div>
+    <?= render_user_menu() ?>
   </header>
 
   <?php

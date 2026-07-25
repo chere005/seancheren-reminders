@@ -43,7 +43,7 @@ function chrome_styles(): string
     .usermenu .menu a:hover { background: #2a2a2a; color: #fff; }
     /* Edit — a pencil, as on every other Edit in the suite — sits to the left of
        the username, wearing the same pill. */
-    .usercol { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
+    .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
     .hedit {
       margin: 0; color: #ccc; font-size: 0.95rem; background: none; border: 1px solid #333;
       border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; font-family: inherit;
@@ -77,17 +77,16 @@ function back_button(): string
 function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): string
 {
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
-    $menu = settings_button()
+    // One flex child, because the header is space-between: loose buttons would be
+    // spread across the row rather than gathered on the right.
+    $menu = '<div class="usercol">' . settings_button()
           . '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
-          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div>'
-          . settings_modal_html();
-    if (!$withEdit) {
-        return $menu;
-    }
-    return '<div class="usercol">'
-         . '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
-         . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
-         . $menu . '</div>';
+          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div></div>';
+    $edit = $withEdit
+        ? '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
+          . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
+        : '';
+    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html();
 }
 
 /**
@@ -99,7 +98,7 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): s
  */
 function settings_button(): string
 {
-    return '<button type="button" class="dots" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
+    return '<button type="button" class="setbtn" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
 }
 
 function settings_modal_html(): string
@@ -129,13 +128,14 @@ HTML;
 function settings_modal_styles(): string
 {
     return <<<CSS
-    /* The "⋮" wears the username's pill, one notch narrower. */
-    .dots {
+    /* The "⋮" wears the username's pill, one notch narrower. Its own class, not
+       ".dots" — the Calendar's day cells already use that for their dot row. */
+    .setbtn {
       height: 32px; width: 26px; display: inline-flex; align-items: center; justify-content: center;
       background: none; border: 1px solid #333; border-radius: 999px; color: #ccc;
       font-family: inherit; font-size: 1.1rem; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
-    .dots:hover { border-color: #888; color: #fff; }
+    .setbtn:hover { border-color: #888; color: #fff; }
     /* Same shape as the calendar and folder managers. */
     .setmodal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 70;
