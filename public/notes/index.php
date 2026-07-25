@@ -446,7 +446,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; padding: 0.35rem 0.9rem; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1.2; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
@@ -635,8 +635,9 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   window.sectionEditToggle = () => setEdit(!document.body.classList.contains('editing'));
   document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
 
-  // "+ Section" turns into the field it's asking for, and turns back if you
-  // leave it empty — the same shape as the "+" on a section header.
+  // "+ Section" turns into the field it's asking for, and turns back if you leave it
+  // empty — the same gesture as the "+" on a section header, and the same size as the
+  // button it replaces so the row doesn't jump.
   const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
   if (newSecBtn && newSecForm) {
     const input = newSecForm.querySelector('input[type=text]');
