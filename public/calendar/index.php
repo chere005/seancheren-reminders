@@ -106,7 +106,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // --- Manage calendars / calendar sets (AJAX: answers with the fresh list, no reload) ---
     if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder',
-                           'set_add', 'set_delete', 'set_members'], true)) {
+                           'set_add', 'set_delete', 'set_members', 'cal_default'], true)) {
         $calIdsNow = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
         $name      = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
 
@@ -144,6 +144,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                           'cals' => [], 'created' => time()];
         } elseif ($action === 'set_delete') {
             $calList = array_values(array_filter($calList, fn($c) => !(is_calset($c) && ($c['id'] ?? '') === $id)));
+        } elseif ($action === 'cal_default') {
+            // Which calendar new events land in. Kept in calprefs, not the calendar list.
+            if (in_array($id, $calIdsNow, true)) {
+                $calPrefs['default_cal'] = $id;
+                store_write($prefFile, $calPrefs);
+            }
         } elseif ($action === 'set_members') {
             $want = (array) (json_decode((string) ($_POST['cals'] ?? '[]'), true) ?: []);
             foreach ($calList as &$s) {
@@ -155,8 +161,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             unset($s);
         }
         save_json_list($calFile, $calList);
+        // The chosen default may have just been deleted; fall back to the first calendar.
+        $idsAfter = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+        $defNow   = (string) ($calPrefs['default_cal'] ?? '');
+        if (!in_array($defNow, $idsAfter, true)) { $defNow = $idsAfter[0] ?? ''; }
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'list' => array_values($calList)]);
+        echo json_encode(['ok' => true, 'list' => array_values($calList), 'default' => $defNow]);
         exit;
     }
 
@@ -292,7 +302,10 @@ $next = date('Y-m', mktime(0, 0, 0, $month + 1, 1, $year));
 $calsOnly = array_values(array_filter($calList, fn($c) => !is_calset($c)));
 $setsOnly = array_values(array_filter($calList, 'is_calset'));
 $calIds   = array_column($calsOnly, 'id');
-$defCal   = $calIds[0] ?? '';
+// New events land here when you aren't looking at one calendar in particular.
+// Chosen in the manage window; falls back to the first calendar.
+$defCal   = (string) ($calPrefs['default_cal'] ?? '');
+if (!in_array($defCal, $calIds, true)) { $defCal = $calIds[0] ?? ''; }
 $calColor = array_column($calsOnly, 'color', 'id');
 
 // Shared calendars join the picker and the colour map; their ids stay distinct from mine.
@@ -652,6 +665,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .callist .ccount { font-size: 0.75rem; color: #666; white-space: nowrap; }
     .callist .cmember { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
     .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
+    /* Default-calendar picker, under the calendar list. */
+    .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
+    .defrow label { font-size: 0.85rem; color: #999; white-space: nowrap; }
+    .defrow select {
+      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+    }
+    .defrow select:focus { outline: none; border-color: #888; }
     .calmodal .chint { color: #777; font-size: 0.78rem; margin: -0.4rem 0 0.7rem; }
     /* Colour palette popover */
     .swatches {
@@ -829,6 +850,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
     </div>
     <ul class="callist" id="calRows"></ul>
+    <div class="defrow">
+      <label for="calDefault">New events go to</label>
+      <select id="calDefault"></select>
+    </div>
     <hr class="cdiv">
     <h2>Calendar sets</h2>
     <div class="addrow">
@@ -971,7 +996,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mOk.textContent = 'Add';
     mText.value = '';
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
-    mCal.value = VIEW_CAL;                 // new events land in the calendar you're looking at
+    mCal.value = newEventCal();            // the calendar you're looking at, else the default
     showTime('');
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
@@ -989,7 +1014,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
-    if (kind === 'event') { mCal.value = cal || VIEW_CAL; showTime(time); } else { hideTime(); }
+    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); } else { hideTime(); }
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
@@ -1171,7 +1196,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   // ---- Calendars & calendar sets ----
   const CSRF     = '<?= $csrf ?>';
   const PALETTE  = <?= json_encode(CAL_COLORS) ?>;
-  const VIEW_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : $defCal) ?>';
+  // New events land in the calendar you're looking at; when that's "all" or a set,
+  // they land in the default chosen in the manage window.
+  let DEFAULT_CAL  = '<?= e($defCal) ?>';
+  const VIEWED_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : '') ?>';
+  const newEventCal = () => VIEWED_CAL || DEFAULT_CAL;
   let CALS   = <?= json_encode(array_values($calList), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const FOLDERS = <?= json_encode(array_values($remFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const PARTNER = <?= json_encode($partner ? share_name($partner) : null) ?>;
@@ -1197,7 +1226,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       .then(r => r.json())
       .then(j => {
         if (!j) return;
-        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); if (PARTNER) renderShare(); }
+        if (j.default !== undefined) { DEFAULT_CAL = j.default; }
+        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); renderDefault(); if (PARTNER) renderShare(); }
         if (j.hidden) { HIDDEN = j.hidden; HIDDEN_SHARED = j.hiddenShared || []; calDirty = true; renderFolders(); }
         if (j.shares) { SHARES = j.shares; calDirty = true; renderShare(); }
       })
@@ -1233,6 +1263,22 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       calRows.appendChild(li);
     });
   }
+
+  // Which calendar new events default to, when you aren't viewing one in particular.
+  const calDefault = document.getElementById('calDefault');
+  function renderDefault() {
+    calDefault.innerHTML = '';
+    onlyCals().forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      if (c.id === DEFAULT_CAL) o.selected = true;
+      calDefault.appendChild(o);
+    });
+  }
+  calDefault.addEventListener('change', () => {
+    DEFAULT_CAL = calDefault.value;
+    calApi('cal_default', { id: DEFAULT_CAL });
+  });
 
   function renderSets() {
     setRows.innerHTML = '';
@@ -1405,7 +1451,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   document.getElementById('setName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSet(); } });
 
   document.getElementById('calMgr').addEventListener('click', () => {
-    renderCals(); renderSets(); renderFolders();
+    renderCals(); renderSets(); renderDefault(); renderFolders();
     calModal.classList.add('open');
   });
   const closeCalModal = () => {
