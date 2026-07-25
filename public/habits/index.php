@@ -212,7 +212,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       <?= back_button() ?>
       <h1>Habits</h1>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(true) ?>
   </header>
 
   <div class="bar">
@@ -230,7 +230,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       <?php endif; ?>
     </form>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
-    <button type="button" id="editBtn" class="editbtn">Edit</button>
   </div>
 
   <form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==''">

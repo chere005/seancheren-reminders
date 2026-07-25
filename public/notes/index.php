@@ -324,12 +324,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
-    .listbar .nedit {
-      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
-      border-radius: 999px; font-size: 0.95rem; cursor: pointer;
-    }
-    .listbar .nedit:hover { border-color: #888; color: #fff; }
-    body.editing .listbar .nedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
     .listbar .undo {
       padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
       border-radius: 999px; font-size: 0.95rem; cursor: pointer; display: none;
@@ -413,7 +407,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <?= back_button() ?>
       <h1>Notes</h1>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(!$editing) ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -421,7 +415,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   <?php render_folder_nav($folders, $view, $csrf); ?>
 
   <div class="listbar">
-    <button type="button" id="editBtn" class="nedit">Edit</button>
     <button type="button" id="undoBtn" class="undo">Undo</button>
     <form method="post" action="" style="margin-left:auto">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
