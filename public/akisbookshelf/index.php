@@ -186,6 +186,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if (!in_array($shelf, ['library', 'read', 'want'], true)) { $shelf = 'library'; }
     $listUrl  = _self_path();
     $shelfUrl = $listUrl . '?shelf=' . urlencode($shelf);
+
+    // Nothing destructive happens without the confirmed second press.
+    if (in_array($action, ['delete_book', 'delete_note', 'delete_section'], true)
+        && empty($_POST['confirm'])) {
+        header('Location: ' . $shelfUrl);
+        exit;
+    }
     $bookUrl  = $listUrl . '?book=' . urlencode($bookId);
 
     // Anything that changes a book — including writing its notes — counts as editing it,

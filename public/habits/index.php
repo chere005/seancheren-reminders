@@ -62,6 +62,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // Nothing destructive happens without the confirmed second press.
+    if (in_array($_POST['action'], ['delete_habit', 'delete_section'], true)
+        && empty($_POST['confirm'])) {
+        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?edit=1');
+        exit;
+    }
+
     $stay = '?edit=1';   // these are all edit-mode controls; hand edit mode back
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
