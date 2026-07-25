@@ -72,8 +72,9 @@ CONNECT.md             → how to resume the Claude Code session from your phone
   `store_read()` / `store_write()`, which use AES-256-CBC behind an `ENC1:` prefix.
   Legacy plaintext files are still readable and get encrypted on their next write.
 - **Folders** are a per-user filter; **sections** are bold headers that group items
-  within a list. Both reminders and notes have both. Folders are added and removed
-  in the folder window behind the **+** next to the app title (edit mode only).
+  within a list. Both reminders and notes have both. Folders are added, removed and
+  given a default in the folder window behind the **+** next to the app title (edit
+  mode only); the default is where new items land while you're viewing "All".
 - Writes are `POST` + CSRF token, then either a redirect or — for the drag/tick
   style interactions — a JSON reply.
 
@@ -83,6 +84,9 @@ Nothing is ever copied. `shares-<user>.json` records which of your calendars and
 reminder folders the other person may see, and their app reads **your** file
 directly. Shared reminder folders show up in the folder dropdown as
 `@aki:Groceries`; while one is selected, reads and writes go to the owner's file.
+A shared calendar can also be dropped into one of your calendar sets, so a set can
+span both people. Un-sharing takes effect immediately — a set that still lists the
+calendar simply stops resolving it.
 Their sections and folder list stay theirs to arrange. Anyone who isn't in the
 sean/aki pair gets no sharing UI at all.
 
