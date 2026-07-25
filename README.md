@@ -57,10 +57,10 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 
 | App | Login | Storage | Highlights |
 |-----|-------|---------|------------|
-| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, a Completed toggle |
-| Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
+| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, **+ New section** on the folder row, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, a Completed toggle |
+| Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, **+ New section** beside New note, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
 | Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), swipe up for a two-week view, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
-| Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections |
+| Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections, a pencil beside the title for edit mode |
 | Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections and a quote window (quote + your note + page + optional date) |
 | Chat | **no** | `chat.json` (shared) | public message board, live AJAX feed |
 
@@ -80,6 +80,9 @@ CONNECT.md             → how to resume the Claude Code session from your phone
   mode only); the default is where new items land while you're viewing "All".
 - Writes are `POST` + CSRF token, then either a redirect or — for the drag/tick
   style interactions — a JSON reply.
+- Every app wears the same **top bar**: back button, the app's name, one round
+  button (the **+**, or a pencil in Habits), the username on the right, and a rule
+  under the lot. Everything on it is the same height.
 - **Deleting takes two presses.** There is no confirm box and no Undo: the first
   press turns the button red, the second one goes through, and the server refuses
   anything destructive that didn't come from that second press.
@@ -88,7 +91,9 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 
 Nothing is ever copied. `shares-<user>.json` records which of your calendars and
 reminder folders the other person may see, and their app reads **your** file
-directly. Shared reminder folders show up in the folder dropdown as
+directly. Tick them in the **Share** window — behind the **+** in Reminders, or the
+Share button in the Calendar's manage window. Nothing is shared until you tick it,
+and each of you ticks your own. Shared reminder folders show up in the folder dropdown as
 `@aki:Groceries`; while one is selected, reads and writes go to the owner's file.
 A shared calendar can also be dropped into one of your calendar sets, so a set can
 span both people. Un-sharing takes effect immediately — a set that still lists the

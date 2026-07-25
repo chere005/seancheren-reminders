@@ -225,28 +225,39 @@ function rt_script(): string
     const bq = quoteAt();
     if (!bq) { return false; }
     const sel = document.getSelection();
-    // Which of the quote's own children holds the caret? (No element child = the
-    // whole quote is one line.)
-    let line = sel.anchorNode;
-    while (line && line.parentNode !== bq) { line = line.parentNode; }
+
+    // Which of the quote's own children is the caret in? Lines inside a quote are
+    // either block children (one each) or runs of nodes separated by <br> — Enter
+    // gives you one or the other depending on the browser, so handle both.
+    let node = sel.anchorNode;
+    while (node && node.parentNode !== bq) { node = node.parentNode; }
     const kids = [...bq.childNodes];
+    const i = node ? kids.indexOf(node) : -1;
+    let start = 0, end = kids.length - 1;
+    if (i !== -1 && node.nodeType === 1 && /^(DIV|P|LI|H[1-6])$/.test(node.nodeName)) {
+      start = end = i;                                     // the line is that block
+    } else if (i !== -1) {
+      start = i; while (start > 0 && kids[start - 1].nodeName !== 'BR') { start--; }
+      end = i;   while (end < kids.length - 1 && kids[end + 1].nodeName !== 'BR') { end++; }
+    }
+
+    const line  = kids.slice(start, end + 1);
+    const after = kids.slice(end + 1);
+    while (after.length && after[0].nodeName === 'BR') { after.shift().remove(); }
 
     const out = document.createElement('div');
-    if (!line || kids.length <= 1) {          // one line: the whole quote comes out
-      while (bq.firstChild) { out.appendChild(bq.firstChild); }
-      bq.replaceWith(out);
-    } else {
-      const i = kids.indexOf(line);
-      const rest = kids.slice(i + 1);
-      out.appendChild(line);
-      bq.after(out);
-      if (rest.length) {                      // keep what was below it quoted
-        const tail = document.createElement('blockquote');
-        rest.forEach(n => tail.appendChild(n));
-        out.after(tail);
-      }
-      if (!bq.childNodes.length) { bq.remove(); }
+    line.forEach(n => out.appendChild(n));
+    bq.after(out);
+    if (after.length) {                                    // what was below stays quoted
+      const tail = document.createElement('blockquote');
+      after.forEach(n => tail.appendChild(n));
+      out.after(tail);
     }
+    // Whatever was above is still in the original quote; drop it if that's nothing,
+    // and drop the <br> that used to separate it from the line we just took out.
+    while (bq.lastChild && bq.lastChild.nodeName === 'BR') { bq.lastChild.remove(); }
+    if (!bq.childNodes.length) { bq.remove(); }
+
     const r = document.createRange();
     r.selectNodeContents(out);
     r.collapse(false);

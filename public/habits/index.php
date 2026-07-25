@@ -138,14 +138,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
-    /* The pencil beside the title, the size of the "+" the other apps wear there. */
-    .titleedit {
-      display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
-      width: 26px; height: 26px; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
-    }
-    .titleedit:hover { border-color: #34d399; color: #34d399; }
-    body.editing .titleedit { background: #34d399; border-color: #34d399; color: #06251b; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
@@ -227,7 +219,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Habits</h1>
-        <button type="button" id="editBtn" class="titleedit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
+        <button type="button" id="editBtn" class="titlebtn edit-toggle" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
       </div>
     </div>
     <?= render_user_menu() ?>
