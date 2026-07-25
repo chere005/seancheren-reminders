@@ -82,13 +82,6 @@ function rt_body_html(?string $stored): string
     return rt_sanitize($stored);
 }
 
-/** Plain-text version of a body, for previews and anywhere HTML would be wrong. */
-function rt_body_text(string $stored): string
-{
-    return trim(html_entity_decode(strip_tags(str_replace(['<br>', '</div>', '</p>', '</blockquote>'], "\n", $stored)),
-                                   ENT_QUOTES));
-}
-
 /**
  * The button row. $withEntry adds the bookshelf-only "+✏️" that opens the quote window.
  * Sizing follows the Calendar day-panel buttons, like every other control in the suite.
