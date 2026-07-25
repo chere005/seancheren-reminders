@@ -137,13 +137,13 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header { display: flex; align-items: center; justify-content: space-between; }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
-    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who { color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
 
-    .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; padding-left: 2rem; }
     body:not(.editing) .bar { justify-content: flex-end; }   /* Edit keeps the right edge */
     .bar form.addh { flex: 1 1 220px; }
     body:not(.editing) .bar form.addh { display: none; }   /* edit mode only */
@@ -180,7 +180,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     /* Section header row spans the full grid width. */
     .hsection {
       grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem;
-      margin: 0.9rem 0 0.1rem; padding: 0 0.1rem 0.35rem;
+      margin: 0.9rem 0 0.1rem; padding: 0 0.1rem 0.35rem 2rem;   /* the Reminders offset */
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -200,6 +200,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .cell {
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
       border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
+      width: 100%; max-width: 32px; justify-self: center;
     }
     .cell.today { border-color: #34d399; background: #14251f; }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */

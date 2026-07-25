@@ -490,7 +490,7 @@ $sectionInput =
       display: flex; align-items: center; justify-content: space-between;
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
-    header .titlebar { display: flex; align-items: center; gap: 0.6rem; }
+    header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     header .meta { font-size: 0.8rem; color: #888; }
     header .htitle { min-width: 0; }
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
