@@ -166,7 +166,9 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .newsection input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
 
     /* Grid: name column + 7 flexible day columns that shrink to fit narrow phones. */
-    .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 1fr); gap: 5px; align-items: center; max-width: 520px; }
+    /* Fixed day columns rather than 1fr, so the gap between squares is the 6px it
+       says it is in both directions instead of whatever's left over. */
+    .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 28px); gap: 6px; align-items: center; max-width: 520px; }
     .colhead {
       text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
@@ -190,7 +192,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
 
     .hname {
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
-      padding: 0.5rem 0.55rem; min-height: 34px; display: flex; align-items: center; overflow: hidden;
+      padding: 0.35rem 0.5rem; min-height: 28px; display: flex; align-items: center; overflow: hidden;
     }
     .hname .hlabel { color: #d9d2f0; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hname .del { display: none; margin-left: auto; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
@@ -200,7 +202,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .cell {
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
       border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
-      width: 100%; max-width: 32px; justify-self: center;
     }
     .cell.today { border-color: #34d399; background: #14251f; }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
