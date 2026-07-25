@@ -30,7 +30,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf): v
           </form>
         </div>
         <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
-          <button class="cell <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : '' ?>"
+          <button class="cell <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"
                   data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
         <?php endforeach;
 }
@@ -92,10 +92,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($habits as $h) { if (!is_section($h) && ($h['id'] ?? '') === $id) { $_SESSION['undo_habit'] = $h; break; } }
         $habits = array_values(array_filter($habits, fn($h) => is_section($h) || ($h['id'] ?? '') !== $id));
         save_habits($dataFile, $habits);
-        $undoFlag = '?undo=1';
+        $undoFlag = '?undo=1&edit=1';
     } elseif ($_POST['action'] === 'undo') {
         if (!empty($_SESSION['undo_habit'])) { $habits[] = $_SESSION['undo_habit']; unset($_SESSION['undo_habit']); save_habits($dataFile, $habits); }
     }
+    // These are all edit-mode-only controls, so hand edit mode back on the way through.
+    if ($undoFlag === '') { $undoFlag = '?edit=1'; }
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . $undoFlag);
     exit;
 }
@@ -104,7 +106,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 $habits = load_habits($dataFile);
 $today  = date('Y-m-d');
 $days   = [];
-for ($i = 6; $i >= 0; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
+// Six days back through tomorrow, so today sits second from the right and you can
+// tick something off a day early.
+for ($i = 5; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
 // Split sections from habits; group habits under their section (ungrouped first).
@@ -166,8 +170,13 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
 
     /* Grid: name column + 7 flexible day columns that shrink to fit narrow phones. */
     .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 1fr); gap: 5px; align-items: center; max-width: 520px; }
-    .colhead { text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: #888; padding-bottom: 0.4rem; }
-    .colhead.today { color: #fff; font-weight: 700; }
+    .colhead {
+      text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
+      color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
+    }
+    /* Today's whole column is tinted so it's obvious at a glance. */
+    .colhead.today { color: #34d399; font-weight: 700; background: #14251f; }
+    .colhead.ahead { color: #666; }        /* tomorrow, ticked off early */
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     .corner { }
 
@@ -195,7 +204,8 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
       border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
     }
-    .cell.today { border-color: #eee; }
+    .cell.today { border-color: #34d399; background: #14251f; }
+    .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
     .cell.done { background: #34d399; border-color: #34d399; }
     .cell.done.today { border-color: #eee; }
     .cell:active { transform: scale(0.94); }
@@ -244,7 +254,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     <div class="grid">
       <div class="corner"></div>
       <?php foreach ($days as $d): $ts = strtotime($d); ?>
-        <div class="colhead <?= $d === $today ? 'today' : '' ?>">
+        <div class="colhead <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
           <?= substr(date('D', $ts), 0, 2) ?><span class="num"><?= (int) date('j', $ts) ?></span>
         </div>
       <?php endforeach; ?>
@@ -282,9 +292,9 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     document.body.classList.toggle('editing', on);
     if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
-    localStorage.setItem('habitsEditing', on ? '1' : '0');
   };
-  setEdit(localStorage.getItem('habitsEditing') === '1');
+  // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
+  setEdit(new URLSearchParams(location.search).get('edit') === '1');
   // Undo shows only immediately after a delete (server redirects back with ?undo=1).
   if (new URLSearchParams(location.search).get('undo') === '1') {
     document.body.classList.add('can-undo');
