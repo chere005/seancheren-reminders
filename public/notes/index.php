@@ -189,19 +189,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
         case 'delete':
             $id    = (string) ($_POST['id'] ?? '');
-            foreach ($notes as $x) { if (!is_section($x) && ($x['id'] ?? '') === $id) { $_SESSION['undo_note'] = $x; break; } }
             $notes = array_values(array_filter($notes, fn($n) => is_section($n) || $n['id'] !== $id));
             save_notes($dataFile, $notes);
-            header('Location: ' . _self_path() . $vq . '&undo=1&edit=1');   // back to the list, still editing
-            exit;
-
-        case 'undo':
-            if (!empty($_SESSION['undo_note'])) {
-                $notes[] = $_SESSION['undo_note'];
-                unset($_SESSION['undo_note']);
-                save_notes($dataFile, $notes);
-            }
-            header('Location: ' . _self_path() . $vq);
+            header('Location: ' . _self_path() . $vq . '&edit=1');   // back to the list, still editing
             exit;
     }
 
@@ -275,7 +265,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="id" value="<?= e($n['id']) ?>">
-            <button class="del" type="submit" title="Delete note">&times;</button>
+            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete note">&times;</button>
           </form>
         </li>
         <?php
@@ -360,13 +350,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
-    .listbar .undo {
-      padding: 0.35rem 0.9rem; background: none; border: 1px solid #444; color: #ccc;
-      border-radius: 999px; font-size: 0.9rem; cursor: pointer; display: none; font-family: inherit;
-      margin-left: auto;   /* sits opposite + New note */
-    }
-    .listbar .undo:hover { border-color: #888; color: #fff; }
-    body.can-undo .listbar .undo { display: inline-block; }   /* only right after a delete */
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
@@ -465,15 +448,9 @@ function render_note_rows(array $rows, string $view, string $csrf): void
       <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
       <button class="newnote" type="submit">+ New note</button>
     </form>
-    <button type="button" id="undoBtn" class="undo">Undo</button>
   </div>
 
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
-  <form id="undoForm" method="post" action="" style="display:none">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="undo">
-    <input type="hidden" name="view" value="<?= e($view) ?>">
-  </form>
 
   <?= $sectionInput ?>
 
@@ -487,13 +464,12 @@ function render_note_rows(array $rows, string $view, string $csrf): void
         <span class="section-title"><?= e($sname) ?></span>
         <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
         <?= section_edit_button() ?>
-        <form method="post" action="" style="display:inline"
-              onsubmit="return confirm('Delete this section? Its notes stay, just ungrouped.')">
+        <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="delete_section">
           <input type="hidden" name="view" value="<?= e($view) ?>">
           <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del" type="submit" title="Delete section">&times;</button>
+          <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
       <?php render_note_rows($rows, $view, $csrf); ?>
@@ -546,7 +522,7 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     <textarea name="body" placeholder="Write your note…"><?= e($current['body'] ?? '') ?></textarea>
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
-      <button class="del" type="submit" name="action" value="delete">Delete</button>
+      <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete">Delete</button>
     </div>
   </form>
 <?php endif; ?>
@@ -610,7 +586,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
   if (editBtn) {
     const setEdit = (on) => {
       document.body.classList.toggle('editing', on);
-      if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
       editBtn.textContent = on ? 'Done' : 'Edit';
     };
     // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
@@ -618,14 +593,6 @@ function render_note_rows(array $rows, string $view, string $csrf): void
     editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
   }
 
-  // Undo appears only immediately after a delete (server redirects back with ?undo=1).
-  const undoBtn = document.getElementById('undoBtn');
-  if (undoBtn) undoBtn.addEventListener('click', () => document.getElementById('undoForm').submit());
-  if (new URLSearchParams(location.search).get('undo') === '1') {
-    document.body.classList.add('can-undo');
-    const u = new URL(location.href); u.searchParams.delete('undo');
-    history.replaceState(null, '', u);
-  }
 
 </script>
 <?= folder_modal_script() ?>

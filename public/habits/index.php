@@ -26,7 +26,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf): v
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_habit">
             <input type="hidden" name="id" value="<?= e($h['id']) ?>">
-            <button class="del" type="submit" title="Delete habit">&times;</button>
+            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete habit">&times;</button>
           </form>
         </div>
         <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
@@ -62,7 +62,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
-    $undoFlag = '';   // set after a delete so the page shows the Undo button
+    $stay = '?edit=1';   // these are all edit-mode controls; hand edit mode back
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
         $section = (string) ($_POST['section'] ?? '');
@@ -89,16 +89,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         save_habits($dataFile, $habits);
     } elseif ($_POST['action'] === 'delete_habit') {
         $id = (string) ($_POST['id'] ?? '');
-        foreach ($habits as $h) { if (!is_section($h) && ($h['id'] ?? '') === $id) { $_SESSION['undo_habit'] = $h; break; } }
         $habits = array_values(array_filter($habits, fn($h) => is_section($h) || ($h['id'] ?? '') !== $id));
         save_habits($dataFile, $habits);
-        $undoFlag = '?undo=1&edit=1';
-    } elseif ($_POST['action'] === 'undo') {
-        if (!empty($_SESSION['undo_habit'])) { $habits[] = $_SESSION['undo_habit']; unset($_SESSION['undo_habit']); save_habits($dataFile, $habits); }
     }
-    // These are all edit-mode-only controls, so hand edit mode back on the way through.
-    if ($undoFlag === '') { $undoFlag = '?edit=1'; }
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . $undoFlag);
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . $stay);
     exit;
 }
 
@@ -155,8 +149,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .bar .editbtn:hover { border-color: #888; color: #fff; }
     .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
     body.editing .bar #editBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .bar #undoBtn { display: none; }
-    body.can-undo .bar #undoBtn { display: inline-block; }   /* only right after a delete */
 
     /* + New section — left-aligned amber pill above the day grid. */
     .newsection { margin: 0 0 1.1rem; }
@@ -239,7 +231,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
         </select>
       <?php endif; ?>
     </form>
-    <button type="button" id="undoBtn" class="editbtn">Undo</button>
   </div>
 
   <form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==''">
@@ -268,7 +259,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="id" value="<?= e($s['id']) ?>">
-            <button class="del" type="submit" title="Delete section">&times;</button>
+            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
         <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf); ?>
@@ -277,10 +268,6 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <?php endif; ?>
 </div>
 
-<form id="undoForm" method="post" action="" style="display:none">
-  <input type="hidden" name="csrf" value="<?= $csrf ?>">
-  <input type="hidden" name="action" value="undo">
-</form>
 
 <?php render_tabbar('habits'); ?>
 <script>
@@ -290,18 +277,11 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   const editBtn = document.getElementById('editBtn');
   const setEdit = (on) => {
     document.body.classList.toggle('editing', on);
-    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     editBtn.textContent = on ? 'Done' : 'Edit';
   };
   // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
   setEdit(new URLSearchParams(location.search).get('edit') === '1');
-  // Undo shows only immediately after a delete (server redirects back with ?undo=1).
-  if (new URLSearchParams(location.search).get('undo') === '1') {
-    document.body.classList.add('can-undo');
-    history.replaceState(null, '', location.pathname);
-  }
   editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
-  document.getElementById('undoBtn').addEventListener('click', () => document.getElementById('undoForm').submit());
 
   // Tap a cell -> toggle that day for the habit (no reload).
   document.querySelectorAll('.cell').forEach(cell => {

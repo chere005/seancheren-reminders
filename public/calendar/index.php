@@ -98,11 +98,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $text    = trim((string) ($_POST['text'] ?? ''));
     $kind    = (string) ($_POST['kind'] ?? '');
     $id      = (string) ($_POST['id'] ?? '');
-    // Return to the item's day (so the bottom panel shows it), else the panel's day.
+    // Stay on the day you were looking at, even if the edit moved the item to another
+    // one — jumping the calendar out from under you is more disorienting than useful.
+    // Only fall back to the item's own date when we don't know which day was open.
     $dayParam = (string) ($_POST['day'] ?? '');
-    $retDay   = $dateOk ? $date : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dayParam) ? $dayParam : '');
+    $retDay   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dayParam) ? $dayParam : ($dateOk ? $date : '');
     $ym       = $retDay !== '' ? substr($retDay, 0, 7) : ((string) ($_POST['ym'] ?? date('Y-m')));
-    $undoFlag = '';   // set after a delete so the Undo button appears
+    $stay = '';   // extra query bits for the redirect (e.g. keep edit mode on)
 
     // --- Manage calendars / calendar sets (AJAX: answers with the fresh list, no reload) ---
     if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder',
@@ -128,8 +130,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         } elseif ($action === 'cal_color') {
             $color = (string) ($_POST['color'] ?? '');
             if (in_array($color, CAL_COLORS, true)) {
-                foreach ($calList as &$c) {
-                    if (!is_calset($c) && ($c['id'] ?? '') === $id) { $c['color'] = $color; break; }
+                foreach ($calList as &$c) {   // sets carry a colour too
+                    if (($c['id'] ?? '') === $id) { $c['color'] = $color; break; }
                 }
                 unset($c);
             }
@@ -141,6 +143,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $calList = array_merge($cals, $sets);
         } elseif ($action === 'set_add' && $name !== '') {
             $calList[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'set', 'name' => $name,
+                          'color' => CAL_COLORS[count($calList) % count(CAL_COLORS)],
                           'cals' => [], 'created' => time()];
         } elseif ($action === 'set_delete') {
             $calList = array_values(array_filter($calList, fn($c) => !(is_calset($c) && ($c['id'] ?? '') === $id)));
@@ -266,25 +269,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== '') {
         $file = user_data_file($cfg['data_dir'], $spec['base']);
         $list = load_json_list($file);
-        foreach ($list as $it) { if (($it['id'] ?? '') === $id) { $_SESSION['undo_cal'] = ['base' => $spec['base'], 'item' => $it]; break; } }
         $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
         save_json_list($file, $list);
-        $undoFlag = '&undo=1&edit=1';   // deleting is edit-mode only; hand it back
-    } elseif ($action === 'undo_item') {
-        $undoFlag = '&edit=1';
-        if (!empty($_SESSION['undo_cal'])) {
-            $u      = $_SESSION['undo_cal'];
-            $file   = user_data_file($cfg['data_dir'], $u['base']);
-            $list   = load_json_list($file);
-            $list[] = $u['item'];
-            save_json_list($file, $list);
-            unset($_SESSION['undo_cal']);
-        }
+        $stay = '&edit=1';   // deleting is edit-mode only; hand it back
     }
 
     $loc = _self_path() . '?ym=' . $ym;
     if ($retDay !== '') { $loc .= '&day=' . $retDay; }
-    header('Location: ' . $loc . $undoFlag);
+    header('Location: ' . $loc . $stay);
     exit;
 }
 
@@ -480,13 +472,40 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
-    /* Visible-calendar picker, under the back button / title. */
-    .calpick { margin: -0.5rem 0 0.9rem; }
-    .calpick select {
+    /* Visible-calendar picker, under the back button / title. Hand-built rather than a
+       <select> so each entry can carry its calendar's colour dot. */
+    .calpick { margin: -0.5rem 0 0.9rem; position: relative; }
+    .calpick-btn {
+      display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
       background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px;
-      padding: 0.3rem 0.7rem; font-size: 16px; font-family: inherit; max-width: 100%;
+      padding: 0.3rem 0.7rem; font-size: 16px; font-family: inherit; cursor: pointer;
     }
-    .calpick select:focus { outline: none; border-color: #888; }
+    .calpick-btn:hover { border-color: #888; }
+    .calpick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .calpick-chev { color: #888; font-size: 0.75rem; }
+    .calpick .cdot {
+      flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #555;
+    }
+    .calpick .cdot.all {
+      background: conic-gradient(#38bdf8, #34d399, #facc15, #f472b6, #38bdf8);
+    }
+    .calpick-menu {
+      position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 210px;
+      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
+      background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
+    }
+    .calpick-menu[hidden] { display: none; }
+    .calpick-group {
+      color: #777; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; padding: 0.5rem 0.6rem 0.25rem;
+    }
+    .calpick-opt {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem;
+      border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
+    }
+    .calpick-opt:hover { background: #262626; color: #fff; }
+    .calpick-opt.on { background: #14251f; color: #34d399; font-weight: 600; }
 
     .monthnav {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
@@ -546,10 +565,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
     body.show-done .dp-head #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
-    .dp-head .dp-undo { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 999px;
-      padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; }
-    .dp-head .dp-undo:hover { border-color: #888; color: #fff; }
-    body.can-undo .dp-head .dp-undo { display: inline-block; }   /* only right after a delete */
     .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
     body.editing .dp-item .dp-del { display: inline-block; }
@@ -740,33 +755,43 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     </div>
   </header>
 
+  <?php
+    // Custom picker rather than a <select>: a native option can't carry a colour dot.
+    $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
+    if ($setsOnly) {
+      $pickGroups[] = ['Calendar sets', array_map(fn($x) => [$x['id'], $x['name'], $x['color'] ?? '#94a3b8'], $setsOnly)];
+    }
+    if ($sharedCals || $sharedFolders) {
+      $pickGroups[] = [share_name($partner), array_merge(
+        array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $sharedCals),
+        array_map(fn($f) => ['f:' . $f, $f, '#34d399'], $sharedFolders))];
+    }
+    // What the closed button shows.
+    $curName = 'All calendars'; $curColor = '';
+    foreach ($pickGroups as [$gl, $opts]) {
+      foreach ($opts as [$v, $n, $col]) { if ($calView === $v) { $curName = $n; $curColor = $col; } }
+    }
+  ?>
   <div class="calpick">
-    <select id="calSel" aria-label="Visible calendar">
-      <option value="all"<?= $calView === 'all' ? ' selected' : '' ?>>All calendars</option>
-      <?php $anyShared = $sharedCals || $sharedFolders; ?>
-      <optgroup label="<?= e(share_name($me)) ?>">
-        <?php foreach ($calsOnly as $c): ?>
-          <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+    <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false">
+      <span class="cdot" style="background:<?= e($curColor) ?>;<?= $curColor === '' ? 'display:none' : '' ?>"></span>
+      <span class="calpick-name"><?= e($curName) ?></span>
+      <span class="calpick-chev">&#9662;</span>
+    </button>
+    <div class="calpick-menu" id="calSelMenu" role="listbox" hidden>
+      <a class="calpick-opt<?= $calView === 'all' ? ' on' : '' ?>" href="?cal=all">
+        <span class="cdot all"></span><span>All calendars</span>
+      </a>
+      <?php foreach ($pickGroups as [$glabel, $opts]): ?>
+        <?php if (!$opts) { continue; } ?>
+        <div class="calpick-group"><?= e($glabel) ?></div>
+        <?php foreach ($opts as [$val, $name, $col]): ?>
+          <a class="calpick-opt<?= $calView === $val ? ' on' : '' ?>" href="?cal=<?= urlencode($val) ?>">
+            <span class="cdot" style="background:<?= e($col) ?>"></span><span><?= e($name) ?></span>
+          </a>
         <?php endforeach; ?>
-      </optgroup>
-      <?php if ($setsOnly): ?>
-        <optgroup label="Calendar sets">
-          <?php foreach ($setsOnly as $s): ?>
-            <option value="<?= e($s['id']) ?>"<?= $calView === $s['id'] ? ' selected' : '' ?>><?= e($s['name']) ?></option>
-          <?php endforeach; ?>
-        </optgroup>
-      <?php endif; ?>
-      <?php if ($anyShared): ?>
-        <optgroup label="<?= e(share_name($partner)) ?>">
-          <?php foreach ($sharedCals as $c): ?>
-            <option value="<?= e($c['id']) ?>"<?= $calView === $c['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
-          <?php endforeach; ?>
-          <?php foreach ($sharedFolders as $f): ?>
-            <option value="f:<?= e($f) ?>"<?= $calView === 'f:' . $f ? ' selected' : '' ?>><?= e($f) ?></option>
-          <?php endforeach; ?>
-        </optgroup>
-      <?php endif; ?>
-    </select>
+      <?php endforeach; ?>
+    </div>
   </div>
 
   <div class="monthnav">
@@ -828,7 +853,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <span class="dp-date" id="dpDate">Select a day</span>
     <button type="button" id="calShowAll">Show Completed</button>
     <span class="dp-gap"></span>
-    <button class="dp-undo" id="dpUndo" type="button">Undo</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
@@ -873,7 +897,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       </select>
     </div>
     <div class="buttons">
-      <button type="button" class="del" id="mDelete" hidden>Delete</button>
+      <button type="button" class="del needs-confirm" data-confirm="Tap again to delete" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
       <button type="submit" class="ok" id="mOk">Add</button>
     </div>
@@ -963,14 +987,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <input type="hidden" name="id" id="diId" value="">
   <input type="hidden" name="ym" value="<?= e($ym) ?>">
   <input type="hidden" name="day" id="diDay" value="">
-</form>
-
-<!-- Hidden form to undo the last day-panel delete -->
-<form id="undoItemForm" method="post" action="" style="display:none">
-  <input type="hidden" name="csrf" value="<?= $csrf ?>">
-  <input type="hidden" name="action" value="undo_item">
-  <input type="hidden" name="ym" value="<?= e($ym) ?>">
-  <input type="hidden" name="day" id="uiDay" value="">
 </form>
 
 <?php render_tabbar('calendar'); ?>
@@ -1072,7 +1088,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   // Delete submits with its own action.
   mDelete.addEventListener('click', () => {
-    if (!confirm('Delete this item?')) return;
     mAction.value = 'delete_item';
     mText.removeAttribute('required');     // don't block submit on empty text
     form.submit();
@@ -1195,7 +1210,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       row.appendChild(chev);
       if (!it.owner) {
         const del = document.createElement('button');
-        del.className = 'dp-del'; del.textContent = '×'; del.title = 'Delete';
+        del.className = 'dp-del needs-confirm'; del.textContent = '×'; del.title = 'Delete';
+        del.dataset.confirm = '×?';
         del.addEventListener('click', (ev) => {
           ev.stopPropagation();
           document.getElementById('diKind').value = it.kind;
@@ -1260,18 +1276,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   dpEdit.textContent = document.body.classList.contains('editing') ? 'Done' : 'Edit';
   dpEdit.addEventListener('click', () => {
     const on = document.body.classList.toggle('editing');
-    if (!on) document.body.classList.remove('can-undo');   // tapping Done clears the Undo button
     dpEdit.textContent = on ? 'Done' : 'Edit';
-  });
-  // Undo shows only right after a delete (server redirects back with ?undo=1).
-  if (new URLSearchParams(location.search).get('undo') === '1') {
-    document.body.classList.add('can-undo');
-    const u = new URL(location.href); u.searchParams.delete('undo');
-    history.replaceState(null, '', u);
-  }
-  document.getElementById('dpUndo').addEventListener('click', () => {
-    document.getElementById('uiDay').value = selected || '';
-    document.getElementById('undoItemForm').submit();
   });
 
   // ---- Calendars & calendar sets ----
@@ -1337,9 +1342,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       li.append(handle, sw, name);
       if (cals.length > 1) {                 // never leave the user with no calendar
         const del = document.createElement('button');
-        del.type = 'button'; del.className = 'cdel'; del.textContent = '×'; del.title = 'Delete calendar';
+        del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
+        del.dataset.confirm = 'Delete?';
         del.addEventListener('click', () => {
-          if (confirm('Delete "' + c.name + '"? Its events move to ' + cals[0].name + '.')) calApi('cal_delete', { id: c.id });
+          calApi('cal_delete', { id: c.id });   // second press: the arming already confirmed it
         });
         li.appendChild(del);
       }
@@ -1376,6 +1382,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     sets.forEach(s => {
       const li = document.createElement('li');
       li.className = 'setrow'; li.dataset.id = s.id;
+      const sw = document.createElement('button');
+      sw.type = 'button'; sw.className = 'cswatch';
+      sw.style.background = s.color || '#94a3b8'; sw.title = 'Choose colour';
+      sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, s.id); });
       const name = document.createElement('span');
       name.className = 'cname'; name.textContent = s.name;
       const count = document.createElement('span');
@@ -1383,12 +1393,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       const n = (s.cals || []).length;
       count.textContent = n + (n === 1 ? ' calendar' : ' calendars');
       const del = document.createElement('button');
-      del.type = 'button'; del.className = 'cdel'; del.textContent = '×'; del.title = 'Delete set';
+      del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete set';
+      del.dataset.confirm = 'Delete?';
       del.addEventListener('click', e => {
         e.stopPropagation();
-        if (confirm('Delete the set "' + s.name + '"?')) calApi('set_delete', { id: s.id });
+        calApi('set_delete', { id: s.id });   // second press: the arming already confirmed it
       });
-      li.append(name, count, del);
+      li.append(sw, name, count, del);
       li.addEventListener('click', () => openSetPicker(s));
       setRows.appendChild(li);
     });
@@ -1550,13 +1561,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   document.getElementById('calDone').addEventListener('click', closeCalModal);
   calModal.addEventListener('click', e => { if (e.target === calModal) closeCalModal(); });
 
-  // Picking the visible calendar / set.
-  document.getElementById('calSel').addEventListener('change', function () {
-    const u = new URL(location.href);
-    u.searchParams.set('cal', this.value);
-    if (selected) u.searchParams.set('day', selected);
-    location.href = u.toString();
-  });
+  // Picking the visible calendar / set. Hand-built popover rather than a <select>,
+  // so each entry can carry its calendar's colour dot.
+  (function () {
+    const btn = document.getElementById('calSelBtn'), menu = document.getElementById('calSelMenu');
+    const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+      btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    // Carry the open day across, the way the old select did.
+    menu.querySelectorAll('.calpick-opt').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const u = new URL(a.href, location.href);
+        if (selected) u.searchParams.set('day', selected);
+        u.searchParams.set('ym', '<?= e($ym) ?>');
+        location.href = u.toString();
+      });
+    });
+  })();
 
   document.getElementById('mCancel').addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
