@@ -502,6 +502,7 @@ $sectionInput =
 
     /* Completed sits on the folder-dropdown row, sized to match it. */
     /* One height for everything on this row, whichever of them is showing. */
+    .foldernav { padding-left: 2rem; }   /* line the dropdown up with the section names */
     .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
       background: none; color: #888; border: 1px solid #333; border-radius: 999px;
@@ -636,6 +637,7 @@ $sectionInput =
       background: none; border: 1px solid #444; color: #ccc; cursor: pointer;
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
     }
+    .check { padding: 0.25rem 0.4rem; }
     .check:hover { border-color: #7a7; color: #7a7; }
     .del:hover { border-color: #f66; color: #f66; }
 
