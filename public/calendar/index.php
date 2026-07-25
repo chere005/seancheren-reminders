@@ -108,7 +108,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // --- Manage calendars / calendar sets (AJAX: answers with the fresh list, no reload) ---
     if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder',
-                           'set_add', 'set_delete', 'set_members', 'cal_default'], true)) {
+                           'set_add', 'set_delete', 'set_members', 'set_reorder', 'cal_default'], true)) {
         $calIdsNow = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
         $name      = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
 
@@ -135,6 +135,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 }
                 unset($c);
             }
+        } elseif ($action === 'set_reorder') {
+            // Sets keep their own order; calendars stay ahead of them in the list.
+            $pos  = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
+            $cals = array_values(array_filter($calList, fn($c) => !is_calset($c)));
+            $sets = array_values(array_filter($calList, 'is_calset'));
+            usort($sets, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
+            $calList = array_merge($cals, $sets);
         } elseif ($action === 'cal_reorder') {
             $pos  = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
             $cals = array_values(array_filter($calList, fn($c) => !is_calset($c)));
@@ -559,7 +566,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
     .dp-head .dp-gap { flex: 1; }          /* pushes Undo/Edit/Add to the right */
-    /* Show Completed sits right of the day, styled to line up with the Edit button. */
+    /* Show Completed sits just left of + Add, at the same size. */
     .dp-head #calShowAll {
       background: none; border: 1px solid #333; color: #888; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit; white-space: nowrap;
@@ -852,8 +859,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <div class="dp-head">
     <span class="dp-date" id="dpDate">Select a day</span>
-    <button type="button" id="calShowAll">Show Completed</button>
     <span class="dp-gap"></span>
+    <button type="button" id="calShowAll">Show Completed</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
@@ -1384,6 +1391,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     sets.forEach(s => {
       const li = document.createElement('li');
       li.className = 'setrow'; li.dataset.id = s.id;
+      const handle = document.createElement('span');
+      handle.className = 'chandle'; handle.textContent = '☰'; handle.title = 'Drag to reorder';
       const sw = document.createElement('button');
       sw.type = 'button'; sw.className = 'cswatch';
       sw.style.background = s.color || '#94a3b8'; sw.title = 'Choose colour';
@@ -1401,7 +1410,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         e.stopPropagation();
         calApi('set_delete', { id: s.id, confirm: 1 });   // the arming already confirmed it
       });
-      li.append(sw, name, count, del);
+      li.append(handle, sw, name, count, del);
       li.addEventListener('click', () => openSetPicker(s));
       setRows.appendChild(li);
     });
@@ -1514,30 +1523,35 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   document.getElementById('setCancel').addEventListener('click', () => setModal.classList.remove('open'));
   setModal.addEventListener('click', e => { if (e.target === setModal) setModal.classList.remove('open'); });
 
-  // Drag to reorder calendars (pointer events, so it works by touch).
-  let dragCal = null;
-  calRows.addEventListener('pointerdown', e => {
-    const h = e.target.closest('.chandle'); if (!h) return;
-    e.preventDefault();
-    dragCal = h.closest('li'); dragCal.classList.add('dragging');
-    try { h.setPointerCapture(e.pointerId); } catch (_) {}
-  });
-  calRows.addEventListener('pointermove', e => {
-    if (!dragCal) return;
-    const el   = document.elementFromPoint(e.clientX, e.clientY);
-    const over = el && el.closest('#calRows li');
-    if (over && over !== dragCal) {
-      const r = over.getBoundingClientRect();
-      calRows.insertBefore(dragCal, (e.clientY < r.top + r.height / 2) ? over : over.nextSibling);
-    }
-  });
-  const endCalDrag = () => {
-    if (!dragCal) return;
-    dragCal.classList.remove('dragging'); dragCal = null;
-    calApi('cal_reorder', { order: JSON.stringify([...calRows.querySelectorAll('li')].map(li => li.dataset.id)) });
+  // Drag to reorder, for calendars and for sets (pointer events, so touch works).
+  // Both lists behave the same; only the action they save under differs.
+  const wireReorder = (list, action) => {
+    let dragging = null;
+    list.addEventListener('pointerdown', e => {
+      const h = e.target.closest('.chandle'); if (!h) return;
+      e.preventDefault();
+      dragging = h.closest('li'); dragging.classList.add('dragging');
+      try { h.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    list.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const el   = document.elementFromPoint(e.clientX, e.clientY);
+      const over = el && el.closest('li');
+      if (over && over !== dragging && over.parentNode === list) {
+        const r = over.getBoundingClientRect();
+        list.insertBefore(dragging, (e.clientY < r.top + r.height / 2) ? over : over.nextSibling);
+      }
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging.classList.remove('dragging'); dragging = null;
+      calApi(action, { order: JSON.stringify([...list.querySelectorAll('li[data-id]')].map(li => li.dataset.id)) });
+    };
+    list.addEventListener('pointerup', end);
+    list.addEventListener('pointercancel', end);
   };
-  calRows.addEventListener('pointerup', endCalDrag);
-  calRows.addEventListener('pointercancel', endCalDrag);
+  wireReorder(calRows, 'cal_reorder');
+  wireReorder(setRows, 'set_reorder');
 
   const addCal = () => {
     const i = document.getElementById('calName');

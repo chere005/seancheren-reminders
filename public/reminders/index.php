@@ -138,7 +138,11 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
     echo '<ul class="rlist" data-section="' . e($section) . '">';   // always emit (empty = drop target)
     foreach ($rows as $r) {
         $done    = !empty($r['done']);
-        $overdue = !empty($r['due']) && !$done && $r['due'] < $today;
+        // Past / today / future, so a glance at the chip tells you where it sits.
+        $when = '';
+        if (!empty($r['due'])) {
+            $when = $r['due'] < $today ? 'past' : ($r['due'] === $today ? 'today' : 'future');
+        }
         ?>
         <li class="<?= $done ? 'done' : '' ?>"
             data-id="<?= e($r['id']) ?>"
@@ -160,7 +164,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             <span class="attime"><?= e(date('g:ia', strtotime($r['time']))) ?></span>
           <?php endif; ?>
           <?php if (!empty($r['due'])): ?>
-            <span class="due <?= $overdue ? 'overdue' : '' ?>"><?= e($r['due']) ?></span>
+            <span class="due <?= $when ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -604,10 +608,12 @@ $sectionInput =
     }
     .textedit:focus { outline: none; border-color: #888; }
     .due {
-      font-size: 0.75rem; color: #7a7; background: #142; padding: 0.15rem 0.5rem;
-      border-radius: 999px; white-space: nowrap;
+      font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap;
+      color: #888; background: #222;
     }
-    .due.overdue { color: #f99; background: #411; }
+    .due.past   { color: #f0a860; background: #3a2410; }   /* gone by */
+    .due.today  { color: #34d399; background: #06251b; }   /* due today */
+    .due.future { color: #7dd3fc; background: #0c2a3a; }   /* still ahead */
     .check, .del {
       background: none; border: 1px solid #444; color: #ccc; cursor: pointer;
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;

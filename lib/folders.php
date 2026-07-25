@@ -133,7 +133,6 @@ function render_folder_select(array $groups, string $active, string $extra = '')
 {
     ?>
     <div class="foldernav">
-      <?= $extra ?>
       <select id="folderSel" class="foldersel" aria-label="Folder">
         <option value="All"<?= ($active === 'All' || $active === '') ? ' selected' : '' ?>>All</option>
         <?php foreach ($groups as $g): ?>
@@ -147,6 +146,7 @@ function render_folder_select(array $groups, string $active, string $extra = '')
           <?php if ($g['label'] !== ''): ?></optgroup><?php endif; ?>
         <?php endforeach; ?>
       </select>
+      <?= $extra ?>
     </div>
     <script>
       document.getElementById('folderSel').addEventListener('change', function () {
