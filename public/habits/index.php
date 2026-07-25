@@ -138,7 +138,9 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     header nav .who { color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
 
     .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    body:not(.editing) .bar { justify-content: flex-end; }   /* Edit keeps the right edge */
     .bar form.addh { flex: 1 1 220px; }
+    body:not(.editing) .bar form.addh { display: none; }   /* edit mode only */
     .bar input[type=text] {
       width: 100%; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px dashed #4a3f6a;
       border-radius: 8px; color: #b9a7f5; font-size: 1rem;
@@ -154,6 +156,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
 
     /* + New section — left-aligned amber pill above the day grid. */
     .newsection { margin: 0 0 1.1rem; }
+    body:not(.editing) .newsection { display: none; }   /* edit mode only */
     .newsection input {
       width: 220px; max-width: 100%; padding: 0.45rem 0.85rem; background: #1a1a1a;
       border: 1px dashed #4a3f6a; border-radius: 999px; color: #b9a7f5; font-size: 16px;
@@ -237,7 +240,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   </form>
 
   <?php if (!$habitItems && !$sections): ?>
-    <p class="empty">No habits yet. Add one above, then tap a day to mark it done.</p>
+    <p class="empty">No habits yet. Tap Edit to add one, then tap a day to mark it done.</p>
   <?php else: ?>
     <div class="grid">
       <div class="corner"></div>

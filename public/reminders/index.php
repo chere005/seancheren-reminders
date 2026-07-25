@@ -368,9 +368,11 @@ $sectionInput =
       display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center;
     }
     form.add input[type=text] {
-      flex: 1 1 100%; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333;
+      flex: 1 1 8rem; min-width: 0; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 1rem;
     }
+    /* Forces Edit/Undo onto their own row, so the top row is text + "+ Date" + Add. */
+    form.add .rowbreak { flex: 1 1 100%; height: 0; margin: 0; }
     form.add input[type=date] {
       padding: 0.6rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
@@ -396,11 +398,12 @@ $sectionInput =
     /* Completed reminders + the clear button stay hidden until "DONE?" is toggled on */
     body:not(.show-done) li.done { display: none; }
     body:not(.show-done) footer { display: none; }
+    /* Same pill as Edit/Add, kept green so it still reads as the date affordance. */
     form.add .adddate {
-      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
-      padding: 0 0.8rem; height: 100%; min-height: 2.4rem; font-size: 0.9rem; cursor: pointer;
+      background: none; border: 1px solid #3a5a4d; color: #34d399; border-radius: 999px;
+      padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; white-space: nowrap;
     }
-    form.add .adddate:hover { background: #14251f; }
+    form.add .adddate:hover { border-color: #34d399; background: #14251f; }
     form.add .datewrap { display: inline-flex; align-items: center; gap: 0.35rem; }
     form.add .datewrap[hidden] { display: none; }   /* make [hidden] win over inline-flex */
     form.add .cleardate {
@@ -478,6 +481,7 @@ $sectionInput =
     footer button:hover { color: #f66; }
 <?= folder_nav_styles() ?>
     .newsection { margin: 0 0 0.6rem; }
+    body:not(.editing) .newsection { display: none; }   /* edit mode only */
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px;   /* 16px stops iOS zoom on focus */
@@ -517,6 +521,8 @@ $sectionInput =
       <input type="date" name="due" id="dueInput" title="Optional due date">
       <button type="button" class="cleardate" id="clearDateBtn" title="Remove date">&times;</button>
     </span>
+    <button type="submit">Add</button>
+    <span class="rowbreak"></span>
     <?php if ($sections): ?>
       <select name="section" class="secsel" title="Add to section">
         <option value="">Reminders</option>
@@ -527,7 +533,6 @@ $sectionInput =
     <?php endif; ?>
     <button type="button" id="undoBtn" class="editbtn">Undo</button>
     <button type="button" id="editBtn" class="editbtn">Edit</button>
-    <button type="submit">Add</button>
   </form>
   <form id="undoForm" method="post" action="" style="display:none">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">

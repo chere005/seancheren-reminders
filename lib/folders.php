@@ -93,6 +93,7 @@ function folder_nav_styles(): string
     .foldernav .chip:hover { border-color: #666; color: #ddd; }
     .foldernav .chip.active { background: #14251f; border-color: #34d399; color: #34d399; }
     .foldernav .newfolder { margin-left: auto; }
+    body:not(.editing) .foldernav .newfolder { display: none; }   /* edit mode only */
     .foldernav .newfolder input {
       width: 150px; padding: 0.3rem 0.7rem; background: #1a1a1a; border: 1px dashed #3a5a4d;
       border-radius: 999px; color: #34d399; font-size: 16px;   /* 16px stops iOS from zooming on focus */
