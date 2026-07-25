@@ -233,10 +233,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                    'cal' => $evCalOk, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
-        $file = user_data_file($cfg['data_dir'], 'reminders');
-        $list = load_json_list($file);
+        // A reminder belongs to a folder and a group, never to a calendar. It lands in
+        // whichever folder Reminders is set to add to, under the group picked here.
+        $file    = user_data_file($cfg['data_dir'], 'reminders');
+        $list    = load_json_list($file);
+        $section = (string) ($_POST['section'] ?? '');
+        $secOk   = [CALENDAR_SECTION => true];
+        foreach ($list as $it) { if (($it['type'] ?? '') === 'section') { $secOk[(string) $it['name']] = true; } }
+        if ($section !== '' && !isset($secOk[$section])) { $section = ''; }
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
-                   'due' => $effDate, 'time' => $ptime, 'done' => false, 'created' => time()];
+                   'due' => $effDate, 'time' => $ptime, 'done' => false,
+                   'folder' => folder_default_get($cfg['data_dir'], 'reminders'),
+                   'section' => $section, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_note' && $text !== '') {
         $file  = user_data_file($cfg['data_dir'], 'notes');
@@ -694,6 +702,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
     }
+    .modal .calrow .tlabel { font-size: 0.85rem; color: #aaa; }
+    .modal .calrow .secnote { font-size: 0.78rem; color: #777; white-space: nowrap; }
 
     /* --- Manage-calendars modal --- */
     .calmodal { max-height: 85vh; overflow-y: auto; }
@@ -923,6 +933,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <?php endforeach; ?>
       </select>
     </div>
+    <?php
+      // Reminders answer to a group, not a calendar. The list is the groups in the
+      // folder new reminders go to, with the two permanent ones at the top.
+      $remDefFolder = folder_default_get($cfg['data_dir'], 'reminders');
+      $remSections  = [];
+      foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $it) {
+          if (($it['type'] ?? '') !== 'section') { continue; }
+          $nm = (string) ($it['name'] ?? '');
+          if ($nm !== '' && !in_array($nm, $remSections, true)
+              && strcasecmp($nm, CALENDAR_SECTION) !== 0) { $remSections[] = $nm; }
+      }
+    ?>
+    <div class="calrow" id="mSecRow" hidden>
+      <span class="tlabel">Group</span>
+      <select name="section" id="mSec">
+        <option value="<?= CALENDAR_SECTION ?>"><?= CALENDAR_SECTION ?></option>
+        <option value="">Reminders</option>
+        <?php foreach ($remSections as $sname): ?>
+          <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <span class="secnote">in <?= e($remDefFolder) ?></span>
+    </div>
     <div class="buttons">
       <button type="button" class="del needs-confirm" data-confirm="Tap again to delete" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
@@ -1054,12 +1087,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const mTime    = document.getElementById('mTime');
   const mCalRow  = document.getElementById('mCalRow');
   const mCal     = document.getElementById('mCal');
-  // Time and calendar are event-only fields, so they show and hide together.
-  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; };
-  const hideTime = () => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; };
+  const mSecRow  = document.getElementById('mSecRow');
+  // Time and calendar are event-only fields, so they show and hide together. A
+  // reminder gets the group picker in their place — it belongs to a folder, not a calendar.
+  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };
+  const hideTime = (kind) => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
   document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
-    r.addEventListener('change', () => { if (r.checked) (r.value === 'event' ? showTime(mTime.value) : hideTime()); });
+    r.addEventListener('change', () => { if (r.checked) (r.value === 'event' ? showTime(mTime.value) : hideTime(r.value)); });
   });
   const fmtTime = (t) => {
     const [h, m] = t.split(':').map(Number);
@@ -1097,7 +1132,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
-    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); } else { hideTime(); }
+    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); } else { hideTime(''); }
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
