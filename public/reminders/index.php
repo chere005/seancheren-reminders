@@ -255,7 +255,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 save_reminders($dataFile, $list);
             }
         }
-        header('Location: ' . $editBack);
+        // Stay in edit mode only if we were already in it (the form carries `edit` while
+        // editing) — adding a section shouldn't drag you into edit mode on its own.
+        header('Location: ' . $backUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
     if ($_POST['action'] === 'rename_section') {
@@ -540,12 +542,13 @@ $sectionInput =
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
     body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
-    /* The + on each section header, and the row it opens. */
+    /* The + on each section header, and the row it opens. The "+" sits slightly low in
+       the flex box, so nudge it up (padding-bottom, with border-box) to centre it. */
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex;
-      align-items: center; justify-content: center;
+      align-items: center; justify-content: center; padding: 0 0 2px;
     }
     .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
@@ -559,7 +562,7 @@ $sectionInput =
     .secadd-row .plus {
       flex: 0 0 auto; width: 38px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
-      display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0 0 2px;
     }
     .secadd-row .plus:hover { background: #52e0ac; }
     /* A time picked out of the typed text, e.g. "2pm". */
@@ -713,14 +716,11 @@ $sectionInput =
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
-      border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1.2; font-weight: 700;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0 0 2px; background: #f0b429; color: #241a00;
+      border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
     .newsection .plus:hover { background: #f7c95a; }
-    /* A section with nothing in it under the current folder: out of the way normally,
-       visible while editing so you can see the one you just made and fill it. */
-    body:not(.editing) .section-group.folder-empty { display: none; }
     .newsection input {
       width: 190px; max-width: 100%; padding: 0.3rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
       border-radius: 999px; color: #f0b429; font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
@@ -770,10 +770,10 @@ $sectionInput =
    <div id="rlist-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
-      <?php // An empty section is noise inside a folder view, but it still has to be
-            // there while editing — otherwise a section you just added vanishes on the
-            // way back, since it has no rows yet. CSS hides it, edit mode brings it back. ?>
-      <div class="section-group<?= (!$rows && $view !== 'All') ? ' folder-empty' : '' ?>" data-section="<?= e($sname) ?>">
+      <?php // Sections always render, empty or not — the same as the permanent Calendar
+            // and Reminders groups below — so a section you add stays put when you switch
+            // folders and there's always a "+" to add the first item against. ?>
+      <div class="section-group" data-section="<?= e($sname) ?>">
         <div class="section-head">
           <?php render_section_add_button($sname); ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>

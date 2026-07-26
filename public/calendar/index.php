@@ -1306,7 +1306,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     // folded is a display preference, so it's remembered per kind.
     const showDone = document.body.classList.contains('show-done');
     const groups   = {};
-    for (const kind of ['reminder', 'event', 'note']) {
+    for (const kind of ['event', 'reminder', 'note']) {   // legend order: events, reminders, notes
       if (!items.some(it => it.kind === kind && (showDone || !it.done))) continue;
       const wrap = document.createElement('div');
       wrap.className = 'dp-group';
