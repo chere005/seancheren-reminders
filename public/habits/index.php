@@ -19,7 +19,7 @@ function save_habits(string $f, array $h): void { store_write($f, array_values($
 function is_section(array $it): bool { return ($it['type'] ?? '') === 'section'; }
 
 // Render one habit's name bubble + 7 day cells into the grid.
-function render_habit_row(array $h, array $days, string $today, string $csrf): void { ?>
+function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0): void { ?>
         <div class="hname">
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
           <form method="post" action="" style="display:inline">
@@ -29,8 +29,8 @@ function render_habit_row(array $h, array $days, string $today, string $csrf): v
             <button class="del needs-confirm" type="submit" title="Delete habit">&times;</button>
           </form>
         </div>
-        <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
-          <button class="cell <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"
+        <?php foreach ($days as $i => $d): $done = !empty($h['done'][$d]); ?>
+          <button class="cell <?= $i < $extra ? 'wide-only' : '' ?> <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"
                   data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
         <?php endforeach;
 }
@@ -118,9 +118,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 $habits = load_habits($dataFile);
 $today  = date('Y-m-d');
 $days   = [];
-// Six days back through tomorrow, so today sits second from the right and you can
-// tick something off a day early.
-for ($i = 5; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
+// Nine days back through tomorrow, so today sits second from the right and you can
+// tick something off a day early. A narrow screen only has room for seven, so the
+// three oldest are rendered anyway and hidden by CSS — the grid is one layout with
+// a column count that changes, not two renders.
+for ($i = 8; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
+$extraDays = count($days) - 7;   // the columns only a wide screen shows
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
 // Split sections from habits; group habits under their section (ungrouped first).
@@ -179,7 +182,13 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     /* Grid: name column + 7 day columns. The squares take whatever the screen
        gives them, up to 56px, and the name column absorbs the rest — so the grid
        always spans the page width instead of stopping short of the username. */
-    .grid { display: grid; grid-template-columns: minmax(52px, 1fr) repeat(7, minmax(0, 56px)); gap: 6px; align-items: center; width: 100%; }
+    .grid { display: grid; grid-template-columns: minmax(52px, 1fr) repeat(10, minmax(0, 52px)); gap: 6px; align-items: center; width: 100%; }
+    /* Seven days is all a phone has room for; the three oldest columns are in the
+       DOM either way, so this is one grid with a different column count. */
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: minmax(52px, 1fr) repeat(7, minmax(0, 56px)); }
+      .wide-only { display: none; }
+    }
     .colhead {
       text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
@@ -265,13 +274,13 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <?php else: ?>
     <div class="grid">
       <div class="corner"></div>
-      <?php foreach ($days as $d): $ts = strtotime($d); ?>
-        <div class="colhead <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
+      <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
+        <div class="colhead <?= $i < $extraDays ? 'wide-only' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
           <?= substr(date('D', $ts), 0, 2) ?><span class="num"><?= (int) date('j', $ts) ?></span>
         </div>
       <?php endforeach; ?>
 
-      <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf); ?>
+      <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
 
       <?php foreach ($sections as $s): ?>
         <div class="hsection">
@@ -284,7 +293,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
             <button class="del needs-confirm" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
-        <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf); ?>
+        <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
