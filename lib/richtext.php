@@ -221,15 +221,16 @@ function rt_script(): string
    * supposed to do this and doesn't reliably strip a blockquote, so the line is lifted
    * out by hand: anything above and below it stays quoted, the line itself doesn't.
    */
-  const unquote = () => {
+  /**
+   * Which of the quote's own children is the caret's line? Lines inside a quote are
+   * either block children (one each) or runs of nodes separated by <br> — Enter gives
+   * you one or the other depending on the browser, so handle both. Returns the quote,
+   * its children and the [start, end] slice the line occupies.
+   */
+  const quoteLine = () => {
     const bq = quoteAt();
-    if (!bq) { return false; }
-    const sel = document.getSelection();
-
-    // Which of the quote's own children is the caret in? Lines inside a quote are
-    // either block children (one each) or runs of nodes separated by <br> — Enter
-    // gives you one or the other depending on the browser, so handle both.
-    let node = sel.anchorNode;
+    if (!bq) { return null; }
+    let node = document.getSelection().anchorNode;
     while (node && node.parentNode !== bq) { node = node.parentNode; }
     const kids = [...bq.childNodes];
     const i = node ? kids.indexOf(node) : -1;
@@ -240,6 +241,14 @@ function rt_script(): string
       start = i; while (start > 0 && kids[start - 1].nodeName !== 'BR') { start--; }
       end = i;   while (end < kids.length - 1 && kids[end + 1].nodeName !== 'BR') { end++; }
     }
+    return { bq, kids, start, end };
+  };
+
+  const unquote = () => {
+    const at = quoteLine();
+    if (!at) { return false; }
+    const sel = document.getSelection();
+    const { bq, kids, start, end } = at;
 
     const line  = kids.slice(start, end + 1);
     const after = kids.slice(end + 1);
@@ -280,14 +289,31 @@ function rt_script(): string
     sync(); refresh();
   });
 
-  // Enter inside a quote stays inside it — a new line is part of the quotation until
-  // you say otherwise, and the quote button is how you say it (it lifts the caret's
-  // line back out). Without this some browsers end the blockquote on the second Enter.
+  // Enter inside a quote stays inside it — a new line is part of the quotation. Enter
+  // on a line that's still empty is how you leave: the blank line goes away and the
+  // caret lands on an unquoted line below the quote, with the quoted text left above.
   body.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || !inQuote()) { return; }
     e.preventDefault();
-    document.execCommand('insertLineBreak');
-    sync();
+    const at = quoteLine();
+    const blank = at && at.kids.slice(at.start, at.end + 1)
+      .every(n => n.nodeName === 'BR' || (n.textContent || '').trim() === '');
+    if (blank) {
+      unquote();                                  // takes the empty line out of the quote
+      const out = document.getSelection().anchorNode;
+      const div = out && (out.nodeType === 1 ? out : out.parentNode);
+      if (div && div.nodeName === 'DIV') {        // ...and leaves nothing on it
+        while (div.firstChild) { div.firstChild.remove(); }
+        div.appendChild(document.createElement('br'));
+        const r = document.createRange();
+        r.setStart(div, 0); r.collapse(true);
+        const sel = document.getSelection();
+        sel.removeAllRanges(); sel.addRange(r);
+      }
+    } else {
+      document.execCommand('insertLineBreak');
+    }
+    sync(); refresh();
   });
 
   // Light the buttons that describe where the caret is. queryCommandState throws on
