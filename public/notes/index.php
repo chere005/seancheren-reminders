@@ -65,7 +65,7 @@ function render_section_add(string $name, string $csrf, string $view, string $fo
     <?php
 }
 
-function load_notes(string $file): array { return store_read($file); }
+function load_notes(string $file): array { return sections_migrate(store_read($file)); }
 function save_notes(string $file, array $notes): void { store_write($file, array_values($notes)); }
 
 // --- Handle mutations (POST -> redirect -> GET) ---
@@ -86,7 +86,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'notes', $name);
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . '&edit=1');
+        $stay = !empty($_POST['edit']) ? '&edit=1' : '';
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay);
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
@@ -116,14 +117,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Section actions (bold headers grouping notes; stored in the notes file).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
+        $secFolder = $view === 'All' ? $defFolder : $view;   // sections belong to a folder
         if ($name !== '' && strcasecmp($name, NOTES_DEFAULT_SECTION) !== 0) {   // "Notes" is reserved
             $notes = load_notes($dataFile);
             $dup   = false;
             foreach ($notes as $it) {
-                if (is_section($it) && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
+                if (is_section($it) && ($it['folder'] ?? '') === $secFolder
+                    && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
             }
             if (!$dup) {
-                $notes[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name, 'created' => time()];
+                $notes[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
+                            'name' => $name, 'folder' => $secFolder, 'created' => time()];
                 save_notes($dataFile, $notes);
             }
         }
@@ -132,17 +136,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($_POST['action'] === 'rename_section') {
+        $secFolder = (string) ($_POST['folder'] ?? $view);
         save_notes($dataFile, section_rename(load_notes($dataFile), (string) ($_POST['name'] ?? ''),
-                                             (string) ($_POST['newname'] ?? '')));
+                                             (string) ($_POST['newname'] ?? ''), $secFolder));
         header('Location: ' . $listUrl . '&edit=1');
         exit;
     }
     if ($_POST['action'] === 'delete_section') {
-        $name  = (string) ($_POST['name'] ?? '');
+        $name      = (string) ($_POST['name'] ?? '');
+        $secFolder = (string) ($_POST['folder'] ?? $view);
         $notes = load_notes($dataFile);
-        $notes = array_filter($notes, fn($it) => !(is_section($it) && ($it['name'] ?? '') === $name));
+        // Only this folder's copy of the section goes; other folders keep theirs.
+        $notes = array_filter($notes, fn($it) => !(is_section($it)
+            && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
         foreach ($notes as &$n) {
-            if (!is_section($n) && ($n['section'] ?? '') === $name) { $n['section'] = ''; }
+            if (!is_section($n) && ($n['section'] ?? '') === $name
+                && ($n['folder'] ?? FOLDER_DEFAULT) === $secFolder) { $n['section'] = ''; }
         }
         unset($n);
         save_notes($dataFile, $notes);
@@ -156,22 +165,40 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if (!is_array($order)) { $order = []; }
         $notes = load_notes($dataFile);
 
-        $sectionRows = [];
-        $validSection = [];
-        $byId         = [];
+        // Sections are per-folder: reorder only the viewed folder's, and re-section notes
+        // against sections that exist in their own folder.
+        $secExists      = [];   // "folder\x1Fname" => true
+        $thisFolderSecs = [];   // name => row (viewed folder)
+        $otherSecs      = [];
+        $byId           = [];
         foreach ($notes as $it) {
-            if (is_section($it)) { $sectionRows[] = $it; $validSection[$it['name']] = true; }
-            else { $byId[$it['id']] = $it; }
+            if (is_section($it)) {
+                $f = $it['folder'] ?? FOLDER_DEFAULT;
+                $secExists[$f . "\x1F" . $it['name']] = true;
+                if ($view !== 'All' && $f === $view) { $thisFolderSecs[$it['name']] = $it; }
+                else { $otherSecs[] = $it; }
+            } else {
+                $byId[$it['id']] = $it;
+            }
         }
+        $secOrder = json_decode((string) ($_POST['sections'] ?? '[]'), true);
+        if (!is_array($secOrder)) { $secOrder = []; }
+        $sectionRows = [];
+        foreach ($secOrder as $nm) {
+            if (isset($thisFolderSecs[$nm])) { $sectionRows[] = $thisFolderSecs[$nm]; unset($thisFolderSecs[$nm]); }
+        }
+        foreach ($thisFolderSecs as $e) { $sectionRows[] = $e; }
+        $sectionRows = array_merge($sectionRows, $otherSecs);
 
         $newRows = [];
         $used    = [];
         foreach ($order as $o) {
             $id = (string) ($o['id'] ?? '');
             if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
+            $row = $byId[$id];
             $sec = (string) ($o['section'] ?? '');
-            if ($sec !== '' && !isset($validSection[$sec])) { $sec = ''; }
-            $row            = $byId[$id];
+            $f   = $row['folder'] ?? FOLDER_DEFAULT;
+            if ($sec !== '' && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
             $row['section'] = $sec;
             $newRows[]      = $row;
             $used[$id]      = true;
@@ -262,9 +289,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 // --- Load + shape data ---
 $all = load_notes($dataFile);
 
-$sections = [];
+// Section rows tagged with their folder. A folder view shows only its own; All shows every folder's.
+$secRows = [];
 foreach ($all as $it) {
-    if (is_section($it) && !in_array($it['name'], $sections, true)) { $sections[] = $it['name']; }
+    if (is_section($it) && ($view === 'All' || ($it['folder'] ?? FOLDER_DEFAULT) === $view)) { $secRows[] = $it; }
 }
 $noteRows = array_values(array_filter($all, fn($it) => !is_section($it)));
 
@@ -298,11 +326,15 @@ if (!$editing) {
     }
     // Stored order is drag order, as in Reminders and the bookshelf's notes.
 
+    // Group by folder+name so same-named sections in two folders stay distinct; keyed by row id.
+    $secByKey = [];
+    foreach ($secRows as $s) { $secByKey[($s['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s['name']] = $s['id']; }
     $ungrouped = [];
     $grouped   = [];
     foreach ($listNotes as $n) {
-        $s = (string) ($n['section'] ?? '');
-        if ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $n; }
+        $s   = (string) ($n['section'] ?? '');
+        $key = ($n['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s;
+        if ($s !== '' && isset($secByKey[$key])) { $grouped[$secByKey[$key]][] = $n; }
         else { $ungrouped[] = $n; }
     }
 }
@@ -558,18 +590,21 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
   <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">
-    <?php foreach ($sections as $sname): ?>
-      <?php $rows = $grouped[$sname] ?? []; ?>
-      <?php // Sections always render, empty or not — like the permanent Notes group
-            // below — so a section stays put when you switch folders. Same as Reminders. ?>
-      <div class="section-head">
-        <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
-        <?= section_title_html($sname, $csrf, $view) ?>
+    <?php foreach ($secRows as $s): ?>
+      <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
+      <?php $rows = $grouped[$s['id']] ?? []; ?>
+      <?php // Sections always render, empty or not — like the permanent Notes group below.
+            // Each belongs to one folder; its rename and delete carry that folder. ?>
+      <div class="section-head" data-folder="<?= e($sfolder) ?>">
+        <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+        <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
+              '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
         <?= section_edit_button() ?>
         <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="delete_section">
           <input type="hidden" name="view" value="<?= e($view) ?>">
+          <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
           <input type="hidden" name="name" value="<?= e($sname) ?>">
           <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
         </form>
@@ -606,9 +641,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           <option value="<?= e($f) ?>" <?= ($current['folder'] ?? FOLDER_DEFAULT) === $f ? 'selected' : '' ?>><?= e($f) ?></option>
         <?php endforeach; ?>
       </select>
+      <?php // Only this note's folder's sections — sections are per-folder now.
+            $noteFolder = $current['folder'] ?? $defFolder;
+            $editorSecs = [];
+            foreach ($all as $it) {
+                if (is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $noteFolder) { $editorSecs[] = (string) $it['name']; }
+            } ?>
       <select name="section" class="secsel" title="Section">
         <option value="">Notes</option>
-        <?php foreach ($sections as $sname): ?>
+        <?php foreach ($editorSecs as $sname): ?>
           <option value="<?= e($sname) ?>" <?= ($current['section'] ?? '') === $sname ? 'selected' : '' ?>><?= e($sname) ?></option>
         <?php endforeach; ?>
       </select>
