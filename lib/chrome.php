@@ -61,7 +61,8 @@ function chrome_styles(): string
     body.editing .sec-edit { background: #34d399; border-color: #34d399; color: #06251b; }
     CSS
     . settings_modal_styles()
-    . confirm_delete_styles();
+    . confirm_delete_styles()
+    . swipe_delete_styles();
 }
 
 function back_button(): string
@@ -230,12 +231,84 @@ function confirm_delete_styles(): string
     CSS;
 }
 
+/**
+ * Swipe a row left to reveal its delete button — the way to delete one thing without
+ * turning edit mode on for the whole list. Mark the row `swipe-row`; its delete
+ * control (a `needs-confirm` one) is revealed by the `swiped` class the gesture adds.
+ * The swipe itself counts as the first press, so the revealed button deletes on a tap.
+ * Edit mode owns the row instead (that's where dragging lives), so it stands down there.
+ */
+function swipe_delete_styles(): string
+{
+    return <<<CSS
+    .swipe-row { touch-action: pan-y; transition: transform 0.16s ease; }
+    .swipe-row.swiped .needs-confirm {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #b3261e; border-color: #f66; color: #fff; font-weight: 700;
+    }
+    CSS;
+}
+
+function swipe_delete_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var row = null, sx = 0, sy = 0, dx = 0, dir = 0, open = null;
+  var LIMIT = 84, TRIGGER = 56;
+  function close(r) {
+    if (!r) { return; }
+    r.classList.remove('swiped');
+    r.style.transition = ''; r.style.transform = '';
+    if (open === r) { open = null; }
+  }
+  document.addEventListener('pointerdown', function (e) {
+    if (document.body.classList.contains('editing')) { return; }   // dragging owns the row there
+    var r = e.target.closest && e.target.closest('.swipe-row');
+    if (open && open !== r) { close(open); }
+    if (!r || e.target.closest('button, input, a, select, textarea')) { return; }
+    row = r; sx = e.clientX; sy = e.clientY; dx = 0; dir = 0;
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (!row) { return; }
+    var mx = e.clientX - sx, my = e.clientY - sy;
+    if (!dir) {                                   // first real movement decides: swipe or scroll
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) { return; }
+      if (Math.abs(mx) <= Math.abs(my) + 4) { row = null; return; }
+      dir = 1; row.style.transition = 'none';
+    }
+    dx = Math.max(-LIMIT, Math.min(0, mx));
+    row.style.transform = 'translateX(' + dx + 'px)';
+    e.preventDefault();
+  }, { passive: false });
+  function end() {
+    if (!row) { return; }
+    var r = row; row = null;
+    r.style.transition = '';
+    if (dx <= -TRIGGER) { r.classList.add('swiped'); r.style.transform = 'translateX(-' + LIMIT + 'px)'; open = r; }
+    else { close(r); }
+  }
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+})();</script>
+JS;
+}
+
 function confirm_delete_script(): string
 {
     // Capture phase, so this runs before the page's own submit/click handlers.
     return <<<'JS'
 <script>(function () {
   var armed = null, timer = null;
+  // Tell the server this was confirmed. Destructive handlers refuse without it, so a
+  // stale or broken page can't delete anything on a single tap.
+  function confirmed(b) {
+    if (b.form && !b.form.querySelector('input[name="confirm"]')) {
+      var c = document.createElement('input');
+      c.type = 'hidden'; c.name = 'confirm'; c.value = '1';
+      b.form.appendChild(c);
+    }
+    disarm();
+  }
   function disarm() {
     if (timer) { clearTimeout(timer); timer = null; }
     if (armed) { armed.classList.remove('armed'); armed = null; }
@@ -243,17 +316,8 @@ function confirm_delete_script(): string
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('.needs-confirm');
     if (!b) { disarm(); return; }          // tapping anything else calls it off
-    if (b === armed) {                     // second press: let the click through
-      // Tell the server this was confirmed. Destructive handlers refuse without it,
-      // so a stale or broken page can't delete anything on a single tap.
-      if (b.form && !b.form.querySelector('input[name="confirm"]')) {
-        var c = document.createElement('input');
-        c.type = 'hidden'; c.name = 'confirm'; c.value = '1';
-        b.form.appendChild(c);
-      }
-      disarm();
-      return;
-    }
+    if (b === armed) { confirmed(b); return; }   // second press: let the click through
+    if (b.closest('.swiped')) { confirmed(b); return; }   // the swipe was the first press
     e.preventDefault();
     e.stopPropagation();
     disarm();
@@ -300,5 +364,6 @@ function chrome_script(): string
          . "if(window.sectionEditToggle){window.sectionEditToggle();}else{eb.click();}});});}})();</script>"
          . settings_modal_script()
          . confirm_delete_script()
+         . swipe_delete_script()
          . keep_edit_script();
 }
