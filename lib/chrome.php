@@ -341,6 +341,9 @@ function swipe_delete_script(): string
 <script>(function () {
   var row = null, sx = 0, sy = 0, dx = 0, dir = 0, open = null;
   var LIMIT = 84, TRIGGER = 56;
+  // Touch only: on a desktop a swipe is a text selection or a stray mouse drag, and
+  // there's an Edit mode right there for deleting things.
+  if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) { return; }
   function close(r) {
     if (!r) { return; }
     r.classList.remove('swiped');

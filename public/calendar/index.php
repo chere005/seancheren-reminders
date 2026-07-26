@@ -381,9 +381,10 @@ if (strncmp($calView, 'f:', 2) === 0) {
 }
 
 // --- Sync: gather this user's dated reminders + notes for the visible month ---
-$monthPrefix = sprintf('%04d-%02d', $year, $month);
-$monthFrom   = $monthPrefix . '-01';
-$monthTo     = sprintf('%s-%02d', $monthPrefix, $daysInMo);
+// The window is the whole grid, not just the month: the greyed days either side are
+// tappable too, so they need their items loaded like any other cell.
+$monthFrom   = date('Y-m-d', mktime(0, 0, 0, $month, 1 - $leadBlank, $year));
+$monthTo     = date('Y-m-d', mktime(0, 0, 0, $month, $daysInMo + $tailBlank, $year));
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
 /**
@@ -392,8 +393,8 @@ $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'do
  * occurrences aren't drawn — ticking one moves the stored due on, so the row always
  * sits on the next date it owes.
  */
-$remDays = function (string $due, ?array $rep, string $eff) use ($monthPrefix, $monthFrom, $monthTo): array {
-    $out = (strpos($eff, $monthPrefix) === 0) ? [[$eff, $eff !== $due]] : [];
+$remDays = function (string $due, ?array $rep, string $eff) use ($monthFrom, $monthTo): array {
+    $out = ($eff >= $monthFrom && $eff <= $monthTo) ? [[$eff, $eff !== $due]] : [];
     foreach (repeat_dates($due, $rep, $monthFrom, $monthTo) as $d) {
         if ($d > $eff) { $out[] = [$d, false]; }
     }
@@ -467,7 +468,7 @@ if ($partner) {
 }
 
 foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'notes')) : [] as $n) {
-    if (!empty($n['date']) && strpos($n['date'], $monthPrefix) === 0) {
+    if (!empty($n['date']) && $n['date'] >= $monthFrom && $n['date'] <= $monthTo) {
         $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note', 'done' => false];
     }
 }
@@ -475,8 +476,8 @@ ksort($byDay);
 
 // Which day starts selected? ?day= param, else today if this month, else none.
 $selDay = (string) ($_GET['day'] ?? '');
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selDay) || strpos($selDay, $monthPrefix) !== 0) {
-    $selDay = (strpos($todayYmd, $monthPrefix) === 0) ? $todayYmd : '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selDay) || $selDay < $monthFrom || $selDay > $monthTo) {
+    $selDay = ($todayYmd >= $monthFrom && $todayYmd <= $monthTo) ? $todayYmd : '';
 }
 $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 ?><!DOCTYPE html>
@@ -599,7 +600,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell:not(.blank):hover { border-color: #3a5a4d; background: #1b1f1d; }
     .cell.blank { background: transparent; border-color: transparent; cursor: default; }
     /* The neighbouring months: there, but clearly not this month. */
-    .cell.other { background: #131313; border-color: #1c1c1c; cursor: default; }
+    .cell.other { background: #131313; border-color: #1c1c1c; }
     .cell.other .num { color: #4a4a4a; }
     .cell .num { font-size: 0.82rem; color: #999; }
     .cell.today { border-color: var(--accent); }
@@ -911,52 +912,53 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     $cellNo = 0;
     $weekOf = function () use (&$cellNo) { return intdiv($cellNo++, 7); };
   ?>
+  <?php
+    // One month cell: the number, then at most two event dots in their calendars'
+    // colours, one for the day's reminders and one for its notes. $other greys the
+    // days either side of the month — they're still tappable.
+    $cell = function (string $ymd, int $num, bool $other, int $week) use ($byDay, $todayYmd): string {
+        $events  = $byDay[$ymd] ?? [];
+        $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
+        $hasNote = (bool) array_filter($events, fn($ev) => $ev['kind'] === 'note');
+        // The single reminder dot takes the worst state of the day's reminders:
+        // overdue beats open, and it only goes grey once every one of them is ticked.
+        $remCls = '';
+        if ($remDots) {
+            $open    = array_filter($remDots, fn($ev) => !$ev['done']);
+            $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
+            $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
+        }
+        $dots = '';
+        $evShown = 0;
+        foreach ($events as $ev) {
+            if ($ev['kind'] !== 'event' || $evShown >= 2) { continue; }
+            $evShown++;
+            $dots .= '<span class="dot event" style="background:' . e($ev['color']) . '"></span>';
+        }
+        if ($remDots) { $dots .= '<span class="dot reminder' . $remCls . '"></span>'; }
+        if ($hasNote) { $dots .= '<span class="dot note"></span>'; }
+        $cls = 'cell' . ($other ? ' other' : '') . ($ymd === $todayYmd ? ' today' : '');
+        return '<div class="' . $cls . '" data-date="' . $ymd . '" data-week="' . $week . '"'
+             . ' role="button" tabindex="0"><div class="num">' . $num . '</div>'
+             . '<div class="dots">' . $dots . '</div></div>';
+    };
+  ?>
   <div class="grid" id="calGrid">
-    <?php // The week either side is shown greyed rather than left empty, so the month
-          // reads as part of a continuous calendar. They aren't tappable — a day panel
-          // for a day this page hasn't loaded any items for would just look broken. ?>
+    <?php // The week either side is greyed rather than left empty, so the month reads
+          // as part of a continuous calendar — and it's tappable like any other day,
+          // since its items are loaded with the rest. Tapping one doesn't turn the page. ?>
     <?php for ($i = $leadBlank; $i > 0; $i--): ?>
-      <div class="cell other" data-week="<?= $weekOf() ?>"><div class="num"><?= $prevDays - $i + 1 ?></div></div>
+      <?php $ymd = date('Y-m-d', mktime(0, 0, 0, $month, 1 - $i, $year)); ?>
+      <?= $cell($ymd, $prevDays - $i + 1, true, $weekOf()) ?>
     <?php endfor; ?>
 
     <?php for ($day = 1; $day <= $daysInMo; $day++): ?>
-      <?php
-        $ymd     = sprintf('%04d-%02d-%02d', $year, $month, $day);
-        $isToday = $ymd === $todayYmd;
-        $events  = $byDay[$ymd] ?? [];
-      ?>
-      <div class="cell<?= $isToday ? ' today' : '' ?>" data-date="<?= $ymd ?>" data-week="<?= $weekOf() ?>" role="button" tabindex="0">
-        <div class="num"><?= $day ?></div>
-        <div class="dots">
-          <?php
-            // Events come first, in their calendar's colour, but at most two of them:
-            // the row reads as "how much is on today", and four dots in a 40px cell
-            // read as noise. Reminders and notes are only ever one dot apiece.
-            $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
-            $hasNote = (bool) array_filter($events, fn($ev) => $ev['kind'] === 'note');
-            // The single reminder dot takes the worst state of the day's reminders:
-            // overdue beats open, and it only goes grey once every one of them is ticked.
-            $remCls = '';
-            if ($remDots) {
-                $open    = array_filter($remDots, fn($ev) => !$ev['done']);
-                $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
-                $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
-            }
-          ?>
-          <?php $evShown = 0; ?>
-          <?php foreach ($events as $ev): ?>
-            <?php if ($ev['kind'] !== 'event' || $evShown >= 2) { continue; } ?>
-            <?php $evShown++; ?>
-            <span class="dot event" style="background:<?= e($ev['color']) ?>"></span>
-          <?php endforeach; ?>
-          <?php if ($remDots): ?><span class="dot reminder<?= $remCls ?>"></span><?php endif; ?>
-          <?php if ($hasNote): ?><span class="dot note"></span><?php endif; ?>
-        </div>
-      </div>
+      <?= $cell(sprintf('%04d-%02d-%02d', $year, $month, $day), $day, false, $weekOf()) ?>
     <?php endfor; ?>
 
     <?php for ($day = 1; $day <= $tailBlank; $day++): ?>
-      <div class="cell other" data-week="<?= $weekOf() ?>"><div class="num"><?= $day ?></div></div>
+      <?php $ymd = date('Y-m-d', mktime(0, 0, 0, $month, $daysInMo + $day, $year)); ?>
+      <?= $cell($ymd, $day, true, $weekOf()) ?>
     <?php endfor; ?>
   </div>
 
