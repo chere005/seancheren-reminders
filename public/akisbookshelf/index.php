@@ -42,11 +42,12 @@ function cover_url(?int $id, string $size = 'M'): string
     return $id ? "https://covers.openlibrary.org/b/id/{$id}-{$size}.jpg" : '';
 }
 
-/** External cover source: Open Library cover id, then an explicit URL, then by ISBN. */
+/** External cover source: a hand-picked URL wins (that's what "Set cover" is for), then
+ *  the Open Library cover id, then by ISBN. */
 function book_cover_source(array $b, string $size = 'M'): string
 {
-    if (!empty($b['cover']))     { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
     if (!empty($b['cover_url'])) { return (string) $b['cover_url']; }
+    if (!empty($b['cover']))     { return 'https://covers.openlibrary.org/b/id/' . ((int) $b['cover']) . "-{$size}.jpg"; }
     if (!empty($b['isbn']))      { return 'https://covers.openlibrary.org/b/isbn/' . rawurlencode((string) $b['isbn']) . "-{$size}.jpg?default=false"; }
     return '';
 }
@@ -189,9 +190,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $shelfUrl = $listUrl . '?shelf=' . urlencode($shelf);
 
     // Nothing destructive happens without the confirmed second press.
-    if (in_array($action, ['delete_book', 'delete_note', 'delete_section'], true)
+    if (in_array($action, ['delete_book', 'delete_note', 'delete_bsection'], true)
         && empty($_POST['confirm'])) {
-        header('Location: ' . $shelfUrl);
+        header('Location: ' . ($action === 'delete_book' ? $shelfUrl : $listUrl . '?book=' . urlencode($bookId) . '&edit=1'));
         exit;
     }
     $bookUrl  = $listUrl . '?book=' . urlencode($bookId);
@@ -246,9 +247,121 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $shelfUrl . '&edit=1');
         exit;
     }
+    // ----- Rating (= "read") and shelf flags — AJAX from the stars and the book-page checkboxes -----
+    if ($action === 'set_rating') {
+        $r     = max(0, min(5, (int) ($_POST['rating'] ?? 0)));
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) {
+                $b['rating'] = $r;
+                // A rating means it's been read: stamp the date on the first one, and clear
+                // it again if the rating is removed, so re-rating later gives a fresh date.
+                $b['read_at'] = $r > 0 ? ((int) ($b['read_at'] ?? 0) ?: time()) : null;
+                break;
+            }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'rating' => $r]);
+        exit;
+    }
+    if (in_array($action, ['set_want', 'set_past'], true)) {
+        $field = ['set_want' => 'want', 'set_past' => 'past'][$action];
+        $val   = !empty($_POST['value']);
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) { $b[$field] = $val; break; }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'value' => $val]);
+        exit;
+    }
+    // ----- Set (or clear) a hand-picked cover image URL, overriding the Open Library one -----
+    if ($action === 'set_cover') {
+        $url   = trim((string) ($_POST['cover_url'] ?? ''));
+        // Only a plain http(s) image URL; an empty value clears it back to the default cover.
+        if ($url !== '' && !preg_match('#^https?://#i', $url)) { $url = ''; }
+        $books = books_load($booksFile);
+        foreach ($books as &$b) {
+            if (($b['id'] ?? '') === $bookId) { $b['cover_url'] = mb_substr($url, 0, 500); break; }
+        }
+        unset($b);
+        books_save($booksFile, $books);
+        header('Location: ' . $listUrl . '?book=' . urlencode($bookId) . '&edit=1');
+        exit;
+    }
+
     // ----- Per-book notes (completely separate from the Notes tab) -----
     $map   = bnotes_load($notesFile);
     $notes = $map[$bookId] ?? [];
+
+    // ----- Note sections (bold headers grouping a book's notes) -----
+    if ($action === 'add_bsection') {
+        $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
+        $name = mb_substr($name, 0, 60);
+        $dup  = false;
+        foreach ($notes as $it) {
+            if (is_bsection($it) && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
+        }
+        if ($name !== '' && !$dup) {
+            $notes[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name, 'created' => time()];
+            $map[$bookId] = $notes;
+            bnotes_save($notesFile, $map);
+        }
+        header('Location: ' . $bookUrl . '&edit=1');
+        exit;
+    }
+    if ($action === 'delete_bsection') {
+        $name  = (string) ($_POST['name'] ?? '');
+        // The header goes; its notes stay, dropping back to the ungrouped list.
+        $notes = array_values(array_filter($notes, fn($it) => !(is_bsection($it) && ($it['name'] ?? '') === $name)));
+        foreach ($notes as &$n) {
+            if (!is_bsection($n) && ($n['section'] ?? '') === $name) { $n['section'] = ''; }
+        }
+        unset($n);
+        $map[$bookId] = $notes;
+        bnotes_save($notesFile, $map);
+        header('Location: ' . $bookUrl . '&edit=1');
+        exit;
+    }
+    // ----- Drag reorder (AJAX). order = [{id, section}, …] top-to-bottom across the groups. -----
+    if ($action === 'reorder_notes') {
+        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        if (!is_array($order)) { $order = []; }
+        // Section headers keep their stored order; notes are re-placed per the drag and
+        // re-pointed at whatever section they were dropped into (blank if it's gone).
+        $sectionRows = [];
+        $secExists   = [];
+        $byId        = [];
+        foreach ($notes as $it) {
+            if (is_bsection($it)) { $sectionRows[] = $it; $secExists[$it['name']] = true; }
+            else { $byId[$it['id']] = $it; }
+        }
+        $newNotes = [];
+        $used     = [];
+        foreach ($order as $o) {
+            $id = (string) ($o['id'] ?? '');
+            if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
+            $row = $byId[$id];
+            $sec = (string) ($o['section'] ?? '');
+            if ($sec !== '' && !isset($secExists[$sec])) { $sec = ''; }
+            $row['section'] = $sec;
+            $newNotes[]     = $row;
+            $used[$id]      = true;
+        }
+        // Notes the drag never saw (chapters live in another view) keep their place after.
+        foreach ($notes as $it) {
+            if (!is_bsection($it) && !isset($used[$it['id']])) { $newNotes[] = $it; }
+        }
+        $map[$bookId] = array_merge($sectionRows, $newNotes);
+        bnotes_save($notesFile, $map);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
 
     if ($action === 'add_note') {
         $nid     = bin2hex(random_bytes(6));
