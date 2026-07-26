@@ -117,13 +117,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'notes', $name);
+        // fm=1 reopens the folder manager so adding one doesn't close it.
         $stay = !empty($_POST['edit']) ? '&edit=1' : '';
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay);
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay . '&fm=1');
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1&fm=1');
         exit;
     }
     if ($_POST['action'] === 'set_folder_color') {
@@ -147,7 +148,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($n);
         save_notes($dataFile, $notes);
-        header('Location: ' . _self_path() . '?folder=All&edit=1');
+        header('Location: ' . _self_path() . '?folder=All&edit=1&fm=1');
         exit;
     }
 
@@ -673,17 +674,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <?= section_collapse_button() ?>
         <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
               '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-        <span class="sec-right">
-          <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
-          <form method="post" action="" style="display:inline">
-            <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_section">
-            <input type="hidden" name="view" value="<?= e($view) ?>">
-            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-            <input type="hidden" name="name" value="<?= e($sname) ?>">
-            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-          </form>
-        </span>
+        <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+        <form method="post" action="" style="display:inline">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="delete_section">
+          <input type="hidden" name="view" value="<?= e($view) ?>">
+          <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+          <input type="hidden" name="name" value="<?= e($sname) ?>">
+          <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+        </form>
       </div>
       <?php render_note_rows($rows, $view, $csrf, $sname, ''); ?>
     <?php endforeach; ?>
@@ -692,7 +691,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     <div class="section-head">
       <?= section_collapse_button() ?>
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
-      <span class="sec-right"><?php render_section_add('', $csrf, $view, $addTarget); ?></span>
+      <?php render_section_add('', $csrf, $view, $addTarget); ?>
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>
    </div>
@@ -851,10 +850,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       clickT = setTimeout(() => { clickT = null; location.href = href; }, 220);
     });
   }
-  // Leave edit mode by tapping empty space or pressing Escape.
+  // Leave edit mode by tapping away from what you're editing. A tap stays in edit only
+  // on a note row, a section name field, an edit control, the toolbar, or a modal.
   document.addEventListener('click', (e) => {
     if (!editingNow() || gSuppress) return;
-    if (e.target.closest('li[data-id], .section-head, .listbar, button, a, input, textarea, select,'
+    if (e.target.closest('.noteitem, .sectitle, .sec-handle, .listbar, button, a, input, textarea, select,'
         + ' .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
     setEdit(false);
   });

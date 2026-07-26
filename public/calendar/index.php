@@ -579,7 +579,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       background: conic-gradient(var(--k-event), var(--k-reminder), #facc15, #f472b6, var(--k-event));
     }
     .calpick-menu {
-      position: absolute; right: 0; top: calc(100% + 5px); z-index: 45; min-width: 210px;
+      position: fixed; z-index: 90; min-width: 210px;
       max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
       background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
@@ -1857,6 +1857,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     btn.addEventListener('click', e => {
       e.stopPropagation();
       menu.hidden = !menu.hidden;
+      if (!menu.hidden) {
+        // Fixed-positioned so it overlays the events below instead of being clipped
+        // inside the scrolling calendar; anchor it under the button, to its right edge.
+        const r = btn.getBoundingClientRect();
+        menu.style.top = (r.bottom + 5) + 'px';
+        menu.style.right = (window.innerWidth - r.right) + 'px';
+      }
       btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
     });
     document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) close(); });

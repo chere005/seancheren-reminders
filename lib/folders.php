@@ -362,6 +362,10 @@ function folder_modal_script(): string
          . "var close=function(){m.classList.remove('open');};"
          . "b.addEventListener('click',function(){m.classList.add('open');"
          . "var i=m.querySelector('.addrow input[type=text]');if(i)i.focus();});"
+         // Add/delete/default reload the page with ?fm=1 so the manager reopens rather
+         // than closing out from under you; strip the param once it's back open.
+         . "var q=new URLSearchParams(location.search);if(q.get('fm')==='1'){m.classList.add('open');"
+         . "q.delete('fm');var u=new URL(location.href);u.search=q.toString();history.replaceState(null,'',u);}"
          . "if(d)d.addEventListener('click',close);"
          . "m.addEventListener('click',function(e){if(e.target===m)close();});"
          // Picking a colour posts in the background and recolours the swatch in place, so
