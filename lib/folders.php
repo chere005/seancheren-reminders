@@ -7,6 +7,10 @@
 
 const FOLDER_DEFAULT = 'General';
 
+/** Colours a folder can wear — the calendars' palette, so the suite reads as one. */
+const FOLDER_COLORS = ['#60a5fa', '#34d399', '#f472b6', '#c084fc', '#fb923c',
+                       '#facc15', '#fb7185', '#22d3ee', '#a3e635', '#94a3b8'];
+
 function folders_load(string $dir, ?string $user = null): array
 {
     $file = user_data_file($dir, 'folders', $user);
@@ -20,6 +24,33 @@ function folders_load(string $dir, ?string $user = null): array
             array_filter($data[$type], fn($f) => $f !== FOLDER_DEFAULT))));
     }
     return $data;
+}
+
+/**
+ * Every folder's colour, keyed by name. A folder that hasn't been given one takes
+ * the next palette colour by position, so a new folder is distinct straight away.
+ */
+function folder_colors(string $dir, string $type, ?string $user = null): array
+{
+    $data  = folders_load($dir, $user);
+    $set   = is_array($data['colors'][$type] ?? null) ? $data['colors'][$type] : [];
+    $out   = [];
+    foreach (array_values($data[$type] ?? []) as $i => $name) {
+        $c = (string) ($set[$name] ?? '');
+        $out[$name] = in_array($c, FOLDER_COLORS, true) ? $c : FOLDER_COLORS[$i % count(FOLDER_COLORS)];
+    }
+    return $out;
+}
+
+function folder_color_set(string $dir, string $type, string $name, string $color): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true) || !in_array($color, FOLDER_COLORS, true)) {
+        return;
+    }
+    $data = folders_load($dir);
+    if (!in_array($name, $data[$type], true)) { return; }
+    $data['colors'][$type][$name] = $color;
+    folders_save($dir, $data);
 }
 
 function folders_save(string $dir, array $data): void
@@ -107,52 +138,54 @@ function folders_delete(string $dir, string $type, string $name): void
 }
 
 /**
- * Render a folder navigator bar. $active is the selected folder ('' or 'All' = show all).
- * Folders are added and removed in the manager window — see render_folder_modal().
+ * The folder picker: a round button wearing the selected folder's colour, right of
+ * the app's "+", opening a menu of every folder. Same shape as the Calendar's, so
+ * the two apps pick a view the same way.
+ * $groups is [ ['label' => 'Sean', 'options' => [ [value, label, color], … ] ], … ];
+ * a group with an empty label lists its options loose at the top.
  */
-function render_folder_nav(array $folders, string $active): void
+function render_folder_pick(array $groups, string $active, string $activeLabel = 'All'): void
 {
+    $e = fn($x) => htmlspecialchars((string) $x, ENT_QUOTES);
+    $cur = '';
+    foreach ($groups as $g) {
+        foreach ($g['options'] as [$val, $label, $col]) {
+            if ($active === $val) { $cur = $col; $activeLabel = $label; }
+        }
+    }
     ?>
-    <div class="foldernav">
-      <a href="?folder=All" class="chip <?= ($active === 'All' || $active === '') ? 'active' : '' ?>">All</a>
-      <?php foreach ($folders as $f): ?>
-        <a href="?folder=<?= urlencode($f) ?>" class="chip <?= $active === $f ? 'active' : '' ?>">
-          <?= htmlspecialchars($f, ENT_QUOTES) ?>
+    <div class="folderpick">
+      <button type="button" class="folderpick-btn" id="folderSelBtn" aria-haspopup="listbox"
+              aria-expanded="false" title="<?= $e($activeLabel) ?>" aria-label="<?= $e($activeLabel) ?>">
+        <span class="fdot<?= $cur === '' ? ' all' : '' ?>"<?= $cur === '' ? '' : ' style="background:' . $e($cur) . '"' ?>></span>
+      </button>
+      <div class="folderpick-menu" id="folderSelMenu" role="listbox" hidden>
+        <a class="folderpick-opt<?= ($active === 'All' || $active === '') ? ' on' : '' ?>" href="?folder=All">
+          <span class="fdot all"></span><span>All</span>
         </a>
-      <?php endforeach; ?>
-    </div>
-    <?php
-}
-
-/**
- * Folder navigator as a dropdown, grouped by owner.
- * $groups is [ ['label' => 'Sean', 'options' => [ [value, label], … ] ], … ]; a group
- * with an empty label has its options listed loose at the top.
- */
-function render_folder_select(array $groups, string $active, string $extra = ''): void
-{
-    ?>
-    <div class="foldernav">
-      <select id="folderSel" class="foldersel" aria-label="Folder">
-        <option value="All"<?= ($active === 'All' || $active === '') ? ' selected' : '' ?>>All</option>
         <?php foreach ($groups as $g): ?>
           <?php if (empty($g['options'])) { continue; } ?>
-          <?php if ($g['label'] !== ''): ?><optgroup label="<?= htmlspecialchars($g['label'], ENT_QUOTES) ?>"><?php endif; ?>
-          <?php foreach ($g['options'] as [$val, $label]): ?>
-            <option value="<?= htmlspecialchars($val, ENT_QUOTES) ?>"<?= $active === $val ? ' selected' : '' ?>>
-              <?= htmlspecialchars($label, ENT_QUOTES) ?>
-            </option>
+          <?php if ($g['label'] !== ''): ?><div class="folderpick-group"><?= $e($g['label']) ?></div><?php endif; ?>
+          <?php foreach ($g['options'] as [$val, $label, $col]): ?>
+            <a class="folderpick-opt<?= $active === $val ? ' on' : '' ?>" href="?folder=<?= urlencode($val) ?>">
+              <span class="fdot" style="background:<?= $e($col) ?>"></span><span><?= $e($label) ?></span>
+            </a>
           <?php endforeach; ?>
-          <?php if ($g['label'] !== ''): ?></optgroup><?php endif; ?>
         <?php endforeach; ?>
-      </select>
-      <?= $extra ?>
+      </div>
     </div>
-    <script>
-      document.getElementById('folderSel').addEventListener('change', function () {
-        location.href = '?folder=' + encodeURIComponent(this.value);
+    <script>(function(){
+      var b = document.getElementById('folderSelBtn'), m = document.getElementById('folderSelMenu');
+      if (!b || !m) { return; }
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        m.hidden = !m.hidden;
+        b.setAttribute('aria-expanded', m.hidden ? 'false' : 'true');
       });
-    </script>
+      document.addEventListener('click', function (e) {
+        if (!m.hidden && !m.contains(e.target)) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
+      });
+    })();</script>
     <?php
 }
 
@@ -164,7 +197,7 @@ function render_folder_select(array $groups, string $active, string $extra = '')
  */
 function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                              string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
-                             string $extraButton = ''): void
+                             string $extraButton = '', array $colors = []): void
 {
     $csrf = htmlspecialchars($csrf, ENT_QUOTES);
     $vw   = htmlspecialchars($view, ENT_QUOTES);
@@ -181,6 +214,22 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
         <ul class="flist">
           <?php foreach ($folders as $f): ?>
             <li>
+              <?php // The swatch opens a <details> palette: picking a colour is an
+                    // ordinary POST, like everything else in this window. ?>
+              <details class="fcolor">
+                <summary style="background:<?= htmlspecialchars($colors[$f] ?? FOLDER_COLORS[0], ENT_QUOTES) ?>"
+                         title="Colour"></summary>
+                <form class="fswatches" method="post" action="">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="action" value="set_folder_color">
+                  <input type="hidden" name="view" value="<?= $vw ?>">
+                  <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
+                  <?php foreach (FOLDER_COLORS as $col): ?>
+                    <button type="submit" name="color" value="<?= $col ?>" style="background:<?= $col ?>"
+                            title="<?= $col ?>"></button>
+                  <?php endforeach; ?>
+                </form>
+              </details>
               <span class="fname"><?= htmlspecialchars($f, ENT_QUOTES) ?></span>
               <?php if ($f !== FOLDER_DEFAULT): ?>
                 <form method="post" action="" style="display:inline">
@@ -232,18 +281,38 @@ function folder_nav_styles(): string
 {
     return <<<CSS
     .foldernav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem; align-items: center; }
-    .foldernav .chip {
-      padding: 0.3rem 0.75rem; border: 1px solid #333; border-radius: 999px;
-      color: #aaa; text-decoration: none; font-size: 0.82rem; white-space: nowrap;
+
+    /* Folder picker: a round button in the title bar wearing the folder's colour,
+       and the menu it drops. The Calendar's calpick is the same thing for calendars. */
+    .folderpick { position: relative; display: inline-flex; }
+    .folderpick-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; padding: 0;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 50%; cursor: pointer;
     }
-    .foldernav .chip:hover { border-color: #666; color: #ddd; }
-    .foldernav .chip.active { background: #14251f; border-color: #34d399; color: #34d399; }
-    .foldersel {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 999px; color: #34d399;
-      padding: 0.3rem 0.75rem; font-size: 16px;   /* 16px stops iOS from zooming on focus */
-      font-family: inherit; max-width: 100%;
+    .folderpick-btn:hover { border-color: #888; }
+    .fdot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; background: #555; }
+    .fdot.all {
+      background: conic-gradient(#60a5fa, #34d399, #facc15, #f472b6, #60a5fa);
     }
-    .foldersel:focus { outline: none; border-color: #34d399; }
+    .folderpick-menu {
+      position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
+      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
+      background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
+    }
+    .folderpick-menu[hidden] { display: none; }
+    .folderpick-group {
+      color: #777; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; padding: 0.45rem 0.6rem 0.2rem;
+    }
+    .folderpick-opt {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem;
+      border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
+    }
+    .folderpick-opt .fdot { width: 9px; height: 9px; }
+    .folderpick-opt:hover { background: #262626; color: #fff; }
+    .folderpick-opt.on { background: #14251f; color: #34d399; font-weight: 600; }
 
 
     /* Folder manager window */
@@ -279,6 +348,22 @@ function folder_nav_styles(): string
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
+    /* The folder's colour: a swatch that opens the palette under it. */
+    .foldermodal .fcolor { flex: 0 0 auto; position: relative; }
+    .foldermodal .fcolor summary {
+      width: 20px; height: 20px; border-radius: 50%; border: 1px solid #444;
+      cursor: pointer; list-style: none;
+    }
+    .foldermodal .fcolor summary::-webkit-details-marker { display: none; }
+    .foldermodal .fswatches {
+      position: absolute; z-index: 5; top: calc(100% + 6px); left: 0;
+      background: #1c1c1c; border: 1px solid #444; border-radius: 10px; padding: 0.5rem;
+      display: grid; grid-template-columns: repeat(5, 22px); gap: 0.4rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+    }
+    .foldermodal .fswatches button {
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid #444; cursor: pointer; padding: 0;
+    }
     /* Which folder new items land in — same shape as the Calendar's default picker. */
     .foldermodal .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
     .foldermodal .defrow label { font-size: 0.85rem; color: #999; white-space: nowrap; }
