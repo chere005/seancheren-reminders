@@ -20,6 +20,9 @@ ob_start();
   <li>Dream Theater</li>
   <li>Led Zeppelin</li>
   <li>Amon Amarth</li>
+  <li>Umphrey's McGee</li>
+  <li>Pink Floyd</li>
+  <li>きかがくもよ</li>
 </ul>
 </div>
 
