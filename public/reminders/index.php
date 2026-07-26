@@ -71,7 +71,7 @@ function is_section(array $it): bool
     return ($it['type'] ?? '') === 'section';
 }
 
-function load_reminders(string $file): array { return store_read($file); }
+function load_reminders(string $file): array { return sections_migrate(store_read($file)); }
 function save_reminders(string $file, array $list): void { store_write($file, array_values($list)); }
 
 /**
@@ -94,18 +94,19 @@ function sort_by_date(array $rows): array
     return $rows;
 }
 
-/** Stable DOM id tying a section's "+" button to the row it opens. */
-function section_add_id(string $name): string
+/** Stable DOM id tying a section's "+" button to the row it opens. Keyed by folder and
+ *  name, since two folders may hold same-named sections (both visible in the All view). */
+function section_add_id(string $folder, string $name): string
 {
-    return 'secadd-' . substr(md5($name), 0, 8);
+    return 'secadd-' . substr(md5($folder . "\x1F" . $name), 0, 8);
 }
 
 /** The "+" that sits on a section header. */
-function render_section_add_button(string $name): void
+function render_section_add_button(string $name, string $folder): void
 {
     $label = e($name === '' ? DEFAULT_SECTION : $name);
     ?>
-    <button type="button" class="sec-add" data-target="<?= section_add_id($name) ?>"
+    <button type="button" class="sec-add" data-target="<?= section_add_id($folder, $name) ?>"
             title="Add to <?= $label ?>" aria-label="Add to <?= $label ?>">+</button>
     <?php
 }
@@ -113,17 +114,18 @@ function render_section_add_button(string $name): void
 /**
  * The row that "+" reveals. Typing here adds straight to the end of that section —
  * no window — and the text is scanned for a date and a time ("Vet 8/3 2pm") the same
- * way the Calendar's quick add is.
+ * way the Calendar's quick add is. The new reminder lands in the section's own folder.
  */
-function render_section_add_row(string $name, string $csrf, string $view): void
+function render_section_add_row(string $name, string $csrf, string $view, string $folder): void
 {
     $label = e($name === '' ? DEFAULT_SECTION : $name);
     ?>
-    <form method="post" action="" class="secadd-row" id="<?= section_add_id($name) ?>" hidden
+    <form method="post" action="" class="secadd-row" id="<?= section_add_id($folder, $name) ?>" hidden
           onsubmit="return this.text.value.trim()!==''">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add">
       <input type="hidden" name="view" value="<?= e($view) ?>">
+      <input type="hidden" name="folder" value="<?= e($folder) ?>">
       <input type="hidden" name="section" value="<?= e($name) ?>">
       <input type="text" name="text" placeholder="Add to <?= $label ?>&hellip;" maxlength="500" autocomplete="off">
       <button type="submit" class="plus" title="Add">+</button>
@@ -211,7 +213,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'add_folder') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'reminders', $name);
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . '&edit=1');
+        // Switch to the new folder, staying in edit mode only if we were already in it.
+        $stay = !empty($_POST['edit']) ? '&edit=1' : '';
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay);
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
@@ -239,19 +243,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
-    // Section actions. Sections are bold headers that group reminders (orthogonal to folders).
+    // Section actions. A section belongs to one folder — folders keep distinct sections,
+    // so adding, renaming or deleting one only ever touches the folder it's in.
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
+        // A section lands in the folder you're viewing (the default when you're on All).
+        $secFolder = $viewFolder === 'All' ? $defFolder : $viewFolder;
         // "Reminders" and "Calendar" are the two permanent groups — neither can be recreated.
         if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0
             && strcasecmp($name, CALENDAR_SECTION) !== 0) {
             $list = load_reminders($dataFile);
             $dup  = false;
             foreach ($list as $it) {
-                if (is_section($it) && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
+                if (is_section($it) && ($it['folder'] ?? '') === $secFolder
+                    && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
             }
             if (!$dup) {
-                $list[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name, 'created' => time()];
+                $list[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
+                           'name' => $name, 'folder' => $secFolder, 'created' => time()];
                 save_reminders($dataFile, $list);
             }
         }
@@ -261,22 +270,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($_POST['action'] === 'rename_section') {
+        $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         $list = load_reminders($dataFile);
         save_reminders($dataFile, section_rename($list, (string) ($_POST['name'] ?? ''),
-                                                 (string) ($_POST['newname'] ?? '')));
+                                                 (string) ($_POST['newname'] ?? ''), $secFolder));
         header('Location: ' . $editBack);
         exit;
     }
     if ($_POST['action'] === 'delete_section') {
-        $name = (string) ($_POST['name'] ?? '');
+        $name      = (string) ($_POST['name'] ?? '');
+        $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         if (strcasecmp($name, CALENDAR_SECTION) === 0) {   // permanent, like the default group
             header('Location: ' . $editBack);
             exit;
         }
         $list = load_reminders($dataFile);
-        $list = array_filter($list, fn($it) => !(is_section($it) && ($it['name'] ?? '') === $name));
+        // Only this folder's copy of the section goes; other folders keep theirs.
+        $list = array_filter($list, fn($it) => !(is_section($it)
+            && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
         foreach ($list as &$r) {
-            if (!is_section($r) && ($r['section'] ?? '') === $name) { $r['section'] = ''; }
+            if (!is_section($r) && ($r['section'] ?? '') === $name
+                && ($r['folder'] ?? FOLDER_DEFAULT) === $secFolder) { $r['section'] = ''; }
         }
         unset($r);
         save_reminders($dataFile, $list);
@@ -292,29 +306,42 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if (!is_array($secOrder)) { $secOrder = []; }
         $list = load_reminders($dataFile);
 
-        $validSections = [];
-        $secByName     = [];
-        $byId          = [];
+        // Sections are per-folder, so a drag only reorders the viewed folder's sections
+        // and only re-sections items against sections that exist in their own folder.
+        $secExists      = [];   // "folder\x1Fname" => true, for every section row
+        $thisFolderSecs = [];   // name => row, for the folder being viewed
+        $otherSecs      = [];   // rows in other folders, left untouched
+        $byId           = [];
         foreach ($list as $it) {
-            if (is_section($it)) { $secByName[$it['name']] = $it; $validSections[$it['name']] = true; }
-            else { $byId[$it['id']] = $it; }
+            if (is_section($it)) {
+                $f = $it['folder'] ?? FOLDER_DEFAULT;
+                $secExists[$f . "\x1F" . $it['name']] = true;
+                if ($viewFolder !== 'All' && $f === $viewFolder) { $thisFolderSecs[$it['name']] = $it; }
+                else { $otherSecs[] = $it; }
+            } else {
+                $byId[$it['id']] = $it;
+            }
         }
 
-        // Reorder section entries by the posted order; keep any not listed (e.g. hidden in a folder view).
+        // Reorder the viewed folder's section rows by the posted order; keep the rest.
         $sectionsList = [];
         foreach ($secOrder as $name) {
-            if (isset($secByName[$name])) { $sectionsList[] = $secByName[$name]; unset($secByName[$name]); }
+            if (isset($thisFolderSecs[$name])) { $sectionsList[] = $thisFolderSecs[$name]; unset($thisFolderSecs[$name]); }
         }
-        foreach ($secByName as $e) { $sectionsList[] = $e; }
+        foreach ($thisFolderSecs as $e) { $sectionsList[] = $e; }
+        $sectionsList = array_merge($sectionsList, $otherSecs);
 
         $newReminders = [];
         $used = [];
         foreach ($order as $o) {
             $id = (string) ($o['id'] ?? '');
             if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
-            $sec = (string) ($o['section'] ?? '');
-            if ($sec !== '' && !isset($validSections[$sec])) { $sec = ''; }
-            $item            = $byId[$id];
+            $item = $byId[$id];
+            $sec  = (string) ($o['section'] ?? '');
+            $f    = $item['folder'] ?? FOLDER_DEFAULT;
+            // Keep the permanent Calendar group; otherwise a section must exist in this item's folder.
+            if ($sec !== '' && strcasecmp($sec, CALENDAR_SECTION) !== 0
+                && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
             $item['section'] = $sec;
             $newReminders[]  = $item;
             $used[$id]       = true;
@@ -425,13 +452,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 // --- Render ---
 $all = load_reminders($dataFile);
 
-// Section names, in creation order (deduped). "Calendar" is permanent and rendered
-// separately, so it never appears among the user's own sections even if it got stored.
-$sections = [];
+// Section rows, in stored order, tagged with the folder they belong to. "Calendar" is
+// permanent and rendered separately, so it never appears among the user's own sections.
+// A folder view shows only its own sections; "All" shows every folder's.
+$secRows = [];
 foreach ($all as $it) {
-    if (is_section($it) && !in_array($it['name'], $sections, true)
-        && strcasecmp((string) $it['name'], CALENDAR_SECTION) !== 0) {
-        $sections[] = $it['name'];
+    if (is_section($it) && strcasecmp((string) $it['name'], CALENDAR_SECTION) !== 0
+        && ($viewFolder === 'All' || ($it['folder'] ?? FOLDER_DEFAULT) === $viewFolder)) {
+        $secRows[] = $it;
     }
 }
 
@@ -442,19 +470,24 @@ if ($viewFolder !== 'All') {
 }
 
 // Split into the permanent Calendar group, the user's sections, and everything else.
-// Each group is then shown undated-first, by date.
+// A section is matched by folder *and* name, so same-named sections in two folders stay
+// distinct. Grouped rows are keyed by the section row's id.
+$secByKey = [];   // "folder\x1Fname" => row id
+foreach ($secRows as $s) { $secByKey[($s['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s['name']] = $s['id']; }
+
 $ungrouped = [];
 $calRows   = [];
 $grouped   = [];
 foreach ($items as $r) {
     $s = (string) ($r['section'] ?? '');
-    if (strcasecmp($s, CALENDAR_SECTION) === 0)      { $calRows[] = $r; }
-    elseif ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
-    else                                              { $ungrouped[] = $r; }
+    if (strcasecmp($s, CALENDAR_SECTION) === 0) { $calRows[] = $r; continue; }
+    $key = ($r['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s;
+    if ($s !== '' && isset($secByKey[$key])) { $grouped[$secByKey[$key]][] = $r; }
+    else                                      { $ungrouped[] = $r; }
 }
 $ungrouped = sort_by_date($ungrouped);
 $calRows   = sort_by_date($calRows);
-foreach ($grouped as $s => $rows) { $grouped[$s] = sort_by_date($rows); }
+foreach ($grouped as $id => $rows) { $grouped[$id] = sort_by_date($rows); }
 
 $openCount = count(array_filter($items, fn($r) => empty($r['done'])));
 $doneCount = count($items) - $openCount;
@@ -768,51 +801,57 @@ $sectionInput =
 
   <?php // The permanent groups always render, so there's always a + to add against. ?>
    <div id="rlist-root">
-    <?php foreach ($sections as $sname): ?>
-      <?php $rows = $grouped[$sname] ?? []; ?>
+    <?php foreach ($secRows as $s): ?>
+      <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
+      <?php $rows = $grouped[$s['id']] ?? []; ?>
       <?php // Sections always render, empty or not — the same as the permanent Calendar
-            // and Reminders groups below — so a section you add stays put when you switch
-            // folders and there's always a "+" to add the first item against. ?>
-      <div class="section-group" data-section="<?= e($sname) ?>">
+            // and Reminders groups below. Each belongs to one folder; its rename and
+            // delete forms carry that folder, so acting on it never touches another. ?>
+      <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>">
         <div class="section-head">
-          <?php render_section_add_button($sname); ?>
+          <?php render_section_add_button($sname, $sfolder); ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
-          <?= section_title_html($sname, $csrf, $view) ?>
+          <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
+                '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
           <?= section_edit_button() ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
             <input type="hidden" name="name" value="<?= e($sname) ?>">
             <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
-        <?php render_section_add_row($sname, $csrf, $view); ?>
+        <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
       </div>
     <?php endforeach; ?>
 
-    <!-- Permanent "Calendar" group: undated items here ride along on the Calendar under today. -->
+    <!-- Permanent "Calendar" group: undated items ride along on the Calendar under today.
+         It only makes sense in the default folder (and All), not in every folder. -->
+    <?php if ($viewFolder === 'All' || $viewFolder === $defFolder): ?>
     <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
       <div class="section-head">
-        <?php render_section_add_button(CALENDAR_SECTION); ?>
+        <?php render_section_add_button(CALENDAR_SECTION, $view); ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
         <?= section_edit_button() ?>
       </div>
-      <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view); ?>
+      <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view, $view); ?>
       <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
     </div>
+    <?php endif; ?>
 
     <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
     <div class="section-group default-group" data-section="">
       <div class="section-head">
-        <?php render_section_add_button(''); ?>
+        <?php render_section_add_button('', $view); ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
         <?= section_edit_button() ?>
       </div>
-      <?php render_section_add_row('', $csrf, $view); ?>
+      <?php render_section_add_row('', $csrf, $view, $view); ?>
       <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
     </div>
    </div>

@@ -197,22 +197,76 @@ function repeat_label(?array $rep): string
  * notes — they all store a header row plus a `section` on each item), taking its
  * rows with it. Returns the list unchanged if the new name is empty or taken.
  */
-function section_rename(array $list, string $old, string $new): array
+/**
+ * Rename a section. Sections belong to a folder, so a rename is scoped to one: pass
+ * $folder to rename only that folder's section (and re-point only its items). $folder
+ * null keeps the old suite-wide behaviour (used where sections aren't foldered, e.g.
+ * anything that hasn't been migrated).
+ */
+function section_rename(array $list, string $old, string $new, ?string $folder = null): array
 {
     $new = trim(preg_replace('/\s+/', ' ', $new));
     if ($new === '' || $new === $old) { return $list; }
+    $inFolder = fn($it) => $folder === null
+        || ($it['folder'] ?? SECTION_DEFAULT_FOLDER) === $folder;
     foreach ($list as $it) {
-        if (($it['type'] ?? '') === 'section' && strcasecmp((string) ($it['name'] ?? ''), $new) === 0) {
-            return $list;   // that name is already a section
+        if (($it['type'] ?? '') === 'section' && strcasecmp((string) ($it['name'] ?? ''), $new) === 0
+            && $inFolder($it)) {
+            return $list;   // that name is already a section in this folder
         }
     }
     foreach ($list as &$it) {
         if (($it['type'] ?? '') === 'section') {
-            if (($it['name'] ?? '') === $old) { $it['name'] = $new; }
-        } elseif (($it['section'] ?? '') === $old) {
+            if (($it['name'] ?? '') === $old && $inFolder($it)) { $it['name'] = $new; }
+        } elseif (($it['section'] ?? '') === $old && $inFolder($it)) {
             $it['section'] = $new;
         }
     }
     unset($it);
     return $list;
+}
+
+/** Default folder a section falls back to when a row or item doesn't name one. */
+const SECTION_DEFAULT_FOLDER = 'General';
+
+/**
+ * Bring an old list up to per-folder sections. Legacy section rows carried no `folder`
+ * and were shown in every folder; here each is replaced by one row per folder that
+ * actually uses it (so existing grouping is preserved), falling back to General when a
+ * section has no items. Idempotent: a list with no legacy rows is returned untouched.
+ */
+function sections_migrate(array $list, string $defaultFolder = SECTION_DEFAULT_FOLDER): array
+{
+    $hasLegacy = false;
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section' && !array_key_exists('folder', $it)) { $hasLegacy = true; break; }
+    }
+    if (!$hasLegacy) { return $list; }
+
+    $items = array_filter($list, fn($it) => ($it['type'] ?? '') !== 'section');
+    $have  = [];   // "folder\x1Fname" of section rows that already exist, tagged
+    $out   = [];
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section') {
+            if (!array_key_exists('folder', $it)) { continue; }   // drop legacy; re-add below
+            $have[$it['folder'] . "\x1F" . $it['name']] = true;
+        }
+        $out[] = $it;
+    }
+    foreach ($list as $sec) {
+        if (($sec['type'] ?? '') !== 'section' || array_key_exists('folder', $sec)) { continue; }
+        $name = (string) ($sec['name'] ?? '');
+        $folders = [];
+        foreach ($items as $r) {
+            if ((string) ($r['section'] ?? '') === $name) { $folders[$r['folder'] ?? $defaultFolder] = true; }
+        }
+        if (!$folders) { $folders[$defaultFolder] = true; }
+        foreach (array_keys($folders) as $f) {
+            if (isset($have[$f . "\x1F" . $name])) { continue; }
+            $out[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name,
+                      'folder' => $f, 'created' => $sec['created'] ?? time()];
+            $have[$f . "\x1F" . $name] = true;
+        }
+    }
+    return $out;
 }
