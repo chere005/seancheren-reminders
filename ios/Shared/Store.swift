@@ -204,9 +204,26 @@ final class Store: ObservableObject {
         })
     }
 
+    /// Persist a drag-reorder within a group: `ordered` is the group as arranged now.
+    /// Display still sorts undated-first by date, so `order` only breaks ties — matching
+    /// the web, where dragging within a section is largely cosmetic.
+    func moveReminders(_ ordered: [Reminder], from: IndexSet, to: Int) {
+        var rows = ordered
+        rows.move(fromOffsets: from, toOffset: to)
+        for (i, r) in rows.enumerated() {
+            if let idx = data.reminders.firstIndex(where: { $0.id == r.id }) { data.reminders[idx].order = i }
+        }
+        touch()
+    }
+
     // MARK: - Notes
 
-    func add(_ note: Note)     { data.notes.append(note); touch() }
+    func add(_ note: Note) {
+        var new = note
+        new.order = (data.notes.map(\.order).max() ?? 0) + 1   // new notes sort to the end until dragged
+        data.notes.append(new)
+        touch()
+    }
     func update(_ note: Note) {
         guard let i = data.notes.firstIndex(where: { $0.id == note.id }) else { return }
         data.notes[i] = note
@@ -215,10 +232,21 @@ final class Store: ObservableObject {
     }
     func delete(_ note: Note)  { data.notes.removeAll { $0.id == note.id }; touch() }
 
+    /// Notes in a folder+group, in drag order (stored `order`), like the web suite.
     func notes(folder: UUID?, group: UUID?) -> [Note] {
         data.notes
             .filter { $0.group == group && (folder == nil || $0.folder == folder) }
-            .sorted { $0.updated > $1.updated }
+            .sorted { $0.order < $1.order }
+    }
+
+    /// Persist a drag-reorder: `ordered` is the group as the user just arranged it.
+    func moveNotes(_ ordered: [Note], from: IndexSet, to: Int) {
+        var rows = ordered
+        rows.move(fromOffsets: from, toOffset: to)
+        for (i, n) in rows.enumerated() {
+            if let idx = data.notes.firstIndex(where: { $0.id == n.id }) { data.notes[idx].order = i }
+        }
+        touch()
     }
 
     // MARK: - Events
@@ -231,29 +259,62 @@ final class Store: ObservableObject {
     }
     func delete(_ event: Event) { data.events.removeAll { $0.id == event.id }; touch() }
 
+    /// Real calendars (not sets) and calendar sets, from the one stored list.
+    var calendarsOnly: [Cal] { data.calendars.filter { !$0.isSet } }
+    var calSets: [Cal]       { data.calendars.filter { $0.isSet } }
+
     func addCalendar(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
-        let made = Cal(name: clean, color: data.calendars.count % 10)
+        let made = Cal(name: clean, color: calendarsOnly.count % 10)
         data.calendars.append(made)
         if data.defaultCal == nil { data.defaultCal = made.id }
         touch()
     }
 
-    /// A deleted calendar takes its events with it — unlike a folder, there's nowhere
-    /// sensible for them to land, and an event with no calendar has no colour.
-    func deleteCalendar(_ cal: Cal) {
-        guard data.calendars.count > 1 else { return }
-        data.events.removeAll { $0.cal == cal.id }
-        data.calendars.removeAll { $0.id == cal.id }
-        if data.defaultCal == cal.id { data.defaultCal = data.calendars.first?.id }
+    /// A set is a saved view over several calendars' ids.
+    func addSet(_ name: String, members: [UUID]) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !members.isEmpty else { return }
+        data.calendars.append(Cal(name: clean, color: data.calendars.count % 10, members: members))
         touch()
     }
 
-    /// Everything landing on one day: events and dated reminders, repeats expanded.
-    func events(on date: Date) -> [Event] {
+    /// A deleted calendar takes its events with it — unlike a folder, there's nowhere
+    /// sensible for them to land, and an event with no calendar has no colour. A deleted
+    /// set is just dropped, and any calendar removed is scrubbed from the sets too.
+    func deleteCalendar(_ cal: Cal) {
+        if cal.isSet {
+            data.calendars.removeAll { $0.id == cal.id }
+            touch(); return
+        }
+        guard calendarsOnly.count > 1 else { return }
+        data.events.removeAll { $0.cal == cal.id }
+        for i in data.calendars.indices {
+            if var m = data.calendars[i].members { m.removeAll { $0 == cal.id }; data.calendars[i].members = m }
+        }
+        data.calendars.removeAll { $0.id == cal.id }
+        if data.defaultCal == cal.id { data.defaultCal = calendarsOnly.first?.id }
+        touch()
+    }
+
+    /// Which calendar ids a selection covers: nil (show all), a single calendar, or a
+    /// set's members (validated against calendars that still exist).
+    func calScope(_ selection: UUID?) -> Set<UUID>? {
+        guard let selection, let c = data.cal(selection) else { return nil }
+        if let m = c.members { return Set(m).intersection(Set(calendarsOnly.map(\.id))) }
+        return [selection]
+    }
+
+    /// Events on one day, repeats expanded, optionally narrowed to a calendar scope. An
+    /// event with no calendar counts as the default one.
+    func events(on date: Date, scope: Set<UUID>? = nil) -> [Event] {
         let day = date.day
         return data.events.filter { event in
+            if let scope {
+                let ec = event.cal ?? data.defaultCal
+                guard let ec, scope.contains(ec) else { return false }
+            }
             if let rule = event.recurrence {
                 return !rule.dates(start: event.date, from: day, to: day).isEmpty
             }
@@ -314,6 +375,16 @@ final class Store: ObservableObject {
 
     func habits(group: UUID?) -> [Habit] {
         data.habits.filter { $0.group == group }.sorted { $0.order < $1.order }
+    }
+
+    /// Persist a drag-reorder: `ordered` is the group as the user just arranged it.
+    func moveHabits(_ ordered: [Habit], from: IndexSet, to: Int) {
+        var rows = ordered
+        rows.move(fromOffsets: from, toOffset: to)
+        for (i, h) in rows.enumerated() {
+            if let idx = data.habits.firstIndex(where: { $0.id == h.id }) { data.habits[idx].order = i }
+        }
+        touch()
     }
 
     // MARK: - The watch's list
