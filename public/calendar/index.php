@@ -1053,7 +1053,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <span class="secnote">in <?= e($remDefFolder) ?></span>
     </div>
     <div class="buttons">
-      <button type="button" class="del needs-confirm" data-confirm="Tap again to delete" id="mDelete" hidden>Delete</button>
+      <button type="button" class="del needs-confirm" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
       <button type="submit" class="ok" id="mOk">Add</button>
     </div>
@@ -1382,7 +1382,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       if (!it.owner) {
         const del = document.createElement('button');
         del.className = 'dp-del needs-confirm'; del.textContent = '×'; del.title = 'Delete';
-        del.dataset.confirm = '×?';
         del.addEventListener('click', (ev) => {
           ev.stopPropagation();
           document.getElementById('diKind').value = it.kind;
@@ -1526,7 +1525,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       if (cals.length > 1) {                 // never leave the user with no calendar
         const del = document.createElement('button');
         del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
-        del.dataset.confirm = 'Delete?';
         del.addEventListener('click', () => {
           calApi('cal_delete', { id: c.id, confirm: 1 });   // the arming already confirmed it
         });
@@ -1579,7 +1577,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       count.textContent = n + (n === 1 ? ' calendar' : ' calendars');
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete set';
-      del.dataset.confirm = 'Delete?';
       del.addEventListener('click', e => {
         e.stopPropagation();
         calApi('set_delete', { id: s.id, confirm: 1 });   // the arming already confirmed it

@@ -171,7 +171,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="id" value="<?= e($r['id']) ?>">
-            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete">&times;</button>
+            <button class="del needs-confirm" type="submit" title="Delete">&times;</button>
           </form>
         </li>
         <?php
@@ -604,7 +604,7 @@ $sectionInput =
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
-    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
+    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
@@ -664,12 +664,9 @@ $sectionInput =
     /* On a section header the + and the drag handle share one slot on the left: the +
        out of edit mode, the handle in it. Same width either way, so the name never
        shifts — and the two permanent groups keep the empty slot for the same reason. */
-    .section-head .sec-handle {
-      width: 24px; margin-right: -0.25rem; visibility: visible; display: none;
-    }
-    /* 24px + the header's 0.5rem gap - 0.25rem = the rows' 1rem handle + 0.75rem gap,
-       so a section's name starts exactly where the text under it does. */
-    .section-head .sec-add { margin-right: -0.25rem; }
+    .section-head .sec-handle { width: 24px; visibility: visible; display: none; }
+    /* The header's gap is the rows' gap, so the name sits the same distance from the
+       + as it does from the pencil on its other side. */
     body.editing .section-head .sec-handle { display: inline-flex; }
     body.editing .sec-add { display: none; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
@@ -761,7 +758,7 @@ $sectionInput =
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="name" value="<?= e($sname) ?>">
-            <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
+            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
         <?php render_section_add_row($sname, $csrf, $view); ?>

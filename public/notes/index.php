@@ -312,7 +312,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="id" value="<?= e($n['id']) ?>">
-            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete note">&times;</button>
+            <button class="del needs-confirm" type="submit" title="Delete note">&times;</button>
           </form>
         </li>
         <?php
@@ -381,13 +381,13 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .listbar select:focus { outline: none; border-color: #888; }
 
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
-    .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
+    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
     /* The + sits in the left slot, ahead of the name — not with the delete X. */
-    /* The + sits in the left slot, ahead of the name — not with the delete X. Its
-       24px plus the header's 0.5rem gap, less 0.25rem, matches the rows' handle +
-       gap, so the name starts where the note titles under it do. */
-    .section-head form.sec-add-form { margin-left: 0; margin-right: -0.25rem; }
+    /* The + sits in the left slot, ahead of the name — not with the delete X. The
+       header's gap is the rows' gap, so the name sits the same distance from the +
+       as from the pencil on its other side. */
+    .section-head form.sec-add-form { margin-left: 0; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
@@ -572,7 +572,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           <input type="hidden" name="action" value="delete_section">
           <input type="hidden" name="view" value="<?= e($view) ?>">
           <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
+          <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
       <?php render_note_rows($rows, $view, $csrf, $sname); ?>
@@ -630,7 +630,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     <input type="hidden" class="rt-value" name="body" value="<?= e(rt_body_html($current['body'] ?? '')) ?>">
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
-      <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete">Delete</button>
+      <button class="del needs-confirm" type="submit" name="action" value="delete">Delete</button>
     </div>
   </form>
 <?php endif; ?>

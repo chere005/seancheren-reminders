@@ -103,7 +103,7 @@ function render_book_card(array $b, string $csrf, string $shelf): void
         <input type="hidden" name="action" value="delete_book">
         <input type="hidden" name="book" value="<?= e($b['id']) ?>">
         <input type="hidden" name="shelf" value="<?= e($shelf) ?>">
-        <button class="bdel needs-confirm" data-confirm="Delete?" type="submit" title="Remove book">&times;</button>
+        <button class="bdel needs-confirm" type="submit" title="Remove book">&times;</button>
       </form>
     </div>
     <?php
@@ -882,7 +882,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
             <input type="hidden" name="book" value="<?= e($book['id']) ?>">
             <input type="hidden" name="id" value="<?= e($n['id']) ?>">
             <input type="hidden" name="ret" value="chapters">
-            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete chapter">&times;</button>
+            <button class="del needs-confirm" type="submit" title="Delete chapter">&times;</button>
           </form>
         </li>
       <?php endforeach; ?>
@@ -966,7 +966,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
               <input type="hidden" name="action" value="delete_note">
               <input type="hidden" name="book" value="<?= e($book['id']) ?>">
               <input type="hidden" name="id" value="<?= e($n['id']) ?>">
-              <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete note">&times;</button>
+              <button class="del needs-confirm" type="submit" title="Delete note">&times;</button>
             </form>
           </li>
         <?php }
@@ -999,7 +999,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
           <input type="hidden" name="action" value="delete_bsection">
           <input type="hidden" name="book" value="<?= e($book['id']) ?>">
           <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
+          <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
       <?php $renderBNotes($groupedN[$sname] ?? [], $sname); ?>
@@ -1040,7 +1040,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     <input type="hidden" class="rt-value" name="body" value="<?= e(rt_body_html($curNote['body'] ?? '')) ?>">
     <div class="actions">
       <span class="meta" id="saveStatus">Saved</span>
-      <button class="del needs-confirm" data-confirm="Tap again to delete" type="submit" name="action" value="delete_note">Delete</button>
+      <button class="del needs-confirm" type="submit" name="action" value="delete_note">Delete</button>
     </div>
   </form>
   <?= rt_entry_modal_html() ?>

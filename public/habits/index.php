@@ -26,7 +26,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf): v
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_habit">
             <input type="hidden" name="id" value="<?= e($h['id']) ?>">
-            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete habit">&times;</button>
+            <button class="del needs-confirm" type="submit" title="Delete habit">&times;</button>
           </form>
         </div>
         <?php foreach ($days as $d): $done = !empty($h['done'][$d]); ?>
@@ -269,7 +269,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="id" value="<?= e($s['id']) ?>">
-            <button class="del needs-confirm" data-confirm="Delete?" type="submit" title="Delete section">&times;</button>
+            <button class="del needs-confirm" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
         <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf); ?>
