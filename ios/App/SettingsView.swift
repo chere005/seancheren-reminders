@@ -66,7 +66,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-        .onChange(of: token) { _ in sent = false }
+        .onChange(of: token) { sent = false }   // a different token hasn't been sent yet
     }
 
     /// Drop the cookies the whole suite shares, then send every tab home so it
