@@ -7,9 +7,11 @@
 
 const FOLDER_DEFAULT = 'General';
 
-/** Colours a folder can wear — the calendars' palette, so the suite reads as one. */
-const FOLDER_COLORS = ['#60a5fa', '#34d399', '#f472b6', '#c084fc', '#fb923c',
-                       '#facc15', '#fb7185', '#22d3ee', '#a3e635', '#94a3b8'];
+/** Colours a folder can wear. Deliberately a warm palette that shares no colour with
+ *  the calendars' (CAL_COLORS, which leads with blue/green), so a reminder or note
+ *  folder never reads as a calendar — reminders are their own thing at a glance. */
+const FOLDER_COLORS = ['#f97316', '#ef4444', '#db2777', '#d946ef', '#f59e0b',
+                       '#e11d48', '#c026d3', '#fb923c', '#a21caf', '#b45309'];
 
 function folders_load(string $dir, ?string $user = null): array
 {
