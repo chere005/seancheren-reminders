@@ -256,13 +256,35 @@ function signup_clean_user(string $u): string
     return preg_match('/^[a-z0-9_-]{2,20}$/', $u) ? $u : '';
 }
 
-/** Post the code out. Plain mail(), which is all NFSN needs. */
+/**
+ * Post the code out. mail() through the host's sendmail, with the envelope sender
+ * set explicitly (-f) — without it the relay stamps its own and the message is
+ * refused or filed as spam. Failures are logged, since there's nothing else to
+ * look at when someone says the email never came.
+ */
 function signup_send_code(array $cfg, string $email, string $code): bool
 {
-    $from = (string) ($cfg['mail_from'] ?? 'no-reply@seancheren.com');
-    return @mail($email, 'Your verification code',
-                 "Your verification code is $code\n",
-                 "From: $from\r\nContent-Type: text/plain; charset=utf-8");
+    $from    = (string) ($cfg['mail_from'] ?? 'no-reply@seancheren.com');
+    $headers = implode("\r\n", [
+        'From: seancheren.com <' . $from . '>',
+        'Reply-To: ' . $from,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=utf-8',
+        'Content-Transfer-Encoding: 8bit',
+        'Date: ' . date('r'),
+    ]);
+    $body = "Your verification code is $code\n\n"
+          . "It's good for fifteen minutes. If you didn't ask for an account, ignore this.\n";
+    $ok = @mail($email, 'Your verification code', $body, $headers, '-f' . $from);
+    if (!$ok) { signup_log($cfg, 'mail() refused ' . $email); }
+    return $ok;
+}
+
+/** One line in data/mail.log — the only trace of a send that didn't happen. */
+function signup_log(array $cfg, string $line): void
+{
+    @file_put_contents(rtrim($cfg['data_dir'], '/') . '/mail.log',
+                       date('c') . ' ' . $line . "\n", FILE_APPEND);
 }
 
 /**
@@ -381,22 +403,36 @@ function render_login(string $area, string $error = '', string $stage = 'login',
     /* Create account: a quieter button under Log in, and the form it reveals. */
     .login-box .makebtn { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
     .login-box .makebtn:hover { background: #222; color: #eee; }
-    .login-box .signup { margin-top: 1.25rem; border-top: 1px solid #2a2a2a; padding-top: 1.25rem; }
-    .login-box .signup[hidden] { display: none; }
-    .login-box .signup h2 { font-size: 0.95rem; margin-bottom: 0.9rem; text-align: center; }
-    /* The code window, on top of the page while we wait for the email to arrive. */
-    .codeback {
+    /* Creating an account is a window over the page, the same shape as the one
+       that then waits for the code — the login box itself never changes size. */
+    .modalback {
       position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex;
       align-items: center; justify-content: center; padding: 1rem; z-index: 20;
     }
-    .codeback[hidden] { display: none; }
-    .codebox {
+    .modalback[hidden] { display: none; }
+    .modalbox {
       background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.5rem;
-      width: 100%; max-width: 320px; text-align: center;
+      width: 100%; max-width: 320px;
     }
-    .codebox h2 { font-size: 1.05rem; margin-bottom: 0.4rem; }
-    .codebox p { font-size: 0.82rem; color: #888; margin-bottom: 1rem; }
-    .codebox input { text-align: center; letter-spacing: 0.5em; font-size: 1.3rem; }
+    .modalbox h2 { font-size: 1.05rem; margin-bottom: 0.4rem; text-align: center; }
+    .modalbox p { font-size: 0.82rem; color: #888; margin-bottom: 1rem; text-align: center; }
+    .modalbox label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.25rem; }
+    .modalbox input {
+      width: 100%; padding: 0.5rem 0.75rem; background: #222; border: 1px solid #444;
+      border-radius: 4px; color: #eee; font-size: 1rem; margin-bottom: 1rem;
+    }
+    .modalbox input:focus { outline: none; border-color: #888; }
+    .modalbox button {
+      width: 100%; padding: 0.6rem; background: #eee; color: #111; border: none;
+      border-radius: 4px; font-size: 1rem; cursor: pointer;
+    }
+    .modalbox .cancel { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
+    /* Four characters wide and no wider — a full-width box with half an em of
+       letter-spacing pushed the last digit past the edge on a phone. */
+    .codebox input {
+      width: 7ch; margin: 0 auto 1rem; text-align: center; font-size: 1.3rem;
+      letter-spacing: 0.4em; text-indent: 0.4em;
+    }
   </style>
 </head>
 <body>
@@ -413,11 +449,18 @@ function render_login(string $area, string $error = '', string $stage = 'login',
       <button type="submit">Log in</button>
     </form>
     <button type="button" class="makebtn" id="makeBtn">Create account</button>
-    <?php if ($error !== '' && $stage !== 'verify'): ?>
+    <?php if ($error !== '' && $stage !== 'signup' && $stage !== 'verify'): ?>
       <p class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></p>
     <?php endif; ?>
-    <form class="signup" id="signupForm" method="post" action="<?= $action ?>"<?= $stage === 'signup' ? '' : ' hidden' ?>>
+  </div>
+  <div class="modalback" id="signBack"<?= $stage === 'signup' ? '' : ' hidden' ?>>
+    <div class="modalbox">
+    <form method="post" action="<?= $action ?>">
       <h2>Create an account</h2>
+      <p>Pick a name and we'll email you a code.</p>
+      <?php if ($stage === 'signup' && $error !== ''): ?>
+        <p class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></p>
+      <?php endif; ?>
       <input type="hidden" name="action" value="signup">
       <label for="newuser">Username</label>
       <input id="newuser" type="text" name="newuser" autocapitalize="none" autocorrect="off"
@@ -427,11 +470,13 @@ function render_login(string $area, string $error = '', string $stage = 'login',
       <label for="newpass">Password</label>
       <input id="newpass" type="password" name="newpass" autocomplete="new-password" minlength="6" required>
       <button type="submit">Send verification code</button>
+      <button type="button" class="cancel" data-close>Cancel</button>
     </form>
+    </div>
   </div>
   <?php // The account isn't made until this comes back matching what we emailed. ?>
-  <div class="codeback" id="codeBack"<?= $stage === 'verify' ? '' : ' hidden' ?>>
-    <div class="codebox">
+  <div class="modalback" id="codeBack"<?= $stage === 'verify' ? '' : ' hidden' ?>>
+    <div class="modalbox codebox">
       <h2>Check your email</h2>
       <p>Enter the four-digit code we sent you.</p>
       <?php if ($stage === 'verify' && $error !== ''): ?>
@@ -443,12 +488,20 @@ function render_login(string $area, string $error = '', string $stage = 'login',
         <input type="text" name="code" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
                required autofocus>
         <button type="submit">Verify</button>
+        <button type="button" class="cancel" data-close>Cancel</button>
       </form>
     </div>
   </div>
   <script>(function () {
-    var b = document.getElementById('makeBtn'), f = document.getElementById('signupForm');
-    b.addEventListener('click', function () { f.hidden = !f.hidden; if (!f.hidden) { f.newuser.focus(); } });
+    var b = document.getElementById('makeBtn'), f = document.getElementById('signBack');
+    b.addEventListener('click', function () { f.hidden = false; f.querySelector('#newuser').focus(); });
+    // Either window closes on its backdrop or its Cancel — nothing here is a
+    // dead end, since a code that never arrives has to be escapable.
+    document.querySelectorAll('.modalback').forEach(function (m) {
+      m.addEventListener('click', function (e) {
+        if (e.target === m || e.target.hasAttribute('data-close')) { m.hidden = true; }
+      });
+    });
   })();</script>
 </body>
 </html>
