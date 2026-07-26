@@ -536,14 +536,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Visible-calendar picker, under the back button / title. Hand-built rather than a
        <select> so each entry can carry its calendar's colour dot. */
     .calpick { margin: 0 0 0.9rem; padding-left: 2rem; position: relative; }   /* the Reminders offset */
+    /* Closed, the picker is one round button wearing the selected calendar's colour. */
     .calpick-btn {
-      display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%;
-      background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px;
-      padding: 0.3rem 0.7rem; font-size: 16px; font-family: inherit; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; padding: 0;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 50%; cursor: pointer;
     }
     .calpick-btn:hover { border-color: #888; }
-    .calpick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .calpick-chev { color: #888; font-size: 0.75rem; }
+    .calpick-btn .cdot { width: 16px; height: 16px; }
     .calpick .cdot {
       flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #555;
     }
@@ -865,10 +865,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
   ?>
   <div class="calpick">
-    <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false">
-      <span class="cdot" style="background:<?= e($curColor) ?>;<?= $curColor === '' ? 'display:none' : '' ?>"></span>
-      <span class="calpick-name"><?= e($curName) ?></span>
-      <span class="calpick-chev">&#9662;</span>
+    <?php // Just the selected calendar's colour, round: the name is in the menu it opens. ?>
+    <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false"
+            title="<?= e($curName) ?>" aria-label="<?= e($curName) ?>">
+      <span class="cdot<?= $curColor === '' ? ' all' : '' ?>"<?= $curColor === '' ? '' : ' style="background:' . e($curColor) . '"' ?>></span>
     </button>
     <div class="calpick-menu" id="calSelMenu" role="listbox" hidden>
       <a class="calpick-opt<?= $calView === 'all' ? ' on' : '' ?>" href="?cal=all">
