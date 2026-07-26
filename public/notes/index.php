@@ -52,7 +52,7 @@ function render_section_add(string $name, string $csrf, string $view, string $fo
 {
     $label = e($name === '' ? NOTES_DEFAULT_SECTION : $name);
     ?>
-    <form method="post" action="" style="display:inline">
+    <form method="post" action="" class="sec-add-form" style="display:inline">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add">
       <input type="hidden" name="view" value="<?= e($view) ?>">
@@ -383,6 +383,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
+    /* The + sits in the left slot, ahead of the name — not with the delete X. */
+    /* The + sits in the left slot, ahead of the name — not with the delete X. Its
+       24px plus the header's 0.5rem gap, less 0.25rem, matches the rows' handle +
+       gap, so the name starts where the note titles under it do. */
+    .section-head form.sec-add-form { margin-left: 0; margin-right: -0.25rem; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
@@ -559,9 +564,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <?php $rows = $grouped[$sname] ?? []; ?>
       <?php if (!$rows && $view !== 'All') continue; ?>
       <div class="section-head">
-        <span class="drag-handle blank" aria-hidden="true"></span>
-        <span class="section-title"><?= e($sname) ?></span>
         <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
+        <span class="section-title"><?= e($sname) ?></span>
         <?= section_edit_button() ?>
         <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -576,9 +580,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
     <!-- Permanent "Notes" group: always last, not deletable. -->
     <div class="section-head">
-      <span class="drag-handle blank" aria-hidden="true"></span>
-      <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
       <?php render_section_add('', $csrf, $view, $addTarget); ?>
+      <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
       <?= section_edit_button() ?>
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>

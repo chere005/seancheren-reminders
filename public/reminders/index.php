@@ -661,9 +661,17 @@ $sectionInput =
     /* The permanent groups can't be dragged, but they keep the slot so their titles
        line up with every other section's. */
     .sec-handle.blank { cursor: default; }
-    /* The rows put a wider gap after their handle; match it so a section's name
-       starts where the checkboxes under it do. */
-    .section-head .sec-handle { margin-right: 0.25rem; }
+    /* On a section header the + and the drag handle share one slot on the left: the +
+       out of edit mode, the handle in it. Same width either way, so the name never
+       shifts — and the two permanent groups keep the empty slot for the same reason. */
+    .section-head .sec-handle {
+      width: 24px; margin-right: -0.25rem; visibility: visible; display: none;
+    }
+    /* 24px + the header's 0.5rem gap - 0.25rem = the rows' 1rem handle + 0.75rem gap,
+       so a section's name starts exactly where the text under it does. */
+    .section-head .sec-add { margin-right: -0.25rem; }
+    body.editing .section-head .sec-handle { display: inline-flex; }
+    body.editing .sec-add { display: none; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     .section-group.dragging { opacity: 0.9; }
@@ -744,9 +752,9 @@ $sectionInput =
             // way back, since it has no rows yet. CSS hides it, edit mode brings it back. ?>
       <div class="section-group<?= (!$rows && $view !== 'All') ? ' folder-empty' : '' ?>" data-section="<?= e($sname) ?>">
         <div class="section-head">
+          <?php render_section_add_button($sname); ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= e($sname) ?></span>
-          <?php render_section_add_button($sname); ?>
           <?= section_edit_button() ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -764,9 +772,9 @@ $sectionInput =
     <!-- Permanent "Calendar" group: undated items here ride along on the Calendar under today. -->
     <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
       <div class="section-head">
+        <?php render_section_add_button(CALENDAR_SECTION); ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
-        <?php render_section_add_button(CALENDAR_SECTION); ?>
         <?= section_edit_button() ?>
       </div>
       <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view); ?>
@@ -776,9 +784,9 @@ $sectionInput =
     <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
     <div class="section-group default-group" data-section="">
       <div class="section-head">
+        <?php render_section_add_button(''); ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
-        <?php render_section_add_button(''); ?>
         <?= section_edit_button() ?>
       </div>
       <?php render_section_add_row('', $csrf, $view); ?>
