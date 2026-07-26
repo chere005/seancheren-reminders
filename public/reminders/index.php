@@ -375,11 +375,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
 
     $list        = load_reminders($dataFile);
-    $sectionSet  = [];
+    $sectionSet  = [];   // "folder\x1Fname" — sections are per-folder
     // Edit mode rides along on the POST, so anything done from within it lands back
     // in it. The forms only carry this field while editing (see the submit hook).
     $stay        = !empty($_POST['edit']) ? '&edit=1' : '';
-    foreach ($list as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
+    foreach ($list as $it) {
+        if (is_section($it)) { $sectionSet[($it['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $it['name']] = true; }
+    }
 
     switch ($_POST['action']) {
         case 'add':
@@ -389,7 +391,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (!in_array($folder, $folders, true)) { $folder = $addTarget; }
             $section = (string) ($_POST['section'] ?? '');
             // The two permanent groups are legal targets even though they aren't stored sections.
-            if ($section !== '' && $section !== CALENDAR_SECTION && !isset($sectionSet[$section])) { $section = ''; }
+            if ($section !== '' && $section !== CALENDAR_SECTION
+                && !isset($sectionSet[$folder . "\x1F" . $section])) { $section = ''; }
 
             // A dated field from the window wins; otherwise read the date and time
             // out of what was typed ("Vet 8/3 2pm").
@@ -399,7 +402,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 $due = $parsedDate ?? '';
             }
             if ($text !== '') {
-                $list[] = [
+                // Prepend so a new reminder lands at the top of its group (stored order
+                // breaks ties, and earlier in the list sorts higher).
+                array_unshift($list, [
                     'id'      => bin2hex(random_bytes(6)),
                     'text'    => mb_substr($text, 0, 500),
                     'due'     => preg_match('/^\d{4}-\d{2}-\d{2}$/', $due) ? $due : null,
@@ -408,7 +413,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     'folder'  => $folder,
                     'section' => $section,
                     'created' => time(),
-                ];
+                ]);
             }
             break;
 
