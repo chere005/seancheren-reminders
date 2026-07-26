@@ -865,7 +865,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Calendar</h1>
-        <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars"><?= folder_icon_svg() ?></button>
       <div class="calpick">
         <?php // Just the selected calendar's colour, round: the name is in the menu it opens. ?>
         <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false"
@@ -887,9 +886,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           <?php endforeach; ?>
         </div>
       </div>
+      <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars"><?= folder_icon_svg() ?></button>
       </div>
     </div>
-    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Calendar widget</a></div>') ?>
+    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>') ?>
   </header>
 
 
