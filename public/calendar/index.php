@@ -249,15 +249,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     } elseif ($action === 'add_reminder' && $text !== '') {
         // A reminder belongs to a folder and a group, never to a calendar. It lands in
         // whichever folder Reminders is set to add to, under the group picked here.
-        $file    = user_data_file($cfg['data_dir'], 'reminders');
-        $list    = load_json_list($file);
-        $section = (string) ($_POST['section'] ?? '');
-        $secOk   = [CALENDAR_SECTION => true];
-        foreach ($list as $it) { if (($it['type'] ?? '') === 'section') { $secOk[(string) $it['name']] = true; } }
+        $file     = user_data_file($cfg['data_dir'], 'reminders');
+        $list     = load_json_list($file);
+        $remFolder = folder_default_get($cfg['data_dir'], 'reminders');
+        $section  = (string) ($_POST['section'] ?? '');
+        // Sections are per-folder, so only the default folder's sections are valid here.
+        $secOk    = [CALENDAR_SECTION => true];
+        foreach ($list as $it) {
+            if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $remFolder) {
+                $secOk[(string) $it['name']] = true;
+            }
+        }
         if ($section !== '' && !isset($secOk[$section])) { $section = ''; }
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
-                   'due' => $effDate, 'time' => $ptime, 'done' => false,
-                   'folder' => folder_default_get($cfg['data_dir'], 'reminders'),
+                   'due' => $effDate, 'time' => $timeOk ? $time : $ptime, 'done' => false,
+                   'folder' => $remFolder,
                    'section' => $section, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_note' && $text !== '') {
@@ -265,7 +271,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $list  = load_json_list($file);
         $newId = bin2hex(random_bytes(6));
         $list[] = ['id' => $newId, 'title' => mb_substr($ptext, 0, 200),
-                   'date' => $effDate, 'body' => '', 'created' => time(), 'updated' => time()];
+                   'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
+                   'body' => '', 'created' => time(), 'updated' => time()];
         save_json_list($file, $list);
         header('Location: /notes/?id=' . $newId);   // jump straight to the note editor
         exit;
@@ -300,7 +307,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 // ("Vet 8/3 2pm"), and the window's own fields win over what was typed.
                 $it[$spec['textField']] = mb_substr($ptext, 0, $kind === 'note' ? 200 : 500);
                 $it[$spec['dateField']] = $effDate;
-                if ($kind !== 'note')  { $it['time'] = $timeOk ? $time : $ptime; $it['repeat'] = $rep; }
+                $it['time'] = $timeOk ? $time : $ptime;               // reminders, notes and events can carry a time
+                if ($kind !== 'note')  { $it['repeat'] = $rep; }
                 if ($kind === 'event') { $it['cal'] = $evCalOk; }
                 if ($kind === 'note')  { $it['updated'] = time(); }
                 break;
@@ -1039,8 +1047,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       // folder new reminders go to, with the two permanent ones at the top.
       $remDefFolder = folder_default_get($cfg['data_dir'], 'reminders');
       $remSections  = [];
+      // Sections are per-folder — only the default folder's sections belong here.
       foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $it) {
           if (($it['type'] ?? '') !== 'section') { continue; }
+          if (($it['folder'] ?? FOLDER_DEFAULT) !== $remDefFolder) { continue; }
           $nm = (string) ($it['name'] ?? '');
           if ($nm !== '' && !in_array($nm, $remSections, true)
               && strcasecmp($nm, CALENDAR_SECTION) !== 0) { $remSections[] = $nm; }
@@ -1191,8 +1201,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     // Anything that isn't a number (or is empty) means "every 1", same as the server.
     if (!mRepEvery.hidden && !(parseInt(mRepN.value, 10) > 0)) { mRepN.value = 1; }
   });
+  // Time applies to every kind now; only the calendar (events) and group (reminders)
+  // rows are kind-specific.
   const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };
-  const hideTime = (kind) => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
+  const hideTime = (kind) => { mTimeRow.hidden = false; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
   document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
     r.addEventListener('change', () => {
@@ -1238,7 +1250,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
-    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); } else { hideTime(''); }
+    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); }
+    else { mTime.value = time || ''; hideTime(kind); }
     showRep(kind, rep);
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
