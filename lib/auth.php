@@ -161,6 +161,23 @@ function user_data_file(string $dir, string $base, ?string $user = null): string
     return rtrim($dir, '/') . "/{$base}-{$safe}.json";
 }
 
+/**
+ * Whose token is this? The calendar widget and the watch app both authenticate with
+ * the string in data/token-<user>.json instead of a session, since neither of them
+ * can hold a login. Returns the username, or null if nothing matches.
+ */
+function token_user(string $dir, string $token): ?string
+{
+    if ($token === '') { return null; }
+    foreach (glob(rtrim($dir, '/') . '/token-*.json') as $f) {
+        $t = store_read($f);
+        if (!empty($t['token']) && hash_equals((string) $t['token'], $token)) {
+            return preg_replace('/^token-(.*)\.json$/', '$1', basename($f));
+        }
+    }
+    return null;
+}
+
 function require_login(string $area = 'App'): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {

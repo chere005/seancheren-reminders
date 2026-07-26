@@ -123,15 +123,7 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
 if (isset($_GET['token'])) {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    $token = (string) $_GET['token'];
-    $owner = null;
-    foreach (glob("$dataDir/token-*.json") as $f) {
-        $t = store_read($f);
-        if (!empty($t['token']) && hash_equals((string) $t['token'], $token)) {
-            $owner = preg_replace('/^token-(.*)\.json$/', '$1', basename($f));
-            break;
-        }
-    }
+    $owner = token_user($dataDir, (string) $_GET['token']);
     if ($owner === null) { http_response_code(403); echo json_encode(['error' => 'invalid token']); exit; }
     $pin = isset($_GET['cals']) ? (string) $_GET['cals'] : null;
     echo json_encode(build_feed($dataDir, $owner, $pin), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
