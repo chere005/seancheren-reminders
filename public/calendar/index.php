@@ -624,12 +624,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell .dot.event { background: var(--k-event); }
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
     .cell.wk-hide { display: none; }
-    body.weekmode .legend { display: none; }
-    .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
-    .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-    .legend .dot.reminder { background: var(--k-reminder); }
-    .legend .dot.event { background: var(--k-event); }
-    .legend .dot.note { background: var(--k-note); }
 
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
@@ -895,7 +889,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       </div>
       </div>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Calendar widget</a></div>') ?>
   </header>
 
 
@@ -968,12 +962,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?php $ymd = date('Y-m-d', mktime(0, 0, 0, $month, $daysInMo + $day, $year)); ?>
       <?= $cell($ymd, $day, true, $weekOf()) ?>
     <?php endfor; ?>
-  </div>
-
-  <div class="legend">
-    <span><span class="dot event"></span>Events</span>
-    <span><span class="dot reminder"></span>Reminders</span>
-    <span><span class="dot note"></span>Notes</span>
   </div>
  </div>
 </div>
@@ -1105,7 +1093,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?php if ($partner): ?>
         <?= share_button_html() ?>
       <?php endif; ?>
-      <a class="widgetlink" href="/calendar/feed.php">Widget</a>
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
   </div>
