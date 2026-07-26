@@ -62,7 +62,8 @@ function chrome_styles(): string
     CSS
     . settings_modal_styles()
     . confirm_delete_styles()
-    . swipe_delete_styles();
+    . swipe_delete_styles()
+    . section_rename_styles();
 }
 
 function back_button(): string
@@ -242,6 +243,63 @@ function section_edit_button(): string
 }
 
 /**
+ * A section's name, editable in place. Out of edit mode it reads as plain text; in
+ * edit mode it's a field that posts `rename_section` on Enter or on leaving it. The
+ * permanent groups pass $fixed, since they can't be renamed.
+ */
+function section_title_html(string $name, string $csrf, string $view = '', bool $fixed = false,
+                            string $action = 'rename_section', string $extra = ''): string
+{
+    $e = fn($x) => htmlspecialchars((string) $x, ENT_QUOTES);
+    if ($fixed) {
+        return '<span class="section-title">' . $e($name) . '</span>';
+    }
+    return '<form method="post" action="" class="secrename">'
+         . '<input type="hidden" name="csrf" value="' . $e($csrf) . '">'
+         . '<input type="hidden" name="action" value="' . $e($action) . '">'
+         . '<input type="hidden" name="view" value="' . $e($view) . '">'
+         . '<input type="hidden" name="name" value="' . $e($name) . '">' . $extra
+         . '<input class="section-title sectitle" name="newname" value="' . $e($name) . '"'
+         . ' size="' . max(4, min(30, mb_strlen($name))) . '" maxlength="40" autocomplete="off"'
+         . ' aria-label="Section name"></form>';
+}
+
+function section_rename_styles(): string
+{
+    return <<<CSS
+    .secrename { display: inline-flex; min-width: 0; }
+    .sectitle {
+      background: none; border: none; border-bottom: 1px solid transparent; padding: 0;
+      color: #f0b429; font-family: inherit; font-weight: 700; font-size: 1.15rem;
+      min-width: 0; max-width: 100%;
+    }
+    /* Only a field once you're editing — otherwise it's just the section's name. */
+    body:not(.editing) .sectitle { pointer-events: none; }
+    body.editing .sectitle { border-bottom-color: #3a3a3a; }
+    .sectitle:focus { outline: none; border-bottom-color: #f0b429; }
+    CSS;
+}
+
+function section_rename_script(): string
+{
+    return <<<'JS'
+<script>document.addEventListener('focusout', function (e) {
+  var i = e.target;
+  if (!i.classList || !i.classList.contains('sectitle')) { return; }
+  var was = i.form.querySelector('input[name="name"]').value;
+  if (i.value.trim() !== '' && i.value !== was) { i.form.submit(); }
+  else { i.value = was; }
+});
+document.addEventListener('keydown', function (e) {
+  var i = e.target;
+  if (!i.classList || !i.classList.contains('sectitle')) { return; }
+  if (e.key === 'Enter') { e.preventDefault(); i.blur(); }
+  if (e.key === 'Escape') { i.value = i.form.querySelector('input[name="name"]').value; i.blur(); }
+});</script>
+JS;
+}
+
+/**
  * Two-press delete, used everywhere instead of a confirm() box or an Undo button.
  * Mark any delete control `needs-confirm`: the first press arms it (fills red), the
  * second goes through. Arming disarms itself after a few seconds, and only one
@@ -393,5 +451,6 @@ function chrome_script(): string
          . settings_modal_script()
          . confirm_delete_script()
          . swipe_delete_script()
+         . section_rename_script()
          . keep_edit_script();
 }

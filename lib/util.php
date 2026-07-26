@@ -191,3 +191,28 @@ function repeat_label(?array $rep): string
         ? 'Every ' . $rep['unit']
         : 'Every ' . $rep['n'] . ' ' . $rep['unit'] . 's';
 }
+
+/**
+ * Rename a section in one of the sectioned lists (reminders, notes, habits, book
+ * notes — they all store a header row plus a `section` on each item), taking its
+ * rows with it. Returns the list unchanged if the new name is empty or taken.
+ */
+function section_rename(array $list, string $old, string $new): array
+{
+    $new = trim(preg_replace('/\s+/', ' ', $new));
+    if ($new === '' || $new === $old) { return $list; }
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section' && strcasecmp((string) ($it['name'] ?? ''), $new) === 0) {
+            return $list;   // that name is already a section
+        }
+    }
+    foreach ($list as &$it) {
+        if (($it['type'] ?? '') === 'section') {
+            if (($it['name'] ?? '') === $old) { $it['name'] = $new; }
+        } elseif (($it['section'] ?? '') === $old) {
+            $it['section'] = $new;
+        }
+    }
+    unset($it);
+    return $list;
+}
