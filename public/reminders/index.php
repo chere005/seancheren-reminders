@@ -161,6 +161,16 @@ function reminders_markdown(array $secRows, array $grouped, array $calRows, arra
     return trim($md);
 }
 
+/** The edit-mode ‹ › pair that outdents / indents an item into a subsection. The row's
+ *  id and the CSRF/view come from the DOM, so this is the same markup for rows and heads. */
+function indent_controls(): string
+{
+    return '<span class="indent-ctrls">'
+         . '<button type="button" class="indent-btn" data-dir="out" title="Outdent" aria-label="Outdent">&lsaquo;</button>'
+         . '<button type="button" class="indent-btn" data-dir="in" title="Indent (subsection)" aria-label="Indent">&rsaquo;</button>'
+         . '</span>';
+}
+
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
 function render_rows(array $rows, string $csrf, string $view, string $today, string $section = ''): void
 {
@@ -175,6 +185,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
         }
         ?>
         <li class="swipe-row <?= $done ? 'done' : '' ?>"
+            style="--ind:<?= (int) ($r['indent'] ?? 0) ?>"
             data-id="<?= e($r['id']) ?>"
             data-pos="<?= $pos++ ?>"
             data-done="<?= $done ? '1' : '0' ?>"
@@ -196,6 +207,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $when ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
+          <?= indent_controls() ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
@@ -408,6 +420,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // Indent a reminder or section into a subsection (visual only): store its level 0–4.
+    if ($_POST['action'] === 'set_indent') {
+        $id   = (string) ($_POST['id'] ?? '');
+        $ind  = max(0, min(4, (int) ($_POST['indent'] ?? 0)));
+        $list = load_reminders($dataFile);
+        foreach ($list as &$it) {
+            if (($it['id'] ?? '') === $id) { $it['indent'] = $ind; break; }
+        }
+        unset($it);
+        save_reminders($dataFile, $list);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'indent' => $ind]);
         exit;
     }
 
@@ -729,6 +756,21 @@ $sectionInput =
       font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
+    /* Subsections: padding-left indents the content, so the delete × stays pinned to the
+       right edge and every × lines up down the app. The indent level is a CSS var. */
+    ul.rlist > li { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
+    .section-head { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
+    /* The right-hand tail of a section header (indent arrows + delete), pushed to the edge. */
+    .section-head .sec-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .section-head .sec-tail form { margin-left: 0; }
+    /* Indent controls: edit mode only, to the right of a row or section. */
+    .indent-ctrls { display: none; flex: 0 0 auto; align-items: center; gap: 0.15rem; }
+    body.editing .indent-ctrls { display: inline-flex; }
+    .indent-btn {
+      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      padding: 0.3rem 0.4rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    .indent-btn:hover { border-color: #888; color: #ccc; }
 
     ul { list-style: none; }
     li {
@@ -873,21 +915,25 @@ $sectionInput =
       <?php // Sections always render, empty or not — the same as the permanent Calendar
             // and Reminders groups below. Each belongs to one folder; its rename and
             // delete forms carry that folder, so acting on it never touches another. ?>
-      <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>">
+      <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>"
+           data-id="<?= e($s['id']) ?>" style="--ind:<?= (int) ($s['indent'] ?? 0) ?>">
         <div class="section-head">
           <?= section_collapse_button() ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
                 '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
           <?php render_section_add_button($sname, $sfolder); ?>
-          <form method="post" action="" style="display:inline">
-            <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_section">
-            <input type="hidden" name="view" value="<?= e($view) ?>">
-            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-            <input type="hidden" name="name" value="<?= e($sname) ?>">
-            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-          </form>
+          <span class="sec-tail">
+            <?= indent_controls() ?>
+            <form method="post" action="" style="display:inline">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <input type="hidden" name="action" value="delete_section">
+              <input type="hidden" name="view" value="<?= e($view) ?>">
+              <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+              <input type="hidden" name="name" value="<?= e($sname) ?>">
+              <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+            </form>
+          </span>
         </div>
         <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
@@ -1201,6 +1247,18 @@ $sectionInput =
     if (e.key !== 'Escape' || !editing()) return;
     if (document.querySelector('.textedit') || document.querySelector('.secadd-row:not([hidden])')) return;
     setEdit(false);
+  });
+
+  // ----- Indent / outdent a reminder or section into a subsection (edit mode) -----
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.indent-btn'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const host = b.closest('[data-id]'); if (!host) return;
+    let ind = parseInt(host.style.getPropertyValue('--ind'), 10); if (isNaN(ind)) ind = 0;
+    ind = Math.max(0, Math.min(4, ind + (b.dataset.dir === 'in' ? 1 : -1)));
+    host.style.setProperty('--ind', ind);
+    const body = new URLSearchParams({ csrf: CSRF, action: 'set_indent', view: VIEW, id: host.dataset.id, indent: ind });
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
   });
 </script>
 <?= folder_modal_script() ?>
