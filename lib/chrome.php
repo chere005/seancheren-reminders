@@ -13,7 +13,7 @@
 
 function chrome_styles(): string
 {
-    return <<<CSS
+    return theme_css() . <<<CSS
     /* The top bar: back, the app's name, its one round button, then the username on
        the right. Everything on it is 32px tall and sits on the same line, with a
        rule under the lot, and the same small gap under that rule in every app.
@@ -30,11 +30,11 @@ function chrome_styles(): string
     .backbtn:hover { border-color: #888; color: #fff; }
     /* The "+" (or pencil) beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
-    .titlebtn:hover { border-color: #34d399; color: #34d399; }
-    body.editing .titlebtn.edit-toggle { background: #34d399; border-color: #34d399; color: #06251b; }
+    .titlebtn:hover { border-color: var(--accent); color: var(--accent); }
+    body.editing .titlebtn.edit-toggle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who { margin: 0; padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
-    .usermenu .who:hover { border-color: #34d399; color: #34d399; }
+    .usermenu .who { margin: 0; padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: #2a4a3d; }
+    .usermenu .who:hover { border-color: var(--accent); color: var(--accent); }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: #1c1c1c;
       border: 1px solid #333; border-radius: 8px; min-width: 120px; box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
@@ -50,7 +50,7 @@ function chrome_styles(): string
       line-height: 1.2;
     }
     .hedit:hover { border-color: #888; color: #fff; }
-    body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    body.editing .hedit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
     /* The same toggle again, small enough to sit beside a section's "+". */
     .sec-edit {
       flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
@@ -58,7 +58,7 @@ function chrome_styles(): string
       font-family: inherit; display: inline-flex; align-items: center; justify-content: center;
     }
     .sec-edit:hover { border-color: #888; color: #ccc; }
-    body.editing .sec-edit { background: #34d399; border-color: #34d399; color: #06251b; }
+    body.editing .sec-edit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     CSS
     . settings_modal_styles()
     . confirm_delete_styles()
@@ -106,6 +106,13 @@ function settings_modal_html(): string
 {
     $csrf = htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES);
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
+    $now  = theme_get();
+    $themes = '';
+    foreach (THEMES as $key => [$label, $accent, $ink, $soft]) {
+        $on = $key === $now ? ' on' : '';
+        $themes .= '<button type="button" class="themebtn' . $on . '" data-theme="' . $key . '"'
+                 . ' style="background:' . $accent . '" title="' . $label . '" aria-label="' . $label . '"></button>';
+    }
     return <<<HTML
 <div class="setmodal-backdrop" id="setBackdrop">
   <div class="setmodal">
@@ -120,6 +127,10 @@ function settings_modal_html(): string
       <p class="setmsg" id="setMsg" hidden></p>
       <button type="submit" class="setsave">Change password</button>
     </form>
+    <div class="setthemes">
+      <p class="setlabel">Theme</p>
+      <div class="themerow">{$themes}</div>
+    </div>
     <button type="button" class="setdone" id="setDone">Done</button>
   </div>
 </div>
@@ -129,6 +140,14 @@ HTML;
 function settings_modal_styles(): string
 {
     return <<<CSS
+    .setmodal .setthemes { margin-top: 1.1rem; }
+    .setmodal .setlabel { font-size: 0.8rem; color: #aaa; margin-bottom: 0.5rem; }
+    .setmodal .themerow { display: flex; gap: 0.5rem; }
+    .setmodal .themebtn {
+      width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+      cursor: pointer; padding: 0;
+    }
+    .setmodal .themebtn.on { border-color: #eee; }
     /* The "⋮" wears the username's pill, one notch narrower. Its own class, not
        ".dots" — the Calendar's day cells already use that for their dot row. */
     .setbtn {
@@ -157,9 +176,9 @@ function settings_modal_styles(): string
     }
     .setmodal input[type=password]:focus { outline: none; border-color: #888; }
     .setmodal .setmsg { font-size: 0.8rem; margin-bottom: 0.7rem; color: #f66; }
-    .setmodal .setmsg.ok { color: #34d399; }
+    .setmodal .setmsg.ok { color: var(--accent); }
     .setmodal .setsave {
-      background: #34d399; color: #06251b; border: none; border-radius: 999px; font-weight: 700;
+      background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px; font-weight: 700;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .setmodal .setsave:hover { background: #52e0ac; }
@@ -185,6 +204,15 @@ function settings_modal_script(): string
   document.getElementById('setDone').addEventListener('click', close);
   back.addEventListener('click', function (e) { if (e.target === back) { close(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+  // Themes: post the pick, then reload so every rule picks the new accent up.
+  back.querySelectorAll('.themebtn').forEach(function (t) {
+    t.addEventListener('click', function () {
+      var body = new URLSearchParams({ csrf: form.csrf.value, action: 'set_theme', theme: t.dataset.theme });
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+        .then(function () { location.reload(); })
+        .catch(function () { location.reload(); });
+    });
+  });
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     var d = new FormData(form);

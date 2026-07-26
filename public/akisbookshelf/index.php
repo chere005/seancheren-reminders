@@ -17,7 +17,7 @@ if (current_user() !== 'aki') {
        . '<title>Aki\'s Bookshelf</title>'
        . '<body style="font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:2rem;margin:0">'
        . '<div><p style="font-size:1.15rem;margin:0 0 1rem">This bookshelf is aki\'s.</p>'
-       . '<p style="margin:0"><a href="?logout" style="color:#34d399">Log out</a> and sign in as aki.</p></div></body>';
+       . '<p style="margin:0"><a href="?logout" style="color:var(--accent)">Log out</a> and sign in as aki.</p></div></body>';
     exit;
 }
 
@@ -425,7 +425,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who { padding: 0 0.8rem; color: #34d399; font-size: 0.85rem; border-color: #2a4a3d; }
+    .usermenu .who { padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: #2a4a3d; }
     .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     /* The "⋮" sits against the username, not at the header's own gap. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
@@ -437,8 +437,8 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       cursor: pointer; flex: 0 0 auto;
     }
     .hedit:hover { border-color: #888; color: #fff; }
-    body.editing .hedit { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
-    .usermenu .who:hover { border-color: #34d399; }
+    body.editing .hedit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+    .usermenu .who:hover { border-color: var(--accent); }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
       background: #1c1c1c; border: 1px solid #333; border-radius: 8px; min-width: 120px;
@@ -463,13 +463,13 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       font-size: 0.82rem; font-weight: 600; border-radius: 8px;
     }
     .shelfbar a:hover { color: #ccc; }
-    .shelfbar a.active { background: #2a2a2a; color: #34d399; }
+    .shelfbar a.active { background: #2a2a2a; color: var(--accent); }
     @media (max-width: 400px) { .shelfbar a { font-size: 0.7rem; } }
 
     /* Top bar */
     .bar { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1.25rem; }
     .bar .addbook {
-      padding: 0.5rem 1rem; background: #34d399; color: #06251b; border: none;
+      padding: 0.5rem 1rem; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .bar .addbook:hover { background: #52e0ac; }
@@ -488,7 +488,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .sortmenu .smhead { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: #777; padding: 0.45rem 0.6rem 0.2rem; }
     .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: #eee; text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
     .sortmenu a:hover { background: #2a2a2a; }
-    .sortmenu a.on { color: #34d399; font-weight: 700; }
+    .sortmenu a.on { color: var(--accent); font-weight: 700; }
     /* Set cover sits to the right of the book's details, level with the middle of the
        cover, and only while editing. */
     .bh-cover-edit { display: none; margin-left: auto; align-self: flex-start; }
@@ -540,7 +540,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 
     /* Read indicator (cards = disabled) */
     .readchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: #888; }
-    .readchk input { width: 15px; height: 15px; accent-color: #34d399; }
+    .readchk input { width: 15px; height: 15px; accent-color: var(--accent); }
 
     .bookcard .bdel {
       position: absolute; top: 6px; right: 6px; display: none; z-index: 2;
@@ -551,13 +551,13 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     body.editing .bookcard .bdel { display: block; }
 
     .empty { color: #666; text-align: center; padding: 2.5rem 0; }
-    .empty strong { color: #34d399; }
+    .empty strong { color: var(--accent); }
 
     /* Data tab */
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
     .stat { display: block; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1.4rem 1rem; text-align: center; text-decoration: none; color: inherit; cursor: pointer; }
-    a.stat:hover { border-color: #34d399; }
-    .stat .num { font-size: 2.4rem; font-weight: 800; color: #34d399; line-height: 1; }
+    a.stat:hover { border-color: var(--accent); }
+    .stat .num { font-size: 2.4rem; font-weight: 800; color: var(--accent); line-height: 1; }
     .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: #999; }
     .stat .lbl span { display: block; font-size: 0.72rem; color: #666; margin-top: 0.15rem; }
 
@@ -573,7 +573,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .foldertile .fname { font-weight: 700; font-size: 0.95rem; word-break: break-word; }
     .foldertile .fcount { font-size: 0.75rem; color: #999; }
     .folderback { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
-    .folderback a { color: #34d399; text-decoration: none; font-size: 0.9rem; }
+    .folderback a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
     .folderback .folder-h { font-weight: 700; color: #f0b429; }
 
     /* Search modal */
@@ -586,7 +586,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .modal .mhead .mclose:hover { color: #fff; }
     .modal .msearch { padding: 0 1rem 0.75rem; }
     .modal .msearch input { width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a; border-radius: 8px; color: #eee; font-size: 1rem; }
-    .modal .msearch input:focus { outline: none; border-color: #34d399; }
+    .modal .msearch input:focus { outline: none; border-color: var(--accent); }
     .results { overflow-y: auto; padding: 0 0.5rem 0.5rem; }
     .results .hint, .results .loading { color: #777; font-size: 0.9rem; text-align: center; padding: 1.5rem 0; }
     .rrow { display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem; border-radius: 8px; cursor: pointer; }
@@ -595,7 +595,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .rrow .rmeta { flex: 1; min-width: 0; }
     .rrow .rtitle { font-size: 0.95rem; font-weight: 600; }
     .rrow .rauthor { font-size: 0.8rem; color: #999; margin-top: 0.1rem; }
-    .rrow .radd { flex: 0 0 auto; background: #14332a; color: #34d399; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 700; }
+    .rrow .radd { flex: 0 0 auto; background: #14332a; color: var(--accent); border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 700; }
 
     /* ---- Book page (notes) ---- */
     .bookhead { display: flex; gap: 0.9rem; align-items: flex-start; margin-bottom: 1.25rem; }
@@ -607,7 +607,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .bookhead .bh-flags { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; }
     .bookhead .bh-flags .flagrow { display: flex; gap: 1rem; flex-wrap: wrap; }
     .bookhead .chk { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: #ccc; cursor: pointer; }
-    .bookhead .chk input { width: 18px; height: 18px; accent-color: #34d399; cursor: pointer; }
+    .bookhead .chk input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
     .bookhead .flaghint { font-size: 0.72rem; color: #666; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
@@ -680,6 +680,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     }
     .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 <?= settings_modal_styles() ?>
+<?= theme_css() ?>
 <?= confirm_delete_styles() ?>
 <?= rt_styles() ?>
   </style>

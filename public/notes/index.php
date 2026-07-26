@@ -356,7 +356,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
-      color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d;
+      color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
@@ -389,12 +389,12 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .section-head form.sec-add-form { margin-left: 0; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
     .sec-add {
-      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
+      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex;
       align-items: center; justify-content: center;
     }
-    .sec-add:hover { border-color: #34d399; background: #14251f; }
+    .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .section-del {
       background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
       padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
@@ -430,7 +430,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The blank slot swallows the header's gap, so a section's name starts exactly
        where the note titles under it do. */
     .drag-handle.blank { visibility: hidden; cursor: default; margin-right: 0.25rem; }
-    .drag-handle:active { cursor: grabbing; color: #34d399; }
+    .drag-handle:active { cursor: grabbing; color: var(--accent); }
     ul.nlist li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
     /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
@@ -445,7 +445,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
     /* Editor view */
     .backbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
-    .backbar a { color: #34d399; text-decoration: none; font-size: 0.9rem; margin-right: 0.25rem; }
+    .backbar a { color: var(--accent); text-decoration: none; font-size: 0.9rem; margin-right: 0.25rem; }
     .backbar a:hover { text-decoration: underline; }
     /* The folder/section pickers wear the Edit button's pill (.hedit in chrome.php). */
     .backbar select {
@@ -471,10 +471,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     .editor select.secsel { border-color: #4a3f2a; color: #f0b429; }
     .editor .adddate {
-      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
+      background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
       padding: 0 0.9rem; min-height: 2.4rem; font-size: 0.9rem; cursor: pointer;
     }
-    .editor .adddate:hover { background: #14251f; }
+    .editor .adddate:hover { background: var(--accent-soft); }
     .editor .datewrap { display: inline-flex; align-items: center; gap: 0.35rem; }
     .editor .datewrap[hidden] { display: none; }   /* make [hidden] win over inline-flex */
     .editor .cleardate {

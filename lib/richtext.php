@@ -140,18 +140,18 @@ function rt_styles(): string
       background: none; border: 1px solid #333; color: #ccc; font-family: inherit; line-height: 1.2;
     }
     .rt-btn:hover { border-color: #888; color: #fff; }
-    .rt-btn.on { background: #06251b; border-color: #34d399; color: #34d399; font-weight: 700; }
+    .rt-btn.on { background: var(--accent-ink); border-color: var(--accent); color: var(--accent); font-weight: 700; }
     /* The body itself: a contenteditable wearing the textarea's old clothes. */
     .rt-body {
       width: 100%; min-height: 40vh; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
       padding: 0.75rem; color: #eee; font-family: inherit; font-size: 16px; line-height: 1.5;
       overflow-wrap: anywhere;
     }
-    .rt-body:focus { outline: none; border-color: #34d399; }
+    .rt-body:focus { outline: none; border-color: var(--accent); }
     .rt-body:empty::before { content: attr(data-placeholder); color: #666; }
     .rt-body blockquote {
       margin: 0.5rem 0; padding: 0.15rem 0 0.15rem 0.9rem;
-      border-left: 3px solid #34d399; color: #dfe; font-style: italic;
+      border-left: 3px solid var(--accent); color: #dfe; font-style: italic;
     }
     .rt-body ul, .rt-body ol { margin: 0.4rem 0 0.4rem 1.3rem; }
     .rt-body .rt-meta { color: #888; font-size: 0.8rem; margin: 0.15rem 0 0.6rem; font-style: normal; }
@@ -166,18 +166,18 @@ function rt_styles(): string
       width: 100%; background: #111; border: 1px solid #333; border-radius: 8px; color: #eee;
       padding: 0.5rem 0.7rem; font-family: inherit; font-size: 16px; resize: vertical;
     }
-    .rt-modal textarea:focus, .rt-modal input:focus { outline: none; border-color: #34d399; }
+    .rt-modal textarea:focus, .rt-modal input:focus { outline: none; border-color: var(--accent); }
     .rt-stamp {
       margin-top: 0.8rem; padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px;
       background: none; border: 1px solid #333; color: #777; cursor: pointer; font-family: inherit;
     }
-    .rt-stamp[aria-pressed="true"] { background: #06251b; border-color: #34d399; color: #34d399; font-weight: 700; }
+    .rt-stamp[aria-pressed="true"] { background: var(--accent-ink); border-color: var(--accent); color: var(--accent); font-weight: 700; }
     .rt-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     .rt-modal-actions button {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px; cursor: pointer; font-family: inherit;
     }
     .rt-cancel { background: none; border: 1px solid #444; color: #ccc; }
-    .rt-insert { background: #34d399; border: none; color: #06251b; font-weight: 700; }
+    .rt-insert { background: var(--accent); border: none; color: var(--accent-ink); font-weight: 700; }
     CSS;
 }
 

@@ -247,7 +247,7 @@ JS);
     .box { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; }
     textarea { width: 100%; height: 260px; background: #0e0e0e; color: #cfe; border: 1px solid #333;
       border-radius: 8px; padding: 0.75rem; font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; line-height: 1.4; }
-    button { margin-top: 0.5rem; padding: 0.55rem 1rem; background: #34d399; color: #06251b; border: none;
+    button { margin-top: 0.5rem; padding: 0.55rem 1rem; background: #34d399; color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
     .warn { color: #f0b429; font-size: 0.8rem; margin-top: 0.75rem; }
     .scope { font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; }

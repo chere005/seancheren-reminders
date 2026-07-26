@@ -529,7 +529,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
     header nav .who {
-      color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d;
+      color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
@@ -567,7 +567,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
     }
     .calpick-opt:hover { background: #262626; color: #fff; }
-    .calpick-opt.on { background: #14251f; color: #34d399; font-weight: 600; }
+    .calpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
     .monthnav {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
@@ -577,7 +577,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.4rem 1.1rem; font-size: 1.3rem; line-height: 1; background: #1a1a1a;
       user-select: none;
     }
-    .monthnav a:hover { border-color: #34d399; color: #34d399; }
+    .monthnav a:hover { border-color: var(--accent); color: var(--accent); }
     .monthnav a:active { background: #242424; }
     .monthnav .label { font-size: 1.05rem; color: #ddd; font-weight: 600; }
     /* Today sits just left of the month name. */
@@ -586,7 +586,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
       padding: 0.2rem 0.7rem; font-size: 0.78rem; text-decoration: none; line-height: 1.3;
     }
-    .monthnav .todaybtn:hover { border-color: #34d399; color: #34d399; background: #14251f; }
+    .monthnav .todaybtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
     .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
     .dow { margin-bottom: 6px; }
@@ -602,8 +602,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell.other { background: #131313; border-color: #1c1c1c; cursor: default; }
     .cell.other .num { color: #4a4a4a; }
     .cell .num { font-size: 0.82rem; color: #999; }
-    .cell.today { border-color: #34d399; }
-    .cell.today .num { color: #34d399; font-weight: 700; }
+    .cell.today { border-color: var(--accent); }
+    .cell.today .num { color: var(--accent); font-weight: 700; }
     .cell.selected { border-color: #eee; background: #22262a; }
     .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
     .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -639,13 +639,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
     /* Edit is an icon too, so it doesn't need the text buttons' side padding. */
     .dp-head .hedit { padding: 0.35rem 0.6rem; font-size: 0.95rem; }
-    body.show-done .dp-head #calShowAll { color: #34d399; border-color: #34d399; font-weight: 700; }
+    body.show-done .dp-head #calShowAll { color: var(--accent); border-color: var(--accent); font-weight: 700; }
     .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
     body.editing .dp-item .dp-del { display: inline-block; }
     .dp-item .dp-del:hover { border-color: #f66; color: #f66; }
     .dp-head .dp-add {
-      background: #34d399; color: #06251b; border: none; border-radius: 999px;
+      background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; font-weight: 700; cursor: pointer;
     }
     .dp-head .dp-add:hover { background: #52e0ac; }
@@ -676,7 +676,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .tag.reminder { color: var(--k-reminder); background: var(--k-reminder-soft); }
     .dp-item .tag.event { color: var(--k-event-soft); background: var(--k-event-bg); }
     .dp-item .tag.note { color: var(--k-note-soft); background: var(--k-note-bg); }
-    .dp-item .dp-check { width: 17px; height: 17px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .dp-item .dp-check { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
     .dp-item .cdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
@@ -705,7 +705,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       width: 100%; max-width: 380px; padding: 1.25rem;
     }
     .modal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
-    .modal h2 span { color: #34d399; }
+    .modal h2 span { color: var(--accent); }
     .modal input[type=text] {
       width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
       border-radius: 6px; color: #eee; font-size: 1rem; margin-bottom: 0.85rem;
@@ -717,8 +717,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
     }
     .modal .kind input { display: none; }
-    .modal .kind input:checked + span { color: #34d399; font-weight: 700; }
-    .modal .kind label:has(input:checked) { border-color: #34d399; background: #14251f; }
+    .modal .kind input:checked + span { color: var(--accent); font-weight: 700; }
+    .modal .kind label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .modal .daterow { margin-bottom: 1rem; }
     .modal .timerow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     .modal .timerow .tlabel { font-size: 0.85rem; color: #aaa; }
@@ -727,10 +727,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
     }
     .modal .adddate {
-      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
+      background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
       padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer;
     }
-    .modal .adddate:hover { background: #14251f; }
+    .modal .adddate:hover { background: var(--accent-soft); }
     .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
     .modal .datewrap input[type=date] {
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
@@ -753,7 +753,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       font-weight: 600; cursor: pointer;
     }
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
-    .modal .buttons .ok { background: #34d399; color: #06251b; }
+    .modal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
     /* Share sits on the left of the manager's button row. */
     .modal .buttons .share { margin-right: auto; background: #2a2a2a; color: #ccc; }
     .modal .buttons .share:hover { background: #333; color: #fff; }
@@ -782,7 +782,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
     .addrow input[type=text] { flex: 1; margin-bottom: 0; font-size: 16px; }
     .addrow .plus {
-      flex: 0 0 auto; width: 40px; background: #34d399; color: #06251b; border: none;
+      flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .addrow .plus:hover { background: #52e0ac; }
@@ -791,7 +791,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
       background: #222; border: 1px solid #333; border-radius: 8px;
     }
-    .callist li.dragging { opacity: 0.6; border-color: #34d399; }
+    .callist li.dragging { opacity: 0.6; border-color: var(--accent); }
     .callist .chandle { color: #666; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; }
     .callist .cname { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .callist .cswatch {
@@ -807,7 +807,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .callist .cdel:hover { border-color: #f66; color: #f66; }
     .callist li.setrow { cursor: pointer; }
     .callist .ccount { font-size: 0.75rem; color: #666; white-space: nowrap; }
-    .callist .cmember { width: 20px; height: 20px; accent-color: #34d399; cursor: pointer; flex: 0 0 auto; }
+    .callist .cmember { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
     .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
     /* Default-calendar picker, under the calendar list. */
     .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
