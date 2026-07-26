@@ -118,12 +118,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 $habits = load_habits($dataFile);
 $today  = date('Y-m-d');
 $days   = [];
-// Nine days back through tomorrow, so today sits second from the right and you can
-// tick something off a day early. A narrow screen only has room for seven, so the
-// three oldest are rendered anyway and hidden by CSS — the grid is one layout with
-// a column count that changes, not two renders.
-for ($i = 8; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
-$extraDays = count($days) - 7;   // the columns only a wide screen shows
+// Seven days back through tomorrow (eight columns), so today sits second from the
+// right and you can tick something off a day early. A narrow screen only has room for
+// five, so the three oldest are rendered anyway and hidden by CSS — the grid is one
+// layout with a column count that changes, not two renders.
+for ($i = 6; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
+$extraDays = count($days) - 5;   // the columns only a wide screen shows
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
 // Split sections from habits; group habits under their section (ungrouped first).
@@ -179,14 +179,14 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .newsection input::placeholder { color: #b9a7f5; opacity: 0.8; }
     .newsection input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
 
-    /* Grid: name column + 7 day columns. The squares take whatever the screen
-       gives them, up to 56px, and the name column absorbs the rest — so the grid
-       always spans the page width instead of stopping short of the username. */
-    .grid { display: grid; grid-template-columns: minmax(52px, 1fr) repeat(10, minmax(0, 52px)); gap: 6px; align-items: center; width: 100%; }
-    /* Seven days is all a phone has room for; the three oldest columns are in the
+    /* Grid: name column + day columns. The name column takes at least half the width
+       and absorbs the rest; the day squares are capped small so the habit name has
+       room to read rather than being squeezed by the grid. */
+    .grid { display: grid; grid-template-columns: minmax(120px, 1fr) repeat(8, minmax(0, 40px)); gap: 6px; align-items: center; width: 100%; }
+    /* Five days is all a phone has room for; the three oldest columns are in the
        DOM either way, so this is one grid with a different column count. */
     @media (max-width: 640px) {
-      .grid { grid-template-columns: minmax(52px, 1fr) repeat(7, minmax(0, 56px)); }
+      .grid { grid-template-columns: minmax(96px, 1fr) repeat(5, minmax(0, 44px)); }
       .wide-only { display: none; }
     }
     .colhead {

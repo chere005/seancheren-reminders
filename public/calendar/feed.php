@@ -217,6 +217,15 @@ function shortDate(ymd, today) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric" });
 }
+
+// Stored as 24-hour "HH:MM"; shown as "2pm" / "2:30pm".
+function fmtTime(hm) {
+  const [h, m] = String(hm).split(":").map(Number);
+  if (isNaN(h)) return "";
+  const ap = h < 12 ? "am" : "pm";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${h12}:${String(m).padStart(2, "0")}${ap}` : `${h12}${ap}`;
+}
 JS);
 ?><!DOCTYPE html>
 <html lang="en">

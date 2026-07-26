@@ -473,6 +473,14 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
     }
 }
 ksort($byDay);
+// Within a day, keep the legend's order — events, then reminders, then notes — so the
+// dots and the day panel read the same way. A stable sort (PHP 8+) leaves events in
+// time order and reminders in the order they were gathered.
+$kindRank = ['event' => 0, 'reminder' => 1, 'note' => 2];
+foreach ($byDay as $d => $list) {
+    usort($list, fn($a, $b) => ($kindRank[$a['kind']] ?? 9) <=> ($kindRank[$b['kind']] ?? 9));
+    $byDay[$d] = $list;
+}
 
 // Which day starts selected? ?day= param, else today if this month, else none.
 $selDay = (string) ($_GET['day'] ?? '');

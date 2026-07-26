@@ -531,6 +531,12 @@ $sectionInput =
       padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
       white-space: nowrap;
     }
+    /* Completed is icon-only (a ☑), so it's a 32px circle like the back button —
+       unlike "+ Section", which keeps its label and stays a pill. */
+    .foldernav #doneBtn {
+      width: 32px; padding: 0; flex: 0 0 auto;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
     body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
@@ -553,6 +559,7 @@ $sectionInput =
     .secadd-row .plus {
       flex: 0 0 auto; width: 38px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; line-height: 1;
     }
     .secadd-row .plus:hover { background: #52e0ac; }
     /* A time picked out of the typed text, e.g. "2pm". */
