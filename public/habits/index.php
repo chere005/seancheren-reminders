@@ -154,7 +154,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     header nav a:hover { color: #fff; }
     header nav .who { color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
 
-    .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; padding-left: 2rem; }
+    .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; padding-left: 0; }
     body:not(.editing) .bar { justify-content: flex-end; }   /* Edit keeps the right edge */
     .bar form.addh { flex: 1 1 220px; }
     body:not(.editing) .bar form.addh { display: none; }   /* edit mode only */
@@ -176,10 +176,10 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .newsection input::placeholder { color: #b9a7f5; opacity: 0.8; }
     .newsection input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
 
-    /* Grid: name column + 7 flexible day columns that shrink to fit narrow phones. */
-    /* Fixed day columns rather than 1fr, so the gap between squares is the 6px it
-       says it is in both directions instead of whatever's left over. */
-    .grid { display: grid; grid-template-columns: minmax(52px, 84px) repeat(7, 28px); gap: 6px; align-items: center; max-width: 520px; }
+    /* Grid: name column + 7 day columns. The squares take whatever the screen
+       gives them, up to 56px, and the name column absorbs the rest — so the grid
+       always spans the page width instead of stopping short of the username. */
+    .grid { display: grid; grid-template-columns: minmax(52px, 1fr) repeat(7, minmax(0, 56px)); gap: 6px; align-items: center; width: 100%; }
     .colhead {
       text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
@@ -193,7 +193,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     /* Section header row spans the full grid width. */
     .hsection {
       grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem;
-      margin: 0.9rem 0 0.1rem; padding: 0 0.1rem 0.35rem 2rem;   /* the Reminders offset */
+      margin: 0.9rem 0 0.1rem; padding: 0 0.1rem 0.35rem 0.1rem;   /* flush with the grid */
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
