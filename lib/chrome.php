@@ -286,7 +286,33 @@ function section_rename_styles(): string
 function section_rename_script(): string
 {
     return <<<'JS'
-<script>document.addEventListener('focusout', function (e) {
+<script>
+// A `size` in characters is only ever approximately the width of the name, so a
+// renameable section sat further from its buttons than a fixed one. Measure the
+// text and give the field exactly that width, on load and as it's typed.
+(function () {
+  var ruler = null;
+  function fit(i) {
+    if (!ruler) {
+      ruler = document.createElement('span');
+      ruler.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0';
+      document.body.appendChild(ruler);
+    }
+    var cs = getComputedStyle(i);
+    ruler.style.font = cs.font;
+    ruler.style.letterSpacing = cs.letterSpacing;
+    ruler.textContent = i.value || ' ';
+    i.style.width = (ruler.offsetWidth + 2) + 'px';
+  }
+  function fitAll() { document.querySelectorAll('.sectitle').forEach(fit); }
+  document.addEventListener('input', function (e) {
+    if (e.target.classList && e.target.classList.contains('sectitle')) { fit(e.target); }
+  });
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', fitAll); }
+  else { fitAll(); }
+  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitAll); }
+})();
+document.addEventListener('focusout', function (e) {
   var i = e.target;
   if (!i.classList || !i.classList.contains('sectitle')) { return; }
   var was = i.form.querySelector('input[name="name"]').value;
