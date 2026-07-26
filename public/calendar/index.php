@@ -395,6 +395,12 @@ $monthFrom   = date('Y-m-d', mktime(0, 0, 0, $month, 1 - $leadBlank, $year));
 $monthTo     = date('Y-m-d', mktime(0, 0, 0, $month, $daysInMo + $tailBlank, $year));
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
+// Folder colours, so a day's reminder and note dots wear their folder's colour (a
+// partner's shared folders use the lighter "shared" palette). Resolved into each entry.
+$remFolderColor   = folder_colors($cfg['data_dir'], 'reminders');
+$noteFolderColor  = folder_colors($cfg['data_dir'], 'notes');
+$remFolderTheirs  = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
+
 /**
  * The days a reminder shows on this month: its own (possibly rolled-forward) due
  * date, then any later repeats. Each entry is [ymd, wasRolled]. A repeat's earlier
@@ -422,7 +428,8 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
         // A riding item isn't late — it just lives on today — so don't mark it overdue.
         $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                         'done' => $done, 'rolled' => (!$rides && $wasRolled),
-                        'due' => $r['due'] ?? null, 'rep' => $rep];
+                        'due' => $r['due'] ?? null, 'rep' => $rep,
+                        'color' => $remFolderColor[$r['folder'] ?? FOLDER_DEFAULT] ?? app_palette('reminders')[0]];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
@@ -454,7 +461,8 @@ if ($partner) {
         foreach ($remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
             $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                             'done' => $done, 'rolled' => $wasRolled, 'due' => $r['due'],
-                            'rep' => $rep, 'owner' => $partner];
+                            'rep' => $rep, 'owner' => $partner,
+                            'color' => $remFolderTheirs[$f] ?? app_palette('reminders', true)[0]];
         }
     }
     if ($sharedIds) {
@@ -477,7 +485,9 @@ if ($partner) {
 
 foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'notes')) : [] as $n) {
     if (!empty($n['date']) && $n['date'] >= $monthFrom && $n['date'] <= $monthTo) {
-        $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note', 'done' => false];
+        $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note',
+                                'done' => false,
+                                'color' => $noteFolderColor[$n['folder'] ?? FOLDER_DEFAULT] ?? app_palette('notes')[0]];
     }
 }
 ksort($byDay);
@@ -945,8 +955,23 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             $evShown++;
             $dots .= '<span class="dot event" style="background:' . e($ev['color']) . '"></span>';
         }
-        if ($remDots) { $dots .= '<span class="dot reminder' . $remCls . '"></span>'; }
-        if ($hasNote) { $dots .= '<span class="dot note"></span>'; }
+        if ($remDots) {
+            // Colour the single reminder dot by the folder of the "worst" reminder that
+            // day (overdue, else open, else done); state still rides in the class.
+            $repRem = null;
+            foreach ($remDots as $rd) { if (!$rd['done'] && ($ymd < $todayYmd || !empty($rd['rolled']))) { $repRem = $rd; break; } }
+            if (!$repRem) { foreach ($remDots as $rd) { if (!$rd['done']) { $repRem = $rd; break; } } }
+            if (!$repRem) { $repRem = $remDots[0]; }
+            $rc = (string) ($repRem['color'] ?? '');
+            $dots .= '<span class="dot reminder' . $remCls . '"'
+                   . ($rc !== '' ? ' style="background:' . e($rc) . '"' : '') . '></span>';
+        }
+        if ($hasNote) {
+            $noteColor = '';
+            foreach ($events as $ev) { if ($ev['kind'] === 'note') { $noteColor = (string) ($ev['color'] ?? ''); break; } }
+            $dots .= '<span class="dot note"'
+                   . ($noteColor !== '' ? ' style="background:' . e($noteColor) . '"' : '') . '></span>';
+        }
         $cls = 'cell' . ($other ? ' other' : '') . ($ymd === $todayYmd ? ' today' : '');
         return '<div class="' . $cls . '" data-date="' . $ymd . '" data-week="' . $week . '"'
              . ' role="button" tabindex="0"><div class="num">' . $num . '</div>'
