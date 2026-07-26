@@ -568,7 +568,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <h1>Notes</h1>
         <?php if (!$editing): ?>
           <button type="button" id="folderMgr" class="titlebtn"
-                  title="Manage folders" aria-label="Manage folders">+</button>
+                  title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
           <?php render_folder_pick([['label' => '', 'options' =>
                 array_map(fn($f) => [$f, $f, $folderColors[$f] ?? FOLDER_COLORS[0]], $folders)]], $view); ?>
         <?php endif; ?>

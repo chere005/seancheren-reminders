@@ -28,11 +28,9 @@ function chrome_styles(): string
     }
     .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
-    /* The "+" (or pencil) beside the app's name. The "+" glyph renders slightly low
-       inside the flex box, so nudge those buttons up; the pencil (edit-toggle) sits
-       fine and is left alone. */
+    /* The manage-folders (folder icon) or Edit (pencil) button beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
-    .titlebtn:not(.edit-toggle) { padding-bottom: 3px; }
+    .titlebtn svg { display: block; }
     .titlebtn:hover { border-color: var(--accent); color: var(--accent); }
     body.editing .titlebtn.edit-toggle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .usermenu { position: relative; flex: 0 0 auto; }
@@ -72,6 +70,14 @@ function chrome_styles(): string
 function back_button(): string
 {
     return '<button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>';
+}
+
+/** A monochrome folder glyph (inherits the button's colour) for the manage-folders button. */
+function folder_icon_svg(): string
+{
+    return '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"'
+         . ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+         . '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 }
 
 /**
