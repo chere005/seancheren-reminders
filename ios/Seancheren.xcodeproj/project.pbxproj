@@ -9,21 +9,25 @@
 /* Begin PBXBuildFile section */
 		5E4C00000000000000000100 /* SeancherenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000020 /* SeancherenApp.swift */; };
 		5E4C00000000000000000101 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000021 /* RootView.swift */; };
-		5E4C00000000000000000102 /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000022 /* WebView.swift */; };
 		5E4C00000000000000000103 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000023 /* SettingsView.swift */; };
 		5E4C00000000000000000104 /* PhoneConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000024 /* PhoneConnectivity.swift */; };
-		5E4C00000000000000000105 /* Site.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000030 /* Site.swift */; };
-		5E4C00000000000000000106 /* Reminders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000031 /* Reminders.swift */; };
-		5E4C00000000000000000107 /* WatchLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000032 /* WatchLink.swift */; };
 		5E4C00000000000000000110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000025 /* Assets.xcassets */; };
 		5E4C00000000000000000120 /* WatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000040 /* WatchApp.swift */; };
 		5E4C00000000000000000121 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000041 /* RemindersView.swift */; };
 		5E4C00000000000000000122 /* WatchConnectivityReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000042 /* WatchConnectivityReceiver.swift */; };
-		5E4C00000000000000000123 /* Site.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000030 /* Site.swift */; };
-		5E4C00000000000000000124 /* Reminders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000031 /* Reminders.swift */; };
-		5E4C00000000000000000125 /* WatchLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000032 /* WatchLink.swift */; };
 		5E4C00000000000000000130 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000043 /* Assets.xcassets */; };
 		5E4C00000000000000000140 /* SeancherenWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000011 /* SeancherenWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5E4C00000000000000000150 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000026 /* Theme.swift */; };
+		5E4C00000000000000000151 /* Pickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000027 /* Pickers.swift */; };
+		5E4C00000000000000000152 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000028 /* RemindersView.swift */; };
+		5E4C00000000000000000153 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000029 /* NotesView.swift */; };
+		5E4C00000000000000000154 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C0000000000000000002A /* CalendarView.swift */; };
+		5E4C00000000000000000155 /* HabitsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C0000000000000000002B /* HabitsView.swift */; };
+		5E4C00000000000000000156 /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000033 /* Model.swift */; };
+		5E4C00000000000000000157 /* Parse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000034 /* Parse.swift */; };
+		5E4C00000000000000000158 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000035 /* Store.swift */; };
+		5E4C00000000000000000159 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000036 /* WatchPayload.swift */; };
+		5E4C00000000000000000160 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000036 /* WatchPayload.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,13 +60,19 @@
 		5E4C00000000000000000011 /* SeancherenWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SeancherenWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E4C00000000000000000020 /* SeancherenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeancherenApp.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000021 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		5E4C00000000000000000022 /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000023 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000024 /* PhoneConnectivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneConnectivity.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000025 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		5E4C00000000000000000030 /* Site.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Site.swift; sourceTree = "<group>"; };
-		5E4C00000000000000000031 /* Reminders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reminders.swift; sourceTree = "<group>"; };
-		5E4C00000000000000000032 /* WatchLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLink.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000026 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000027 /* Pickers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pickers.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000028 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000029 /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
+		5E4C0000000000000000002A /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		5E4C0000000000000000002B /* HabitsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HabitsView.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000033 /* Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000034 /* Parse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Parse.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000035 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000036 /* WatchPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchPayload.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000040 /* WatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApp.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000041 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000042 /* WatchConnectivityReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityReceiver.swift; sourceTree = "<group>"; };
@@ -112,7 +122,12 @@
 			children = (
 				5E4C00000000000000000020 /* SeancherenApp.swift */,
 				5E4C00000000000000000021 /* RootView.swift */,
-				5E4C00000000000000000022 /* WebView.swift */,
+				5E4C00000000000000000028 /* RemindersView.swift */,
+				5E4C00000000000000000029 /* NotesView.swift */,
+				5E4C0000000000000000002A /* CalendarView.swift */,
+				5E4C0000000000000000002B /* HabitsView.swift */,
+				5E4C00000000000000000027 /* Pickers.swift */,
+				5E4C00000000000000000026 /* Theme.swift */,
 				5E4C00000000000000000023 /* SettingsView.swift */,
 				5E4C00000000000000000024 /* PhoneConnectivity.swift */,
 				5E4C00000000000000000025 /* Assets.xcassets */,
@@ -123,9 +138,10 @@
 		5E4C00000000000000000005 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
-				5E4C00000000000000000030 /* Site.swift */,
-				5E4C00000000000000000031 /* Reminders.swift */,
-				5E4C00000000000000000032 /* WatchLink.swift */,
+				5E4C00000000000000000033 /* Model.swift */,
+				5E4C00000000000000000034 /* Parse.swift */,
+				5E4C00000000000000000035 /* Store.swift */,
+				5E4C00000000000000000036 /* WatchPayload.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -243,12 +259,18 @@
 			files = (
 				5E4C00000000000000000100 /* SeancherenApp.swift in Sources */,
 				5E4C00000000000000000101 /* RootView.swift in Sources */,
-				5E4C00000000000000000102 /* WebView.swift in Sources */,
+				5E4C00000000000000000152 /* RemindersView.swift in Sources */,
+				5E4C00000000000000000153 /* NotesView.swift in Sources */,
+				5E4C00000000000000000154 /* CalendarView.swift in Sources */,
+				5E4C00000000000000000155 /* HabitsView.swift in Sources */,
+				5E4C00000000000000000151 /* Pickers.swift in Sources */,
+				5E4C00000000000000000150 /* Theme.swift in Sources */,
 				5E4C00000000000000000103 /* SettingsView.swift in Sources */,
 				5E4C00000000000000000104 /* PhoneConnectivity.swift in Sources */,
-				5E4C00000000000000000105 /* Site.swift in Sources */,
-				5E4C00000000000000000106 /* Reminders.swift in Sources */,
-				5E4C00000000000000000107 /* WatchLink.swift in Sources */,
+				5E4C00000000000000000156 /* Model.swift in Sources */,
+				5E4C00000000000000000157 /* Parse.swift in Sources */,
+				5E4C00000000000000000158 /* Store.swift in Sources */,
+				5E4C00000000000000000159 /* WatchPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -259,9 +281,7 @@
 				5E4C00000000000000000120 /* WatchApp.swift in Sources */,
 				5E4C00000000000000000121 /* RemindersView.swift in Sources */,
 				5E4C00000000000000000122 /* WatchConnectivityReceiver.swift in Sources */,
-				5E4C00000000000000000123 /* Site.swift in Sources */,
-				5E4C00000000000000000124 /* Reminders.swift in Sources */,
-				5E4C00000000000000000125 /* WatchLink.swift in Sources */,
+				5E4C00000000000000000160 /* WatchPayload.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
