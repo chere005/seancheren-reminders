@@ -543,10 +543,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       background: #1a1a1a; border: 1px solid #333; border-radius: 50%; cursor: pointer;
     }
     .calpick-btn:hover { border-color: #888; }
-    .calpick-btn .cdot { width: 16px; height: 16px; }
     .calpick .cdot {
       flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #555;
     }
+    /* After the rule above, or it would shrink the button's dot back to menu size. */
+    .calpick-btn .cdot { width: 16px; height: 16px; }
     .calpick .cdot.all {
       background: conic-gradient(var(--k-event), var(--k-reminder), #facc15, #f472b6, var(--k-event));
     }
