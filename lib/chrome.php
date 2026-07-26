@@ -65,7 +65,7 @@ function chrome_styles(): string
        section's rows: for Reminders the whole group but its head, for Notes the list. */
     /* A ">" that points down when the section is open and right when it's collapsed. */
     .sec-collapse {
-      flex: 0 0 auto; width: 18px; height: 22px; padding: 0; margin: 0; background: none;
+      flex: 0 0 auto; width: 18px; height: 22px; padding: 0; margin: 0 -0.4rem 0 0; background: none;
       border: none; color: #777; cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);

@@ -507,7 +507,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .section-del:hover { border-color: #f66; color: #f66; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
-    ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; }
+    ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; padding-right: 0.25rem; }
     .noteitem {
       flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem;
       text-decoration: none; color: #eee;
