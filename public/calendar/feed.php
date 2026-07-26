@@ -191,7 +191,17 @@ if (data.error) {
   const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
   const max = config.widgetFamily === "large" ? 8 : (config.widgetFamily === "small" ? 3 : 5);
+  let prevDate = null;
   for (const it of items.slice(0, max)) {
+    // A hairline divider whenever the day changes, so dates read as groups.
+    if (prevDate !== null && it.date !== prevDate) {
+      const div = w.addStack();
+      div.size = new Size(0, 1);
+      div.backgroundColor = new Color("#2a2a2a");
+      div.addSpacer();
+      w.addSpacer(5);
+    }
+    prevDate = it.date;
     const row = w.addStack();
     row.centerAlignContent();
     const dot = row.addText("●");
