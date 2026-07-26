@@ -85,7 +85,7 @@ function folder_icon_svg(): string
  * toggle (a pencil) beside them. $editId is the button id the page's own script
  * already listens on.
  */
-function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): string
+function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', string $settingsExtra = ''): string
 {
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
     // One flex child, because the header is space-between: loose buttons would be
@@ -97,7 +97,7 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn'): s
         ? '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
           . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
         : '';
-    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html();
+    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html($settingsExtra);
 }
 
 /**
@@ -112,7 +112,7 @@ function settings_button(): string
     return '<button type="button" class="setbtn" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
 }
 
-function settings_modal_html(): string
+function settings_modal_html(string $extra = ''): string
 {
     $csrf = htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES);
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
@@ -141,6 +141,7 @@ function settings_modal_html(): string
       <p class="setlabel">Theme</p>
       <div class="themerow">{$themes}</div>
     </div>
+    {$extra}
     <button type="button" class="setdone" id="setDone">Done</button>
   </div>
 </div>
@@ -198,6 +199,17 @@ function settings_modal_styles(): string
       font-family: inherit;
     }
     .setmodal .setdone:hover { border-color: #888; color: #fff; }
+    /* App-specific extras (Share, Widget…) sit centred above Done. */
+    .setmodal .setextra {
+      display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+      margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid #333;
+    }
+    .setmodal .setextra a, .setmodal .setextra button {
+      display: inline-block; padding: 0.4rem 1rem; border: 1px solid #444; background: none;
+      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
+      text-decoration: none;
+    }
+    .setmodal .setextra a:hover, .setmodal .setextra button:hover { border-color: #888; color: #fff; }
     CSS;
 }
 

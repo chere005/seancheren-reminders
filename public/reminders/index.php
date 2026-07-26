@@ -133,6 +133,34 @@ function render_section_add_row(string $name, string $csrf, string $view, string
     <?php
 }
 
+/**
+ * A Markdown checklist of the currently-viewed reminders, grouped by section, open
+ * items only. Fed to the "Copy as Markdown" action in the settings window so the whole
+ * list can be pasted elsewhere.
+ */
+function reminders_markdown(array $secRows, array $grouped, array $calRows, array $ungrouped): string
+{
+    $line = function (array $r): string {
+        $bits = [];
+        if (!empty($r['due']))  { $bits[] = $r['due']; }
+        if (!empty($r['time'])) { $bits[] = $r['time']; }
+        $suffix = $bits ? ' (' . implode(' ', $bits) . ')' : '';
+        return '- [ ] ' . ($r['text'] ?? '') . $suffix;
+    };
+    $block = function (string $title, array $rows) use ($line): string {
+        $rows = array_values(array_filter($rows, fn($r) => empty($r['done'])));
+        if (!$rows) { return ''; }
+        $out = "## $title\n";
+        foreach ($rows as $r) { $out .= $line($r) . "\n"; }
+        return $out . "\n";
+    };
+    $md = '';
+    foreach ($secRows as $s) { $md .= $block((string) $s['name'], $grouped[$s['id']] ?? []); }
+    $md .= $block(CALENDAR_SECTION, $calRows);
+    $md .= $block(DEFAULT_SECTION, $ungrouped);
+    return trim($md);
+}
+
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
 function render_rows(array $rows, string $csrf, string $view, string $today, string $section = ''): void
 {
@@ -499,6 +527,15 @@ $doneCount = count($items) - $openCount;
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
 
+// "Copy as Markdown" for the settings window: the whole visible list on the clipboard.
+$shareMd    = reminders_markdown($secRows, $grouped, $calRows, $ungrouped);
+$shareExtra = '<div class="setextra">'
+  . '<button type="button" onclick="navigator.clipboard.writeText('
+  . "document.getElementById('shareMdText').value).then(()=>{this.textContent='Copied!';"
+  . "setTimeout(()=>this.textContent='Copy as Markdown',1500)})\">Copy as Markdown</button>"
+  . '<textarea id="shareMdText" hidden>' . e($shareMd) . '</textarea>'
+  . '</div>';
+
 // Calendars, as [id, name] pairs, for the share window.
 $shareCals = [];
 if ($partner && !$isShared) {
@@ -787,7 +824,7 @@ $sectionInput =
         </div>
       </div>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(false, 'editBtn', $shareExtra) ?>
   </header>
 
   <?php // Completed and Section keep the row under the header; the folder picker
