@@ -757,6 +757,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .buttons .share { margin-right: auto; background: #2a2a2a; color: #ccc; }
     .modal .buttons .share:hover { background: #333; color: #fff; }
     .modal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    /* [hidden] has to win over the flex above, or every row shows on every kind. */
+    .modal .calrow[hidden], .modal .timerow[hidden], .modal .repevery[hidden] { display: none; }
     .modal .calrow select {
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
