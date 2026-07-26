@@ -21,7 +21,8 @@ if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 
-$folders = folders_load($cfg['data_dir'])['notes'];
+$folders      = folders_load($cfg['data_dir'])['notes'];
+$folderColors = folder_colors($cfg['data_dir'], 'notes');
 
 // Which folder is being viewed? ('All' = every note)
 $view = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
@@ -90,6 +91,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''));
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
+        exit;
+    }
+    if ($_POST['action'] === 'set_folder_color') {
+        folder_color_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''),
+                         (string) ($_POST['color'] ?? ''));
         header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
         exit;
     }
@@ -355,7 +362,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
     /* List view — pills sized to match the Calendar's day-panel buttons. */
     /* The row under the rule starts where Reminders' folder row does. */
-    .foldernav, .listbar { padding-left: 2rem; }
+    /* The buttons line up with the + on the section headers under them. */
+    .listbar { padding-left: 0.25rem; }
     .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
     /* One height for everything on this row, whichever of them is showing. */
     .listbar .newnote, .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus {
@@ -532,6 +540,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <?php if (!$editing): ?>
           <button type="button" id="folderMgr" class="titlebtn"
                   title="Manage folders" aria-label="Manage folders">+</button>
+          <?php render_folder_pick([['label' => '', 'options' =>
+                array_map(fn($f) => [$f, $f, $folderColors[$f] ?? FOLDER_COLORS[0]], $folders)]], $view); ?>
         <?php endif; ?>
       </div>
     </div>
@@ -540,7 +550,6 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
 <?php if (!$editing): ?>
   <!-- ===== LIST VIEW ===== -->
-  <?php render_folder_nav($folders, $view); ?>
 
   <div class="listbar">
     <form method="post" action="">
@@ -554,7 +563,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     <?= $sectionInput ?>
   </div>
 
-  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to'); ?>
+  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors); ?>
 
   <?php if (!$noteRows && !$sections): ?>
     <p class="empty">No notes yet. Tap <strong>+ Note</strong> to start.</p>

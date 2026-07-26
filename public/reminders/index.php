@@ -219,6 +219,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $editBack);
         exit;
     }
+    if ($_POST['action'] === 'set_folder_color') {
+        folder_color_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''),
+                         (string) ($_POST['color'] ?? ''));
+        header('Location: ' . $editBack);
+        exit;
+    }
     if ($_POST['action'] === 'delete_folder') {
         $name = (string) ($_POST['name'] ?? '');
         folders_delete($cfg['data_dir'], 'reminders', $name);
@@ -453,11 +459,14 @@ if ($partner && !$isShared) {
 }
 
 // Folder picker contents: mine under my name, then whatever the other person shared.
+$myColors     = folder_colors($cfg['data_dir'], 'reminders');
+$theirColors  = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
 $folderGroups = [['label' => share_name($me),
-                  'options' => array_map(fn($f) => [$f, $f], $myFolders)]];
+                  'options' => array_map(fn($f) => [$f, $f, $myColors[$f] ?? FOLDER_COLORS[0]], $myFolders)]];
 if ($sharedFolders) {
     $folderGroups[] = ['label' => share_name($partner),
-                       'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f], $sharedFolders)];
+                       'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f,
+                                                         $theirColors[$f] ?? FOLDER_COLORS[0]], $sharedFolders)];
 }
 
 // The "+ Section" control that sits on the folder row.
@@ -508,7 +517,7 @@ $sectionInput =
 
     /* Completed sits on the folder-dropdown row, sized to match it. */
     /* One height for everything on this row, whichever of them is showing. */
-    .foldernav { padding-left: 2rem; }   /* line the dropdown up with the section names */
+    .foldernav { padding-left: 0.25rem; }   /* line + Section up with the sections' + */
     .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
       background: none; color: #888; border: 1px solid #333; border-radius: 999px;
@@ -722,21 +731,24 @@ $sectionInput =
             <button type="button" id="folderMgr" class="titlebtn"
                     title="Manage folders" aria-label="Manage folders">+</button>
           <?php endif; ?>
+          <?php render_folder_pick($folderGroups, $view); ?>
         </div>
       </div>
     </div>
     <?= render_user_menu() ?>
   </header>
 
-  <?php // Completed and Section ride on the folder row, same size, in that order.
-        render_folder_select($folderGroups, $view,
-        '<button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>'
-      . '<button type="button" id="newSecBtn" class="showall">+ Section</button>'
-      . $sectionInput); ?>
+  <?php // Completed and Section keep the row under the header; the folder picker
+        // itself has moved up beside the +. ?>
+  <div class="foldernav">
+    <button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
+    <button type="button" id="newSecBtn" class="showall">+ Section</button>
+    <?= $sectionInput ?>
+  </div>
 
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
-                            $partner ? share_button_html() : '');
+                            $partner ? share_button_html() : '', $myColors);
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
