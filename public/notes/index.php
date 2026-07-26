@@ -370,7 +370,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The row under the rule starts where Reminders' folder row does. */
     /* The buttons line up with the + on the section headers under them. */
     /* The row lines up with the + on the section headers under it. */
-    .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding-left: 0.25rem; }
+    .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding-left: 0; }
     /* One height for everything on this row, whichever of them is showing. */
     .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus { height: 32px; }
     .listbar .listedit {
