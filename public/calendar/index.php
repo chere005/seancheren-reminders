@@ -763,11 +763,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .calrow .tlabel { font-size: 0.85rem; color: #aaa; }
     .modal .calrow .secnote { font-size: 0.78rem; color: #777; white-space: nowrap; }
     .modal .reprow .repevery { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #aaa; }
-    .modal .reprow input[type=number] {
-      width: 60px; padding: 0.35rem 0.5rem; background: #222; border: 1px solid #444;
+    .modal .reprow .repevery input {
+      width: 60px; text-align: center; padding: 0.35rem 0.5rem; background: #222; border: 1px solid #444;
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
     }
-    .modal .reprow input[type=number]:focus { outline: none; border-color: #888; }
+    .modal .reprow .repevery input:focus { outline: none; border-color: #888; }
     /* A repeating row says so next to its time. */
     .dp-item .rep { font-size: 0.7rem; color: #777; white-space: nowrap; }
 
@@ -1018,7 +1018,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <option value="year">year(s)</option>
       </select>
       <span class="repevery" id="mRepEvery" hidden>every
-        <input type="number" name="rep_n" id="mRepN" value="1" min="1" max="999" inputmode="numeric">
+        <?php // Plain text, not a number spinner: the little arrows were only ever in the
+              // way, and repeat_clean() already turns anything unparseable into 1. ?>
+        <input type="text" name="rep_n" id="mRepN" value="1" maxlength="3"
+               inputmode="numeric" autocomplete="off">
       </span>
     </div>
     <div class="calrow" id="mCalRow" hidden>
@@ -1184,7 +1187,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   };
   mRepUnit.addEventListener('change', () => {
     mRepEvery.hidden = mRepUnit.value === '';
-    if (!mRepEvery.hidden && !(+mRepN.value > 0)) { mRepN.value = 1; }
+    // Anything that isn't a number (or is empty) means "every 1", same as the server.
+    if (!mRepEvery.hidden && !(parseInt(mRepN.value, 10) > 0)) { mRepN.value = 1; }
   });
   const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };
   const hideTime = (kind) => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
