@@ -245,6 +245,9 @@ function require_login(string $area = 'App'): void
  * the address has come back, so the half-made account waits in data/signups.json
  * (encrypted like everything else) with its code and a fifteen-minute expiry.
  */
+/** The code every sign-up gets while emailing is switched off. */
+const SIGNUP_CODE = '1234';
+
 function signups_file(array $cfg): string
 {
     return rtrim($cfg['data_dir'], '/') . '/signups.json';
@@ -257,12 +260,19 @@ function signup_clean_user(string $u): string
     return preg_match('/^[a-z0-9_-]{2,20}$/', $u) ? $u : '';
 }
 
-/** Post the code out through lib/mail.php — SMTP if config names a server. */
+/**
+ * Post the code out. Sending is turned off for now — nothing leaves the server and
+ * the code is always SIGNUP_CODE, so sign-up can be used while the mailbox is being
+ * sorted out. Put the two lines below back to start emailing real codes again, and
+ * take the fixed code out of signup_handle() at the same time.
+ */
 function signup_send_code(array $cfg, string $email, string $code): bool
 {
-    $body = "Your verification code is $code\n\n"
-          . "It's good for fifteen minutes. If you didn't ask for an account, ignore this.\n";
-    return mail_send($cfg, $email, 'Your verification code', $body);
+    // $body = "Your verification code is $code\n\n"
+    //       . "It's good for fifteen minutes. If you didn't ask for an account, ignore this.\n";
+    // return mail_send($cfg, $email, 'Your verification code', $body);
+    mail_log($cfg, "would have emailed $email the code $code");
+    return true;
 }
 
 /**
@@ -296,7 +306,9 @@ function signup_handle(array $cfg): array
         if (isset(app_users($cfg)[$user])) {
             return ['signup', 'That username is taken.', ''];
         }
-        $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        // Fixed while sending is off — see signup_send_code(). Back to
+        // str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT) once mail works.
+        $code = SIGNUP_CODE;
         $pending[$user] = ['email' => $email, 'password' => $pass, 'code' => $code,
                            'expires' => time() + 900, 'tries' => 0];
         store_write(signups_file($cfg), $pending);
