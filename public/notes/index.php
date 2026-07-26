@@ -127,7 +127,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 save_notes($dataFile, $notes);
             }
         }
-        header('Location: ' . $listUrl . '&edit=1');
+        // Stay in edit mode only if we were already in it (the form carries `edit`).
+        header('Location: ' . $listUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
     if ($_POST['action'] === 'rename_section') {
@@ -386,11 +387,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .listbar select:focus { outline: none; border-color: #888; }
 
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
-    body:not(.editing) .section-head.folder-empty,
-    body:not(.editing) ul.nlist.folder-empty { display: none; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
-    /* The + sits in the left slot, ahead of the name — not with the delete X. */
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
        header's gap is the rows' gap, so the name sits the same distance from the +
        as from the pencil on its other side. */
@@ -400,7 +398,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex;
-      align-items: center; justify-content: center;
+      align-items: center; justify-content: center; padding: 0 0 2px;   /* nudge the low "+" up */
     }
     .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .section-del {
@@ -513,8 +511,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
-      border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1.2; font-weight: 700;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0 0 2px; background: #f0b429; color: #241a00;
+      border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
     .newsection .plus:hover { background: #f7c95a; }
@@ -562,11 +560,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
    <div id="notes-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
-      <?php // An empty section is noise inside a folder view, but it has to stay in the
-            // DOM — a section you just made has no notes yet and would appear to vanish.
-            // CSS hides it; edit mode brings it back. Same as Reminders. ?>
-      <?php $sEmpty = (!$rows && $view !== 'All') ? ' folder-empty' : ''; ?>
-      <div class="section-head<?= $sEmpty ?>">
+      <?php // Sections always render, empty or not — like the permanent Notes group
+            // below — so a section stays put when you switch folders. Same as Reminders. ?>
+      <div class="section-head">
         <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
         <?= section_title_html($sname, $csrf, $view) ?>
         <?= section_edit_button() ?>
@@ -578,7 +574,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php render_note_rows($rows, $view, $csrf, $sname, trim($sEmpty)); ?>
+      <?php render_note_rows($rows, $view, $csrf, $sname, ''); ?>
     <?php endforeach; ?>
 
     <!-- Permanent "Notes" group: always last, not deletable. -->

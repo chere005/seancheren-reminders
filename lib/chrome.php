@@ -28,8 +28,11 @@ function chrome_styles(): string
     }
     .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
-    /* The "+" (or pencil) beside the app's name. */
+    /* The "+" (or pencil) beside the app's name. The "+" glyph renders slightly low
+       inside the flex box, so nudge those buttons up; the pencil (edit-toggle) sits
+       fine and is left alone. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
+    .titlebtn:not(.edit-toggle) { padding-bottom: 3px; }
     .titlebtn:hover { border-color: var(--accent); color: var(--accent); }
     body.editing .titlebtn.edit-toggle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .usermenu { position: relative; flex: 0 0 auto; }

@@ -182,11 +182,13 @@ dl.font = Font.mediumSystemFont(13);
 dl.textColor = new Color("#8a8a8a");
 w.addSpacer(8);
 
-const items = data.items || [];
+// Reminders and events only — notes are left off the widget.
+const META = new Color("#777777");                 // the muted time/date colour
+const items = (data.items || []).filter(it => it.kind !== "note");
 if (data.error) {
   const t = w.addText("Couldn't load."); t.textColor = new Color("#ff6666"); t.font = Font.systemFont(12);
 } else if (!items.length) {
-  const t = w.addText("Nothing coming up."); t.textColor = new Color("#777777"); t.font = Font.systemFont(12);
+  const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
   const max = config.widgetFamily === "large" ? 8 : (config.widgetFamily === "small" ? 3 : 5);
   for (const it of items.slice(0, max)) {
@@ -196,15 +198,19 @@ if (data.error) {
     dot.textColor = new Color(COLORS[it.kind] || "#888888");
     dot.font = Font.systemFont(9);
     row.addSpacer(6);
-    const prefix = (it.kind === "event" && it.time) ? fmtTime(it.time) + "  " : "";
-    const label = row.addText(prefix + (it.text || ""));
+    const label = row.addText(it.text || "");
     label.font = Font.systemFont(12);
     label.textColor = it.overdue ? new Color("#ff7755") : new Color("#eeeeee");
     label.lineLimit = 1;
     row.addSpacer();
+    // On the right: the time (if any) sits just left of the date, in the same font.
+    if (it.time) {
+      const t = row.addText(fmtTime(it.time));
+      t.font = Font.systemFont(11); t.textColor = META;
+      row.addSpacer(6);
+    }
     const d = row.addText(shortDate(it.date, data.today));
-    d.font = Font.systemFont(11);
-    d.textColor = new Color("#777777");
+    d.font = Font.systemFont(11); d.textColor = META;
     w.addSpacer(5);
   }
 }

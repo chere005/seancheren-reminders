@@ -182,7 +182,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     /* Grid: name column + day columns. The name column takes at least half the width
        and absorbs the rest; the day squares are capped small so the habit name has
        room to read rather than being squeezed by the grid. */
-    .grid { display: grid; grid-template-columns: minmax(120px, 1fr) repeat(8, minmax(0, 40px)); gap: 6px; align-items: center; width: 100%; }
+    .grid { display: grid; grid-template-columns: minmax(120px, 1fr) repeat(8, minmax(0, 50px)); gap: 6px; align-items: center; width: 100%; }
     /* Five days is all a phone has room for; the three oldest columns are in the
        DOM either way, so this is one grid with a different column count. */
     @media (max-width: 640px) {
