@@ -4,68 +4,61 @@ Two targets in one Xcode project, `Seancheren.xcodeproj`:
 
 | Target | Platform | What it is |
 | --- | --- | --- |
-| `Seancheren` | iOS 17+ | The whole suite — Reminders, Calendar, Notes, Habits — as four native tabs |
+| `Seancheren` | iOS 17+ | Reminders · Calendar · Notes · Habits · Settings, as native tabs |
 | `SeancherenWatch` | watchOS 10+ | Your reminder list on the wrist, read-only |
 
 Open `ios/Seancheren.xcodeproj`, pick your team under **Signing & Capabilities** for
 both targets, and run. The watch app is embedded in the phone app, so building and
 running `Seancheren` installs both — that's why they're one project rather than two.
 
-## Why the phone app is a web view
+## Completely independent of the website
 
-The four apps are the pages. `WebTab` (`App/WebView.swift`) puts each one in its own
-`WKWebView` and the shell wraps them in a native `TabView`, so **every feature works
-the day it ships on the site** — repeats, sharing, folders, drag-reorder, the rich note
-editor, the habit grid — with no second implementation to keep in step. A native
-rewrite of four apps would be four more copies of every rule in `lib/`, and the first
-one to drift would be a bug you only see on the phone.
+This app shares nothing with `seancheren.com` — no web view, no login, no token, no
+network. It is its own native app with its own local data. The site suite is a separate
+thing that happens to look the same; changing one doesn't touch the other.
 
-What the shell adds on top:
+- **All data is local.** One `Codable` tree (`AppData` in `Shared/Model.swift`) is
+  saved to a single `suite.json` in Application Support, through `Store`
+  (`Shared/Store.swift`). Writes are debounced, so typing doesn't rewrite the file on
+  every keystroke.
+- **No accounts.** There is nothing to sign into. The app starts empty — one "General"
+  folder for reminders and one for notes, one calendar, and nothing in them.
+- **Notes are plain text.** A note is a title and a plain `String` body edited in a
+  `TextEditor` — there's nothing to render, so nothing to sanitise.
 
-- **One session across all four.** They share `WKWebsiteDataStore.default()`, so you
-  sign in once and it survives quitting.
-- **Native tabs.** The site's own bottom bar is hidden by an injected stylesheet
-  (`.tabbar{display:none}`) along with the body padding that cleared it.
-- **Pull to refresh**, back/forward swipes, and off-site links opening in Safari.
-- **Settings** — the fifth tab: which site to point at, the watch's token, and a
-  two-press Sign out that drops the shared cookies. Your password, theme and folders
-  still live in the pages themselves, behind the ⋮ next to your name.
+Everything the site suite does that makes sense on a phone is reimplemented natively:
+folders and groups, repeats (with month/year day-clamping), the undated-first ordering,
+the slash-only US-order text parser (`Shared/Parse.swift`), and the two-press delete.
 
 ## The watch app
 
-A watch has nowhere to keep a login, so it reads `GET /api/reminders.php?token=…`
-instead — the same token as the calendar widget, out of `data/token-<user>.json`. The
-endpoint returns the list you'd see opening the app: the same groups, the same order,
-undated first and then by date.
+A watch can't hold the database, so the phone hands it a ready-made list. Whenever the
+store changes, `PhoneConnectivity` (`App/PhoneConnectivity.swift`) builds a `WatchList`
+(`Store.watchList()`) — the same groups in the same order as the Reminders screen, open
+items only, dates already turned into short strings — and ships it as the
+WatchConnectivity *application context*. `WatchLinkReceiver` on the watch decodes it,
+keeps a copy in `UserDefaults`, and draws it. The context is redelivered whenever the
+watch next wakes, so it keeps working with the phone out of range.
 
-**It is read-only.** That token is handed out as a read key on the widget setup page,
-so anything already copied into a Scriptable script would gain the power to write the
-moment the endpoint accepted a POST. Ticking things off stays on the phone until
-that's a deliberate decision (a separate write token, most likely).
-
-Getting the token across:
-
-1. On the phone, open **Calendar → the widget setup page** (`/calendar/feed.php`) and
-   copy the `token=` value out of the feed URL.
-2. Paste it into **Settings → Watch** in the phone app and tap **Send to Watch**.
-
-It goes over as the WatchConnectivity *application context*, which is redelivered if
-the watch was asleep, and the watch writes it to `UserDefaults` — so it keeps working
-with the phone out of range.
+**It is read-only.** The watch shows what's on; the phone owns the data. Ticking things
+off from the wrist is a future job (it needs a message back to the phone, since the
+phone is the only writer).
 
 ## Layout
 
 ```
 ios/
   Seancheren.xcodeproj/
-  App/      SeancherenApp, RootView, WebView, SettingsView, PhoneConnectivity   (iOS)
-  Watch/    WatchApp, RemindersView, WatchConnectivityReceiver                  (watchOS)
-  Shared/   Site, Reminders, WatchLink            (compiled into both targets)
+  App/      SeancherenApp, RootView, RemindersView, NotesView, CalendarView,
+            HabitsView, Pickers, Theme, SettingsView, PhoneConnectivity      (iOS)
+  Watch/    WatchApp, RemindersView, WatchConnectivityReceiver               (watchOS)
+  Shared/   Model, Parse, Store, WatchPayload
 ```
 
-`Shared/Site.swift` holds the base URL and the four apps; `Shared/Reminders.swift` is
-the model and the one network call. Both are members of both targets — one file, two
-build phases, so there is no copy to keep in sync.
+`Shared/Model.swift`, `Parse.swift` and `Store.swift` are the iOS app's data layer.
+`Shared/WatchPayload.swift` defines the small `WatchList` the two ends exchange and is
+the one file compiled into **both** targets, so the phone and watch can't drift apart on
+its shape.
 
 ## Notes
 
@@ -73,7 +66,9 @@ build phases, so there is no copy to keep in sync.
 - Bundle ids are `com.seancheren.suite` and `com.seancheren.suite.watchkitapp`. The
   watch id **must** stay a `.watchkitapp` suffix of the phone's or the pair won't
   install together.
-- Pointing Settings at a plain-`http` server (e.g. `php -S` on your Mac) needs an ATS
-  exception in the iOS target's Info.plist settings; over https it just works.
-- Info.plists are generated from build settings (`GENERATE_INFOPLIST_FILE`), so
-  there are no `.plist` files to edit — change the `INFOPLIST_KEY_*` settings instead.
+- Info.plists are generated from build settings (`GENERATE_INFOPLIST_FILE`), so there
+  are no `.plist` files to edit — change the `INFOPLIST_KEY_*` settings instead.
+- `project.pbxproj` is hand-maintained with stable numeric ids. When you add a source
+  file, give it a `PBXFileReference`, a `PBXBuildFile`, a line in the right `PBXGroup`,
+  and a line in the right target's `Sources` phase (a file shared with the watch needs a
+  second `PBXBuildFile` and a line in *both* phases).
