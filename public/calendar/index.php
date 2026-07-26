@@ -664,9 +664,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-group.folded .dp-glist { display: none; }
     .dp-item {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem;
-      background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: pointer;
+      background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: default;
     }
-    .dp-item:hover { border-color: #444; }
+    body.editing .dp-item { cursor: pointer; }
+    body.editing .dp-item:hover { border-color: #444; }
     .dp-item .tag {
       font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
       padding: 0.15rem 0.4rem; border-radius: 4px; white-space: nowrap;
@@ -680,7 +681,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
     .dp-item .evtime { font-size: 0.75rem; color: var(--k-event-soft); font-weight: 600; white-space: nowrap; }
     .dp-item.done .txt { color: #666; text-decoration: line-through; }
-    .dp-item .chev { color: #555; font-size: 0.9rem; }
+    /* The pencil (and the tap-to-open it stands for) only appears in edit mode. */
+    .dp-item .chev { color: #555; font-size: 0.9rem; display: none; }
+    body.editing .dp-item .chev { display: inline; }
     /* Someone else's item, shown here but owned (and edited) over in their app. */
     .dp-item.shared { cursor: default; }
     .dp-item .owner {
@@ -1389,6 +1392,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         });
         row.appendChild(del);
         row.addEventListener('click', () => {
+          // Tapping a row only opens it while editing — otherwise the panel is read-only
+          // and the checkboxes are the only thing you can hit by accident.
+          if (!document.body.classList.contains('editing')) return;
           if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
           // Editing any occurrence edits the series — there's only the one stored row.
           openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
