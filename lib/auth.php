@@ -429,8 +429,10 @@ function render_login(string $area, string $error = '', string $stage = 'login',
     .modalbox .cancel { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
     /* Four characters wide and no wider — a full-width box with half an em of
        letter-spacing pushed the last digit past the edge on a phone. */
+    /* Full width like the button under it; the text-indent balances the trailing
+       letter-space so the four digits sit centred rather than a nudge to the left. */
     .codebox input {
-      width: 7ch; margin: 0 auto 1rem; text-align: center; font-size: 1.3rem;
+      width: 100%; text-align: center; font-size: 1.3rem;
       letter-spacing: 0.4em; text-indent: 0.4em;
     }
   </style>
