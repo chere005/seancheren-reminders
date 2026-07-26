@@ -246,19 +246,6 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
             </li>
           <?php endforeach; ?>
         </ul>
-        <form class="defrow" method="post" action="">
-          <input type="hidden" name="csrf" value="<?= $csrf ?>">
-          <input type="hidden" name="action" value="set_default_folder">
-          <input type="hidden" name="view" value="<?= $vw ?>">
-          <label for="folderDefault"><?= htmlspecialchars($defaultLabel, ENT_QUOTES) ?></label>
-          <select id="folderDefault" name="name" onchange="this.form.submit()">
-            <?php foreach ($folders as $f): ?>
-              <option value="<?= htmlspecialchars($f, ENT_QUOTES) ?>"<?= $f === $default ? ' selected' : '' ?>>
-                <?= htmlspecialchars($f, ENT_QUOTES) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-        </form>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
