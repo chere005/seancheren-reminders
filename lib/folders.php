@@ -350,7 +350,7 @@ function folder_nav_styles(): string
     .foldermodal .fswatches {
       position: absolute; z-index: 5; top: calc(100% + 6px); left: 0;
       background: #1c1c1c; border: 1px solid #444; border-radius: 10px; padding: 0.5rem;
-      display: grid; grid-template-columns: repeat(5, 22px); gap: 0.4rem;
+      display: grid; grid-template-columns: repeat(6, 22px); gap: 0.4rem;   /* all six on one row */
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .foldermodal .fswatches button {
