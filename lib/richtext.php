@@ -289,32 +289,40 @@ function rt_script(): string
     sync(); refresh();
   });
 
-  // Enter inside a quote stays inside it — a new line is part of the quotation. Enter
-  // on a line that's still empty is how you leave: the blank line goes away and the
-  // caret lands on an unquoted line below the quote, with the quoted text left above.
+  // Enter inside a quote stays inside it — a new line is part of the quotation.
+  // Enter again on that still-empty line is how you leave: the blank line goes, and
+  // the caret lands on a plain line under the quote with the quoted text above it.
+  // Whether the line is empty is tracked rather than read back off the DOM — the
+  // caret after a <br> can sit on the blockquote itself, which tells you nothing
+  // about which line you're on.
+  let blankLine = false;
+  const leaveQuote = () => {
+    const bq = quoteAt();
+    if (!bq) { return; }
+    while (bq.lastChild && (bq.lastChild.nodeName === 'BR'
+           || (bq.lastChild.nodeType === 3 && bq.lastChild.data === ''))) { bq.lastChild.remove(); }
+    const out = document.createElement('div');
+    out.appendChild(document.createElement('br'));
+    bq.after(out);
+    if (!bq.childNodes.length) { bq.remove(); }
+    const r = document.createRange();
+    r.setStart(out, 0); r.collapse(true);
+    const sel = document.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+  };
   body.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.shiftKey || !inQuote()) { return; }
-    e.preventDefault();
-    const at = quoteLine();
-    const blank = at && at.kids.slice(at.start, at.end + 1)
-      .every(n => n.nodeName === 'BR' || (n.textContent || '').trim() === '');
-    if (blank) {
-      unquote();                                  // takes the empty line out of the quote
-      const out = document.getSelection().anchorNode;
-      const div = out && (out.nodeType === 1 ? out : out.parentNode);
-      if (div && div.nodeName === 'DIV') {        // ...and leaves nothing on it
-        while (div.firstChild) { div.firstChild.remove(); }
-        div.appendChild(document.createElement('br'));
-        const r = document.createRange();
-        r.setStart(div, 0); r.collapse(true);
-        const sel = document.getSelection();
-        sel.removeAllRanges(); sel.addRange(r);
-      }
-    } else {
-      document.execCommand('insertLineBreak');
+    if (e.key !== 'Enter' || e.shiftKey || !inQuote()) {
+      if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') { blankLine = false; }
+      return;
     }
+    e.preventDefault();
+    if (blankLine) { blankLine = false; leaveQuote(); }
+    else { document.execCommand('insertLineBreak'); blankLine = true; }  // after, or its own input event clears it
     sync(); refresh();
   });
+  // Anything typed, pasted or clicked means the new line isn't blank any more.
+  body.addEventListener('input', () => { blankLine = false; });
+  body.addEventListener('mouseup', () => { blankLine = false; });
 
   // Light the buttons that describe where the caret is. queryCommandState throws on
   // some browsers for commands they don't know, hence the try.
