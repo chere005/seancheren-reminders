@@ -836,6 +836,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
     .callist .setrow .cswatch { border-radius: 50%; }
+    /* Read-only colour dot for a partner's shared calendar (no swatch button). */
+    .callist .cdot-ro { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #444; }
     .callist .cdel {
       flex: 0 0 auto; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
@@ -1633,6 +1635,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       }
       calRows.appendChild(li);
     });
+    // The partner's shared calendars, read-only: you can see them (and put them in a
+    // set), but their name, colour and existence stay theirs.
+    if (SHARED_CALS.length) {
+      calRows.appendChild(subHead(PARTNER + '’s calendars'));
+      SHARED_CALS.forEach(c => {
+        const li = document.createElement('li');
+        const dot = document.createElement('span');
+        dot.className = 'cdot-ro'; dot.style.background = c.color;
+        const name = document.createElement('span');
+        name.className = 'cname'; name.textContent = c.name;
+        li.append(dot, name);
+        calRows.appendChild(li);
+      });
+    }
   }
 
   // Which calendar new events default to, when you aren't viewing one in particular.
