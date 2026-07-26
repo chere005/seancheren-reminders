@@ -293,7 +293,7 @@ function folder_nav_styles(): string
     .folderpick-btn:hover { border-color: #888; }
     .fdot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; background: #555; }
     .fdot.all {
-      background: conic-gradient(#60a5fa, #34d399, #facc15, #f472b6, #60a5fa);
+      background: conic-gradient(#60a5fa, var(--accent), #facc15, #f472b6, #60a5fa);
     }
     .folderpick-menu {
       position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
@@ -312,7 +312,7 @@ function folder_nav_styles(): string
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt:hover { background: #262626; color: #fff; }
-    .folderpick-opt.on { background: #14251f; color: #34d399; font-weight: 600; }
+    .folderpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 
     /* Folder manager window */
@@ -333,7 +333,7 @@ function folder_nav_styles(): string
     }
     .foldermodal .addrow input:focus { outline: none; border-color: #888; }
     .foldermodal .addrow .plus {
-      flex: 0 0 auto; width: 40px; background: #34d399; color: #06251b; border: none;
+      flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .foldermodal .addrow .plus:hover { background: #52e0ac; }
@@ -376,7 +376,7 @@ function folder_nav_styles(): string
     .foldermodal .frow { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.1rem; }
     .foldermodal .fdone {
       display: block; margin: 0 0 0 auto; padding: 0.55rem 1.1rem; border: none;
-      border-radius: 6px; background: #34d399; color: #06251b; font-size: 0.95rem;
+      border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: 0.95rem;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
     CSS;

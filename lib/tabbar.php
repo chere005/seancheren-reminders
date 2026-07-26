@@ -29,9 +29,9 @@ function tabbar_styles(): string
     .segmented a .ico { font-size: 1.35rem; line-height: 1; }
     .segmented a:hover { color: #ccc; }
     .segmented a.active {
-      background: #2a2a2a; color: #34d399;
+      background: #2a2a2a; color: var(--accent);
     }
-    .segmented a.active:hover { color: #34d399; }
+    .segmented a.active:hover { color: var(--accent); }
     CSS;
 }
 

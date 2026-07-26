@@ -141,7 +141,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     header nav { display: flex; align-items: center; gap: 0.5rem; }
     header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
     header nav a:hover { color: #fff; }
-    header nav .who { color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
+    header nav .who { color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
 
     .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; padding-left: 2rem; }
     body:not(.editing) .bar { justify-content: flex-end; }   /* Edit keeps the right edge */
@@ -174,7 +174,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
     }
     /* Today's whole column is tinted so it's obvious at a glance. */
-    .colhead.today { color: #34d399; font-weight: 700; background: #14251f; }
+    .colhead.today { color: var(--accent); font-weight: 700; background: var(--accent-soft); }
     .colhead.ahead { color: #666; }        /* tomorrow, ticked off early */
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     .corner { }
@@ -203,9 +203,9 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
       border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
     }
-    .cell.today { border-color: #34d399; background: #14251f; }
+    .cell.today { border-color: var(--accent); background: var(--accent-soft); }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
-    .cell.done { background: #34d399; border-color: #34d399; }
+    .cell.done { background: var(--accent); border-color: var(--accent); }
     .cell.done.today { border-color: #eee; }
     .cell:active { transform: scale(0.94); }
 

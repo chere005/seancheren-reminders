@@ -99,7 +99,7 @@ $messages = load_chat($dataFile);
       flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;
     }
     .msg { max-width: 85%; }
-    .msg .who { font-size: 0.72rem; color: #34d399; margin-bottom: 1px; }
+    .msg .who { font-size: 0.72rem; color: var(--accent); margin-bottom: 1px; }
     .msg .body {
       display: inline-block; background: #1c1c1c; border: 1px solid #262626;
       border-radius: 8px; padding: 0.45rem 0.65rem; font-size: 0.95rem;
@@ -119,7 +119,7 @@ $messages = load_chat($dataFile);
     }
     form.send input:focus { outline: none; border-color: #888; }
     form.send button {
-      padding: 0.6rem 1.1rem; background: #34d399; color: #06251b; border: none;
+      padding: 0.6rem 1.1rem; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer;
     }
     form.send button:hover { background: #52e0ac; }

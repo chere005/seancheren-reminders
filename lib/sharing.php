@@ -129,13 +129,13 @@ function share_modal_styles(): string
       background: #222; border: 1px solid #333; border-radius: 8px; cursor: pointer;
     }
     .sh-list .sh-name { flex: 1; font-size: 0.95rem; word-break: break-word; }
-    .sh-list input[type=checkbox] { width: 18px; height: 18px; accent-color: #34d399; flex: 0 0 auto; }
+    .sh-list input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }
     .sh-list .sh-empty { color: #777; font-size: 0.85rem; background: none; border: none; cursor: default; }
     .sh-actions { display: flex; justify-content: flex-end; margin-top: 1.1rem; }
     .sh-done, .sh-open {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px; cursor: pointer; font-family: inherit;
     }
-    .sh-done { background: #34d399; border: none; color: #06251b; font-weight: 700; }
+    .sh-done { background: var(--accent); border: none; color: var(--accent-ink); font-weight: 700; }
     .sh-open { margin-right: auto; background: #2a2a2a; border: 1px solid #3a3a3a; color: #ccc; }
     .sh-open:hover { background: #333; color: #fff; }
     CSS;

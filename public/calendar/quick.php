@@ -57,7 +57,7 @@ function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES
     .wrap { width: 100%; max-width: 460px; }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
     h1 .day { font-size: 0.85rem; color: #888; font-weight: 400; margin-left: 0.4rem; }
-    .flash { background: #14251f; border: 1px solid #34d399; color: #34d399; border-radius: 8px;
+    .flash { background: #14251f; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px;
       padding: 0.55rem 0.8rem; font-size: 0.9rem; margin: 0.75rem 0; }
     .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 10px; color: #eee; font-size: 1.1rem; margin: 1rem 0; }
@@ -67,7 +67,7 @@ function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES
       padding: 1rem; border: 1px solid #333; border-radius: 12px; font-size: 0.95rem; font-weight: 600;
       cursor: pointer; background: #1a1a1a; }
     .qb :first-child { font-size: 1.7rem; line-height: 1; }
-    .qb.rem { color: #34d399; border-color: #2a4a3d; }
+    .qb.rem { color: var(--accent); border-color: #2a4a3d; }
     .qb.rem:hover { background: #14251f; }
     .qb.evt { color: #7dd3fc; border-color: #24506a; }
     .qb.evt:hover { background: #0f2734; }

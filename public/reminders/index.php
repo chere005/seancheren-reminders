@@ -511,7 +511,7 @@ $sectionInput =
     header a { color: #888; text-decoration: none; margin-left: 1rem; }
     header a:hover { color: #fff; }
     header .who {
-      color: #34d399; font-size: 0.8rem; border: 1px solid #2a4a3d;
+      color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
@@ -525,16 +525,16 @@ $sectionInput =
       white-space: nowrap;
     }
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
-    body.show-done .foldernav #doneBtn { background: #34d399; border-color: #34d399; color: #06251b; font-weight: 700; }
+    body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
     /* The + on each section header, and the row it opens. */
     .sec-add {
-      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: #34d399;
+      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex;
       align-items: center; justify-content: center;
     }
-    .sec-add:hover { border-color: #34d399; background: #14251f; }
+    .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
     .secadd-row[hidden] { display: none; }   /* make [hidden] win over flex */
     .secadd-row input[type=text] {
@@ -542,9 +542,9 @@ $sectionInput =
       border: 1px solid #3a5a4d; border-radius: 999px; color: #eee;
       font-size: 16px;   /* 16px stops iOS from zooming on focus */
     }
-    .secadd-row input:focus { outline: none; border-color: #34d399; }
+    .secadd-row input:focus { outline: none; border-color: var(--accent); }
     .secadd-row .plus {
-      flex: 0 0 auto; width: 38px; background: #34d399; color: #06251b; border: none;
+      flex: 0 0 auto; width: 38px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .secadd-row .plus:hover { background: #52e0ac; }
@@ -579,14 +579,14 @@ $sectionInput =
       border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
     }
     .modal .kind input { display: none; }
-    .modal .kind input:checked + span { color: #34d399; font-weight: 700; }
-    .modal .kind label:has(input:checked) { border-color: #34d399; background: #14251f; }
+    .modal .kind input:checked + span { color: var(--accent); font-weight: 700; }
+    .modal .kind label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .modal .daterow, .modal .secrow { margin-bottom: 1rem; }
     .modal .adddate {
-      background: none; border: 1px dashed #3a5a4d; color: #34d399; border-radius: 6px;
+      background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
       padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
-    .modal .adddate:hover { background: #14251f; }
+    .modal .adddate:hover { background: var(--accent-soft); }
     .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
     .modal .datewrap[hidden] { display: none; }   /* make [hidden] win over flex */
     .modal .datewrap input[type=date] {
@@ -609,7 +609,7 @@ $sectionInput =
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
-    .modal .buttons .ok { background: #34d399; color: #06251b; }
+    .modal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
@@ -678,13 +678,13 @@ $sectionInput =
        + as it does from the pencil on its other side. */
     body.editing .section-head .sec-handle { display: inline-flex; }
     body.editing .sec-add { display: none; }
-    .drag-handle:active, .sec-handle:active { cursor: grabbing; color: #34d399; }
+    .drag-handle:active, .sec-handle:active { cursor: grabbing; color: var(--accent); }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     .section-group.dragging { opacity: 0.9; }
     .section-group.dragging .section-head {
       background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
     }
-    .section-group.dragging .section-title { color: #34d399; }
+    .section-group.dragging .section-title { color: var(--accent); }
     body.editing ul.rlist { min-height: 1.4rem; }
     body.editing ul.rlist:empty { border: 1px dashed #333; border-radius: 6px; margin: 0.25rem 0; }
 

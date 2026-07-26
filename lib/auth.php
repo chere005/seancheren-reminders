@@ -99,6 +99,49 @@ function auth_password_set(array $cfg, string $user, string $password): void
     store_write($file, $own);
 }
 
+/**
+ * Colour themes, chosen per user in the settings window and kept in
+ * data/prefs-<user>.json. A theme is just the accent and the ink that goes on it:
+ * every green in the suite reads --accent / --accent-ink rather than a literal, so
+ * one variable repaints all of it. The reminder/event/note palette stays put — it
+ * says what kind of thing something is, not which theme you like.
+ */
+const THEMES = [
+    'green'  => ['Green',  '#34d399', '#06251b', '#14251f'],
+    'blue'   => ['Blue',   '#60a5fa', '#0b2038', '#10203a'],
+    'purple' => ['Purple', '#c084fc', '#25123a', '#221430'],
+    'amber'  => ['Amber',  '#fbbf24', '#2a1c00', '#241c05'],
+    'rose'   => ['Rose',   '#fb7185', '#3a0f1a', '#2e1218'],
+];
+
+function theme_file(): string
+{
+    return rtrim(app_config()['data_dir'], '/') . '/prefs-'
+         . preg_replace('/[^A-Za-z0-9_-]/', '_', current_user() ?? 'default') . '.json';
+}
+
+function theme_get(): string
+{
+    $t = (string) (store_read(theme_file())['theme'] ?? '');
+    return isset(THEMES[$t]) ? $t : 'green';
+}
+
+function theme_set(string $name): bool
+{
+    if (!isset(THEMES[$name])) { return false; }
+    $p = store_read(theme_file());
+    $p['theme'] = $name;
+    store_write(theme_file(), $p);
+    return true;
+}
+
+/** The chosen theme as variables. Emit it before anything that reads them. */
+function theme_css(): string
+{
+    [, $accent, $ink, $soft] = THEMES[theme_get()];
+    return "    :root { --accent: $accent; --accent-ink: $ink; --accent-soft: $soft; }\n";
+}
+
 /** Username of the signed-in user (null if not logged in). */
 function current_user(): ?string
 {
@@ -158,6 +201,15 @@ function require_login(string $area = 'App'): void
 
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(16));
+    }
+
+    // The settings window's theme pick, answered here for the same reason.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '') === 'set_theme') {
+        header('Content-Type: application/json');
+        $ok = hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))
+              && theme_set((string) ($_POST['theme'] ?? ''));
+        echo json_encode(['ok' => $ok]);
+        exit;
     }
 
     // The settings window's password change. It's handled here rather than in each
