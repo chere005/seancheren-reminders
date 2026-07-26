@@ -144,7 +144,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             $when = $r['due'] < $today ? 'past' : ($r['due'] === $today ? 'today' : 'future');
         }
         ?>
-        <li class="<?= $done ? 'done' : '' ?>"
+        <li class="swipe-row <?= $done ? 'done' : '' ?>"
             data-id="<?= e($r['id']) ?>"
             data-pos="<?= $pos++ ?>"
             data-done="<?= $done ? '1' : '0' ?>"

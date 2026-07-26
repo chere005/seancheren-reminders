@@ -1384,6 +1384,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       }
       row.appendChild(chev);
       if (!it.owner) {
+        // swipe-row: swiping it left reveals the × without turning edit mode on.
+        // The partner's items don't get one — there's nothing here to delete.
+        row.classList.add('swipe-row');
         const del = document.createElement('button');
         del.className = 'dp-del needs-confirm'; del.textContent = '×'; del.title = 'Delete';
         del.addEventListener('click', (ev) => {
