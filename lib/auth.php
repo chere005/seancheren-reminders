@@ -11,6 +11,7 @@
  */
 
 require_once __DIR__ . '/store.php';   // encrypted-at-rest storage helpers
+require_once __DIR__ . '/mail.php';    // sending the sign-up verification code
 require_once __DIR__ . '/util.php';    // small shared helpers (time parsing, …)
 
 function app_config(): array
@@ -256,35 +257,12 @@ function signup_clean_user(string $u): string
     return preg_match('/^[a-z0-9_-]{2,20}$/', $u) ? $u : '';
 }
 
-/**
- * Post the code out. mail() through the host's sendmail, with the envelope sender
- * set explicitly (-f) — without it the relay stamps its own and the message is
- * refused or filed as spam. Failures are logged, since there's nothing else to
- * look at when someone says the email never came.
- */
+/** Post the code out through lib/mail.php — SMTP if config names a server. */
 function signup_send_code(array $cfg, string $email, string $code): bool
 {
-    $from    = (string) ($cfg['mail_from'] ?? 'no-reply@seancheren.com');
-    $headers = implode("\r\n", [
-        'From: seancheren.com <' . $from . '>',
-        'Reply-To: ' . $from,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=utf-8',
-        'Content-Transfer-Encoding: 8bit',
-        'Date: ' . date('r'),
-    ]);
     $body = "Your verification code is $code\n\n"
           . "It's good for fifteen minutes. If you didn't ask for an account, ignore this.\n";
-    $ok = @mail($email, 'Your verification code', $body, $headers, '-f' . $from);
-    if (!$ok) { signup_log($cfg, 'mail() refused ' . $email); }
-    return $ok;
-}
-
-/** One line in data/mail.log — the only trace of a send that didn't happen. */
-function signup_log(array $cfg, string $line): void
-{
-    @file_put_contents(rtrim($cfg['data_dir'], '/') . '/mail.log',
-                       date('c') . ' ' . $line . "\n", FILE_APPEND);
+    return mail_send($cfg, $email, 'Your verification code', $body);
 }
 
 /**
