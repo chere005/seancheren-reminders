@@ -88,6 +88,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $habits[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => $name, 'created' => time()];
             save_habits($dataFile, $habits);
         }
+    } elseif ($_POST['action'] === 'rename_section') {
+        // Sections are keyed by id here, so the rows don't need re-pointing.
+        $id   = (string) ($_POST['id'] ?? '');
+        $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['newname'] ?? '')));
+        if ($name !== '') {
+            foreach ($habits as &$it) {
+                if (is_section($it) && ($it['id'] ?? '') === $id) { $it['name'] = mb_substr($name, 0, 40); break; }
+            }
+            unset($it);
+            save_habits($dataFile, $habits);
+        }
     } elseif ($_POST['action'] === 'delete_section') {
         $id = (string) ($_POST['id'] ?? '');
         $habits = array_values(array_filter($habits, fn($it) => !(is_section($it) && ($it['id'] ?? '') === $id)));
@@ -264,7 +275,8 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
 
       <?php foreach ($sections as $s): ?>
         <div class="hsection">
-          <span class="hslabel"><?= e($s['name']) ?></span>
+          <?= section_title_html($s['name'], $csrf, '', false, 'rename_section',
+                '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">

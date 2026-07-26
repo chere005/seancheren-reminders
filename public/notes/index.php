@@ -130,6 +130,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $listUrl . '&edit=1');
         exit;
     }
+    if ($_POST['action'] === 'rename_section') {
+        save_notes($dataFile, section_rename(load_notes($dataFile), (string) ($_POST['name'] ?? ''),
+                                             (string) ($_POST['newname'] ?? '')));
+        header('Location: ' . $listUrl . '&edit=1');
+        exit;
+    }
     if ($_POST['action'] === 'delete_section') {
         $name  = (string) ($_POST['name'] ?? '');
         $notes = load_notes($dataFile);
@@ -301,9 +307,9 @@ if (!$editing) {
 }
 
 /** Echo a list of note rows. Always emitted, since an empty one is a drag target. */
-function render_note_rows(array $rows, string $view, string $csrf, string $section = ''): void
+function render_note_rows(array $rows, string $view, string $csrf, string $section = '', string $cls = ''): void
 {
-    echo '<ul class="nlist" data-section="' . e($section) . '">';
+    echo '<ul class="nlist' . ($cls !== '' ? ' ' . $cls : '') . '" data-section="' . e($section) . '">';
     foreach ($rows as $n) {
         $date = $n['date'] ?? '';
         ?>
@@ -380,6 +386,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .listbar select:focus { outline: none; border-color: #888; }
 
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
+    body:not(.editing) .section-head.folder-empty,
+    body:not(.editing) ul.nlist.folder-empty { display: none; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
     /* The + sits in the left slot, ahead of the name — not with the delete X. */
@@ -550,16 +558,17 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors); ?>
 
-  <?php if (!$noteRows && !$sections): ?>
-    <p class="empty">No notes yet. Tap the <strong>+</strong> on a section to start.</p>
-  <?php else: ?>
+  <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">
     <?php foreach ($sections as $sname): ?>
       <?php $rows = $grouped[$sname] ?? []; ?>
-      <?php if (!$rows && $view !== 'All') continue; ?>
-      <div class="section-head">
+      <?php // An empty section is noise inside a folder view, but it has to stay in the
+            // DOM — a section you just made has no notes yet and would appear to vanish.
+            // CSS hides it; edit mode brings it back. Same as Reminders. ?>
+      <?php $sEmpty = (!$rows && $view !== 'All') ? ' folder-empty' : ''; ?>
+      <div class="section-head<?= $sEmpty ?>">
         <?php render_section_add($sname, $csrf, $view, $addTarget); ?>
-        <span class="section-title"><?= e($sname) ?></span>
+        <?= section_title_html($sname, $csrf, $view) ?>
         <?= section_edit_button() ?>
         <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -569,7 +578,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
         </form>
       </div>
-      <?php render_note_rows($rows, $view, $csrf, $sname); ?>
+      <?php render_note_rows($rows, $view, $csrf, $sname, trim($sEmpty)); ?>
     <?php endforeach; ?>
 
     <!-- Permanent "Notes" group: always last, not deletable. -->
@@ -580,7 +589,6 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>
    </div>
-  <?php endif; ?>
 
 <?php else: ?>
   <!-- ===== EDITOR VIEW ===== -->

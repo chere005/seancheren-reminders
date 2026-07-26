@@ -258,6 +258,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $editBack);
         exit;
     }
+    if ($_POST['action'] === 'rename_section') {
+        $list = load_reminders($dataFile);
+        save_reminders($dataFile, section_rename($list, (string) ($_POST['name'] ?? ''),
+                                                 (string) ($_POST['newname'] ?? '')));
+        header('Location: ' . $editBack);
+        exit;
+    }
     if ($_POST['action'] === 'delete_section') {
         $name = (string) ($_POST['name'] ?? '');
         if (strcasecmp($name, CALENDAR_SECTION) === 0) {   // permanent, like the default group
@@ -517,7 +524,7 @@ $sectionInput =
 
     /* Completed sits on the folder-dropdown row, sized to match it. */
     /* One height for everything on this row, whichever of them is showing. */
-    .foldernav { padding-left: 0.25rem; }   /* line + Section up with the sections' + */
+    .foldernav { padding-left: 0; }   /* line Completed up with the sections' + */
     .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
       background: none; color: #888; border: 1px solid #333; border-radius: 999px;
@@ -763,7 +770,7 @@ $sectionInput =
         <div class="section-head">
           <?php render_section_add_button($sname); ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
-          <span class="section-title"><?= e($sname) ?></span>
+          <?= section_title_html($sname, $csrf, $view) ?>
           <?= section_edit_button() ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
