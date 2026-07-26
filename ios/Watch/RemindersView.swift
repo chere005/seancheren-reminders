@@ -27,11 +27,12 @@ struct RemindersView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if let list = model.list {
-                    list.sections.isEmpty ? AnyView(empty("Nothing on the list."))
-                                          : AnyView(rows(list))
+                if let list = model.list, !list.sections.isEmpty {
+                    rows(list)
                 } else if let error = model.error {
                     empty(error)
+                } else if model.list != nil {
+                    empty("Nothing on the list.")
                 } else {
                     ProgressView()
                 }
