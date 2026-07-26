@@ -267,6 +267,9 @@ function section_title_html(string $name, string $csrf, string $view = '', bool 
 function section_rename_styles(): string
 {
     return <<<CSS
+    /* It is a form, but it is the section's *name* — it must not pick up the
+       `margin-left: auto` the apps give the other forms in a section head. */
+    .section-head form.secrename { margin-left: 0; }
     .secrename { display: inline-flex; min-width: 0; }
     .sectitle {
       background: none; border: none; border-bottom: 1px solid transparent; padding: 0;
