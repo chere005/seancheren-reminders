@@ -363,19 +363,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* List view — pills sized to match the Calendar's day-panel buttons. */
     /* The row under the rule starts where Reminders' folder row does. */
     /* The buttons line up with the + on the section headers under them. */
-    .listbar { padding-left: 0.25rem; }
-    .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    /* The row lines up with the + on the section headers under it. */
+    .listbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding-left: 0.25rem; }
     /* One height for everything on this row, whichever of them is showing. */
-    .listbar .newnote, .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus {
-      height: 32px;
-    }
-    .listbar .newnote {
-      padding: 0.35rem 0.9rem; background: #34d399; color: #06251b; border: none;
-      border-radius: 999px; font-size: 0.9rem; font-weight: 700; cursor: pointer; white-space: nowrap;
-      font-family: inherit;
-    }
-    .listbar .newnote:hover { background: #52e0ac; }
-    /* "+ Section" sits beside "+ Note", wearing the same size. */
+    .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus { height: 32px; }
     .listbar .listedit {
       background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
@@ -552,13 +543,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   <!-- ===== LIST VIEW ===== -->
 
   <div class="listbar">
-    <form method="post" action="">
-      <input type="hidden" name="csrf" value="<?= $csrf ?>">
-      <input type="hidden" name="action" value="add">
-      <input type="hidden" name="view" value="<?= e($view) ?>">
-      <input type="hidden" name="folder" value="<?= e($addTarget) ?>">
-      <button class="newnote" type="submit">+ Note</button>
-    </form>
+    <?php // No + Note here any more: a note is made from the + on the section it goes in. ?>
     <button type="button" id="newSecBtn" class="listedit">+ Section</button>
     <?= $sectionInput ?>
   </div>
@@ -566,7 +551,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors); ?>
 
   <?php if (!$noteRows && !$sections): ?>
-    <p class="empty">No notes yet. Tap <strong>+ Note</strong> to start.</p>
+    <p class="empty">No notes yet. Tap the <strong>+</strong> on a section to start.</p>
   <?php else: ?>
    <div id="notes-root">
     <?php foreach ($sections as $sname): ?>
