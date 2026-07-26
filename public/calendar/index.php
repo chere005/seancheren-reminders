@@ -529,13 +529,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     /* Top: the calendar */
     .cal-top {
-      flex: 0 0 auto; max-height: 60vh; overflow-y: auto;
+      flex: 0 0 auto; max-height: 60vh; overflow-y: auto; overscroll-behavior: contain;
       padding: 1.5rem 1rem 0.5rem;   /* same top offset as the other apps */
     }
     .cal-top .wrap { max-width: 640px; margin: 0 auto; }
     /* Bottom: the selected-day agenda */
     .daypanel {
-      flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
       border-top: 1px solid #2a2a2a; background: #141414;
       padding: 0.9rem 1rem calc(84px + env(safe-area-inset-bottom, 0px));
     }
@@ -579,7 +579,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       background: conic-gradient(var(--k-event), var(--k-reminder), #facc15, #f472b6, var(--k-event));
     }
     .calpick-menu {
-      position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 210px;
+      position: absolute; right: 0; top: calc(100% + 5px); z-index: 45; min-width: 210px;
       max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
       background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
@@ -595,6 +595,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .calpick-opt:hover { background: #262626; color: #fff; }
     .calpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* "Manage calendars", the last row of the picker menu. */
+    .calpick-manage {
+      width: 100%; background: none; border: none; border-top: 1px solid #333;
+      margin-top: 0.25rem; padding-top: 0.55rem; cursor: pointer; font-family: inherit;
+      text-align: left; color: #bbb; font-size: 0.92rem;
+    }
+    .calpick-manage .cpick-gear { display: inline-flex; width: 16px; justify-content: center; color: #888; }
+    .calpick-manage:hover { color: #fff; }
 
     .monthnav {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
@@ -800,6 +808,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .calmodal { max-height: 85vh; overflow-y: auto; }
     .calmodal h2 { margin-bottom: 0.7rem; }
     .calmodal .cdiv { border: none; border-top: 1px solid #333; margin: 1.2rem 0 1rem; }
+    /* Collapsible manager sections: tap the heading to fold Calendars / Sets / Folders. */
+    .calmodal .cm-section + .cm-section { border-top: 1px solid #333; margin-top: 1.1rem; padding-top: 0.9rem; }
+    .calmodal .cm-head { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none; margin-bottom: 0.7rem; }
+    .calmodal .cm-chev { color: #888; font-size: 0.7rem; margin-left: auto; transition: transform 0.15s ease; }
+    .calmodal .cm-section.collapsed .cm-chev { transform: rotate(-90deg); }
+    .calmodal .cm-section.collapsed .cm-body { display: none; }
+    .calmodal .cm-section.collapsed .cm-head { margin-bottom: 0; }
     .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
     .addrow input[type=text] { flex: 1; margin-bottom: 0; font-size: 16px; }
     .addrow .plus {
@@ -883,6 +898,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Calendar</h1>
+      </div>
+    </div>
+    <?php
+      // The calendar picker rides on the right by the ⋮; "Manage calendars" is the last
+      // row of its dropdown rather than a button of its own.
+      ob_start();
+    ?>
       <div class="calpick">
         <?php // Just the selected calendar's colour, round: the name is in the menu it opens. ?>
         <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false"
@@ -902,12 +924,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
               </a>
             <?php endforeach; ?>
           <?php endforeach; ?>
+          <button type="button" class="calpick-opt calpick-manage" id="calMgr">
+            <span class="cpick-gear" aria-hidden="true"><?= folder_icon_svg() ?></span><span>Manage calendars</span>
+          </button>
         </div>
       </div>
-      <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars"><?= folder_icon_svg() ?></button>
-      </div>
-    </div>
-    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>', (bool) $partner) ?>
+    <?php $titleControls = ob_get_clean(); ?>
+    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>', (bool) $partner, $titleControls) ?>
   </header>
 
 
@@ -1005,7 +1028,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <span class="dp-date" id="dpDate">Select a day</span>
     <span class="dp-gap"></span>
     <button type="button" id="calShowAll" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
-    <button type="button" class="hedit" id="dpEdit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
     <button class="dp-add" id="dpAdd" disabled>+ Add</button>
   </div>
   <div class="dp-list" id="dpList">
@@ -1103,27 +1125,37 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <!-- Manage calendars + calendar sets (opened by the + beside "Calendar" in edit mode) -->
 <div class="modal-backdrop" id="calModal">
   <div class="modal calmodal">
-    <h2>Calendars</h2>
-    <div class="addrow">
-      <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
-      <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
+    <div class="cm-section" data-cm="cals">
+      <h2 class="cm-head">Calendars<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
+      <div class="cm-body">
+        <div class="addrow">
+          <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
+          <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
+        </div>
+        <ul class="callist" id="calRows"></ul>
+        <div class="defrow">
+          <label for="calDefault">New events go to</label>
+          <select id="calDefault"></select>
+        </div>
+      </div>
     </div>
-    <ul class="callist" id="calRows"></ul>
-    <div class="defrow">
-      <label for="calDefault">New events go to</label>
-      <select id="calDefault"></select>
+    <div class="cm-section" data-cm="sets">
+      <h2 class="cm-head">Calendar sets<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
+      <div class="cm-body">
+        <div class="addrow">
+          <input type="text" id="setName" placeholder="New set" maxlength="40" autocomplete="off">
+          <button type="button" class="plus" id="setAdd" title="Add set">+</button>
+        </div>
+        <ul class="callist" id="setRows"></ul>
+      </div>
     </div>
-    <hr class="cdiv">
-    <h2>Calendar sets</h2>
-    <div class="addrow">
-      <input type="text" id="setName" placeholder="New set" maxlength="40" autocomplete="off">
-      <button type="button" class="plus" id="setAdd" title="Add set">+</button>
+    <div class="cm-section" data-cm="folders">
+      <h2 class="cm-head">Reminder folders<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
+      <div class="cm-body">
+        <p class="chint">Which folders' reminders show up on the calendar.</p>
+        <ul class="callist" id="folderRows"></ul>
+      </div>
     </div>
-    <ul class="callist" id="setRows"></ul>
-    <hr class="cdiv">
-    <h2>Reminder folders</h2>
-    <p class="chint">Which folders' reminders show up on the calendar.</p>
-    <ul class="callist" id="folderRows"></ul>
     <div class="buttons" style="margin-top:1.1rem">
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
@@ -1433,14 +1465,36 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           document.getElementById('delItemForm').submit();
         });
         row.appendChild(del);
-        row.addEventListener('click', () => {
-          // Tapping a row only opens it while editing — otherwise the panel is read-only
-          // and the checkboxes are the only thing you can hit by accident.
-          if (!document.body.classList.contains('editing')) return;
-          if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
+        // Open a row for editing: notes go to the Notes tab, everything else to the modal.
+        // There's no Edit button any more — a long-press (touch) or double-click (desktop)
+        // turns edit mode on and opens the row straight away.
+        const openRow = () => {
+          if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }
+          document.body.classList.add('editing');
           // Editing any occurrence edits the series — there's only the one stored row.
           openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
+        };
+        row.addEventListener('click', () => {
+          // A plain tap only opens the row while already editing; otherwise the panel is
+          // read-only and the checkboxes are the only thing you can hit by accident.
+          if (document.body.classList.contains('editing')) openRow();
         });
+        row.addEventListener('dblclick', (e) => { e.preventDefault(); openRow(); });
+        let lpT = null, lpX = 0, lpY = 0;
+        row.addEventListener('pointerdown', (e) => {
+          if (e.pointerType === 'mouse' || document.body.classList.contains('editing')) return;
+          if (e.target.closest('.dp-del, .dp-check, button, a, input')) return;
+          lpX = e.clientX; lpY = e.clientY;
+          lpT = setTimeout(() => { lpT = null; if (navigator.vibrate) navigator.vibrate(12); openRow(); }, 500);
+        });
+        const lpCancel = (e) => {
+          if (!lpT) return;
+          if (e.type === 'pointermove' && Math.abs(e.clientX - lpX) < 10 && Math.abs(e.clientY - lpY) < 10) return;
+          clearTimeout(lpT); lpT = null;
+        };
+        row.addEventListener('pointermove', lpCancel);
+        row.addEventListener('pointerup', lpCancel);
+        row.addEventListener('pointercancel', lpCancel);
       }
       groups[it.kind].appendChild(row);
     }
@@ -1481,17 +1535,21 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     if (selected) renderPanel(selected);
   });
 
-  // Day-panel Edit mode: reveal × to quick-delete items.
-  // Always starts off — opening the app or switching tabs never lands you in edit mode.
-  // A delete redirects back with ?edit=1 so quick-deleting several things in a row works.
-  const dpEdit = document.getElementById('dpEdit');
+  // Day-panel Edit mode: reveal × to quick-delete items. There's no Edit button any
+  // more — a long-press (touch) or double-click (desktop) on a row turns it on and opens
+  // that row. Always starts off; a delete redirects back with ?edit=1 so quick-deleting
+  // several things in a row keeps the mode on.
   if (new URLSearchParams(location.search).get('edit') === '1') {
     document.body.classList.add('editing');
     const u = new URL(location.href); u.searchParams.delete('edit');
     history.replaceState(null, '', u);
   }
-  // The pencil says which state you're in by going green, so it keeps its icon.
-  dpEdit.addEventListener('click', () => { document.body.classList.toggle('editing'); });
+  // Leave edit mode by tapping empty space in the panel (no Edit button to press).
+  document.getElementById('dpList').addEventListener('click', (e) => {
+    if (!document.body.classList.contains('editing')) return;
+    if (e.target.closest('.dp-item, button, a, input, select')) return;
+    document.body.classList.remove('editing');
+  });
 
   // ---- Calendars & calendar sets ----
   const CSRF     = '<?= $csrf ?>';
@@ -1776,6 +1834,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     renderCals(); renderSets(); renderDefault(); renderFolders();
     calModal.classList.add('open');
   });
+  // Collapse/expand the manager's sections (Calendars, Sets, Reminder folders); remembered.
+  document.querySelectorAll('#calModal .cm-head').forEach(h => {
+    const sec = h.closest('.cm-section'), key = 'cmcollapse:' + sec.dataset.cm;
+    if (localStorage.getItem(key) === '1') sec.classList.add('collapsed');
+    h.addEventListener('click', () => {
+      localStorage.setItem(key, sec.classList.toggle('collapsed') ? '1' : '0');
+    });
+  });
   const closeCalModal = () => {
     calModal.classList.remove('open');
     if (calDirty) location.reload();   // colours, names and the picker all live in the page
@@ -1798,6 +1864,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     // Carry the open day across, the way the old select did.
     menu.querySelectorAll('.calpick-opt').forEach(a => {
       a.addEventListener('click', e => {
+        if (a.classList.contains('calpick-manage')) { close(); return; }   // opens the manager, not a nav
         e.preventDefault();
         const u = new URL(a.href, location.href);
         if (selected) u.searchParams.set('day', selected);
@@ -1818,6 +1885,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     if (shareModalEl && shareModalEl.classList.contains('open')) { shareModalEl.classList.remove('open'); return; }
     if (setModal.classList.contains('open')) { setModal.classList.remove('open'); return; }
     if (calModal.classList.contains('open')) { closeCalModal(); return; }
+    if (modal.classList.contains('open')) { closeModal(); return; }
+    if (document.body.classList.contains('editing')) { document.body.classList.remove('editing'); return; }
     closeModal();
   });
 
@@ -1883,7 +1952,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       if (sy === null) { return; }
       const t = e.changedTouches[0], dy = t.clientY - sy, dx = t.clientX - sx;
       sy = null;
-      if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) { return; }   // a tap, or a sideways drag
+      // A firm sideways swipe steps a month: left = forward, right = back.
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)) {
+        location.href = dx < 0 ? '?ym=<?= $next ?>' : '?ym=<?= $prev ?>';
+        return;
+      }
+      if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) { return; }   // a tap, or a small drag
       setMode(dy < 0);
     }, { passive: true });
   })();

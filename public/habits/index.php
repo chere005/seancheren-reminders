@@ -147,7 +147,7 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; overscroll-behavior-y: none; }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header { display: flex; align-items: center; justify-content: space-between; }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
@@ -241,10 +241,14 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Habits</h1>
-        <button type="button" id="editBtn" class="titlebtn edit-toggle" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
       </div>
     </div>
-    <?= render_user_menu() ?>
+    <?php
+      // The Edit pencil rides on the right, gathered by the ⋮.
+      $titleControls = '<button type="button" id="editBtn" class="titlebtn edit-toggle" title="Edit"'
+                     . ' aria-label="Edit">&#9998;&#65038;</button>';
+    ?>
+    <?= render_user_menu(false, 'editBtn', '', false, $titleControls) ?>
   </header>
 
   <div class="bar">

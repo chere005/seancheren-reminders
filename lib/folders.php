@@ -207,7 +207,8 @@ function folders_delete(string $dir, string $type, string $name): void
  * $groups is [ ['label' => 'Sean', 'options' => [ [value, label, color], … ] ], … ];
  * a group with an empty label lists its options loose at the top.
  */
-function render_folder_pick(array $groups, string $active, string $activeLabel = 'All'): void
+function render_folder_pick(array $groups, string $active, string $activeLabel = 'All',
+                            string $manageLabel = ''): void
 {
     $e = fn($x) => htmlspecialchars((string) $x, ENT_QUOTES);
     $cur = '';
@@ -235,6 +236,11 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
             </a>
           <?php endforeach; ?>
         <?php endforeach; ?>
+        <?php if ($manageLabel !== ''): ?>
+          <button type="button" class="folderpick-opt folderpick-manage" id="folderMgr">
+            <span class="fpick-gear" aria-hidden="true"><?= folder_icon_svg() ?></span><span><?= $e($manageLabel) ?></span>
+          </button>
+        <?php endif; ?>
       </div>
     </div>
     <script>(function(){
@@ -247,6 +253,11 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
       });
       document.addEventListener('click', function (e) {
         if (!m.hidden && !m.contains(e.target)) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
+      });
+      // "Manage folders" is the last row of the menu; it opens the manager (wired up in
+      // folder_modal_script via #folderMgr) and closes the menu behind it.
+      m.addEventListener('click', function (e) {
+        if (e.target.closest('.folderpick-manage')) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
       });
     })();</script>
     <?php
@@ -353,6 +364,14 @@ function folder_modal_script(): string
          . "var i=m.querySelector('.addrow input[type=text]');if(i)i.focus();});"
          . "if(d)d.addEventListener('click',close);"
          . "m.addEventListener('click',function(e){if(e.target===m)close();});"
+         // Picking a colour posts in the background and recolours the swatch in place, so
+         // the manager window stays open instead of reloading out from under you.
+         . "m.addEventListener('click',function(e){var sw=e.target.closest('.fswatches button[name=color]');"
+         . "if(!sw)return;e.preventDefault();var col=sw.value,det=sw.closest('details'),f=sw.form;"
+         . "var body=new URLSearchParams(new FormData(f));body.set('color',col);"
+         . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});"
+         . "var sum=det&&det.querySelector('summary');if(sum)sum.style.background=col;"
+         . "if(det)det.open=false;});"
          . "document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();</script>";
 }
 
@@ -375,7 +394,7 @@ function folder_nav_styles(): string
       background: conic-gradient(#60a5fa, var(--accent), #facc15, #f472b6, #60a5fa);
     }
     .folderpick-menu {
-      position: absolute; left: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
+      position: absolute; right: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
       max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
       background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
@@ -392,6 +411,14 @@ function folder_nav_styles(): string
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt:hover { background: #262626; color: #fff; }
     .folderpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* "Manage folders", the last row of the picker menu. */
+    .folderpick-manage {
+      width: 100%; background: none; border: none; border-top: 1px solid #333;
+      margin-top: 0.25rem; padding-top: 0.55rem; cursor: pointer; font-family: inherit;
+      text-align: left; color: #bbb;
+    }
+    .folderpick-manage .fpick-gear { display: inline-flex; width: 9px; justify-content: center; color: #888; }
+    .folderpick-manage:hover { color: #fff; }
 
 
     /* Folder manager window */
