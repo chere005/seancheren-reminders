@@ -35,9 +35,9 @@ function kind_spec(string $kind): ?array
     ][$kind] ?? null;
 }
 
-/** Palette offered when tapping a calendar's colour square. */
-const CAL_COLORS = [KIND_BLUE, '#34d399', '#f0a860', '#f472b6', '#8b6ef0',
-                    '#facc15', '#fb7185', '#22d3ee', '#a3e635', '#94a3b8'];
+/** Palette offered when tapping a calendar's colour square — the calendar tier of the
+ *  suite palette (blue, red, green, orange, purple, grey). See lib/palette.php. */
+define('CAL_COLORS', app_palette('calendar'));
 
 /**
  * Calendars and calendar sets share one list, the way sections share a list elsewhere:
