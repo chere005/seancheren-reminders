@@ -797,7 +797,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .calrow .secnote { font-size: 0.78rem; color: #777; white-space: nowrap; }
     .modal .reprow .repevery { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #aaa; }
     .modal .reprow .repevery input {
-      width: 60px; text-align: center; padding: 0.35rem 0.5rem; background: #222; border: 1px solid #444;
+      width: 48px; text-align: center; padding: 0.5rem 0.5rem; background: #222; border: 1px solid #444;
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
     }
     .modal .reprow .repevery input:focus { outline: none; border-color: #888; }
@@ -973,12 +973,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
             $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
         }
+        // One dot per distinct calendar colour that day, not one per event — several
+        // events on the same calendar read as a single dot in that colour.
         $dots = '';
-        $evShown = 0;
+        $evColors = [];
         foreach ($events as $ev) {
-            if ($ev['kind'] !== 'event' || $evShown >= 2) { continue; }
-            $evShown++;
-            $dots .= '<span class="dot event" style="background:' . e($ev['color']) . '"></span>';
+            if ($ev['kind'] !== 'event') { continue; }
+            $col = (string) ($ev['color'] ?? '');
+            if (!in_array($col, $evColors, true)) { $evColors[] = $col; }
+        }
+        foreach ($evColors as $col) {
+            $dots .= '<span class="dot event" style="background:' . e($col) . '"></span>';
         }
         if ($remDots) {
             // Colour the single reminder dot by the folder of the "worst" reminder that
