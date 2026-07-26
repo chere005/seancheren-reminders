@@ -214,7 +214,9 @@ function render_login(string $area, string $error = ''): void
     <div class="area"><?= $area ?></div>
     <form method="post" action="<?= $action ?>">
       <label for="username">Username</label>
-      <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+      <?php // No shift key on the way in — usernames here are all lower case. ?>
+      <input id="username" type="text" name="username" autocomplete="username"
+             autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
       <label for="password">Password</label>
       <input id="password" type="password" name="password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
