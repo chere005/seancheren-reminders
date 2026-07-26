@@ -63,21 +63,22 @@ function chrome_styles(): string
     /* A section's collapse chevron sits where its "+" used to — subtle, and it steps
        aside in edit mode (where the drag handle takes that slot). Collapsing hides the
        section's rows: for Reminders the whole group but its head, for Notes the list. */
+    /* A ">" that points down when the section is open and right when it's collapsed. */
     .sec-collapse {
-      flex: 0 0 auto; width: 20px; height: 20px; padding: 0; margin: 0; background: none;
-      border: none; color: #555; cursor: pointer; font-size: 0.7rem; line-height: 1;
+      flex: 0 0 auto; width: 18px; height: 22px; padding: 0; margin: 0; background: none;
+      border: none; color: #777; cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
-      transition: transform 0.15s ease; font-family: inherit;
+      transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);
     }
     .sec-collapse:hover { color: #aaa; }
     .section-group.collapsed > .section-head .sec-collapse,
-    .section-head.collapsed .sec-collapse { transform: rotate(-90deg); }
+    .section-head.collapsed .sec-collapse { transform: rotate(0deg); }
     body.editing .sec-collapse { display: none; }
     .section-group.collapsed > *:not(.section-head) { display: none; }
     .section-head.collapsed + .nlist { display: none; }
-    /* The "+" (and the delete ×) live at the right end of a section header now. */
-    .section-head .sec-right { margin-left: auto; display: inline-flex; align-items: center; gap: 0.75rem; }
-    .section-head .sec-right form { margin-left: 0; }
+    /* The "+" sits immediately to the right of the section name; the delete × is pushed
+       to the far right of the header. */
+    .section-head .sec-add { margin-left: 0; }
     CSS
     . settings_modal_styles()
     . confirm_delete_styles()
@@ -161,13 +162,15 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
       <label>Repeat new password<input type="password" name="again" autocomplete="new-password"></label>
       <p class="setmsg" id="setMsg" hidden></p>
     </form>
+    <div class="setpwrow">
+      <button type="submit" form="pwForm" class="setsave">Change password</button>
+    </div>
     <div class="setthemes">
       <p class="setlabel">Theme</p>
       <div class="themerow">{$themes}</div>
     </div>
     {$extra}
     <div class="setactions">
-      <button type="submit" form="pwForm" class="setsave">Change password</button>
       {$share}
       <button type="button" class="setdone" id="setDone">Done</button>
     </div>
@@ -221,6 +224,8 @@ function settings_modal_styles(): string
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .setmodal .setsave:hover { background: #52e0ac; }
+    /* Change password sits on its own row, above the Theme picker. */
+    .setmodal .setpwrow { margin-top: 0.9rem; }
     /* The three actions sit on one row: Change password on the left, then Share and Done
        to the right; they wrap onto the next line only if the window is too narrow. */
     .setmodal .setactions {
@@ -307,7 +312,7 @@ function section_edit_button(): string
  *  the "+" used to; it hides in edit mode, leaving the slot to the drag handle. */
 function section_collapse_button(): string
 {
-    return '<button type="button" class="sec-collapse" title="Collapse section" aria-label="Collapse section">&#9662;</button>';
+    return '<button type="button" class="sec-collapse" title="Collapse section" aria-label="Collapse section">&gt;</button>';
 }
 
 /** Collapse/expand a section by tapping its chevron; the state is remembered per

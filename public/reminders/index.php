@@ -145,7 +145,7 @@ function reminders_markdown(array $secRows, array $grouped, array $calRows, arra
         if (!empty($r['due']))  { $bits[] = $r['due']; }
         if (!empty($r['time'])) { $bits[] = $r['time']; }
         $suffix = $bits ? ' (' . implode(' ', $bits) . ')' : '';
-        return '- [ ] ' . ($r['text'] ?? '') . $suffix;
+        return '- [] ' . ($r['text'] ?? '') . $suffix;
     };
     $block = function (string $title, array $rows) use ($line): string {
         $rows = array_values(array_filter($rows, fn($r) => empty($r['done'])));
@@ -243,13 +243,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         folders_add($cfg['data_dir'], 'reminders', $name);
         // Switch to the new folder, staying in edit mode only if we were already in it.
+        // fm=1 reopens the folder manager so adding one doesn't close it.
         $stay = !empty($_POST['edit']) ? '&edit=1' : '';
-        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay);
+        header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay . '&fm=1');
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . $editBack);
+        header('Location: ' . $editBack . '&fm=1');
         exit;
     }
     if ($_POST['action'] === 'set_folder_color') {
@@ -274,7 +275,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($r);
         save_reminders($dataFile, $list);
-        header('Location: ' . _self_path() . '?folder=All&edit=1');
+        header('Location: ' . _self_path() . '?folder=All&edit=1&fm=1');
         exit;
     }
 
@@ -878,17 +879,15 @@ $sectionInput =
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
                 '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-          <span class="sec-right">
-            <?php render_section_add_button($sname, $sfolder); ?>
-            <form method="post" action="" style="display:inline">
-              <input type="hidden" name="csrf" value="<?= $csrf ?>">
-              <input type="hidden" name="action" value="delete_section">
-              <input type="hidden" name="view" value="<?= e($view) ?>">
-              <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-              <input type="hidden" name="name" value="<?= e($sname) ?>">
-              <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-            </form>
-          </span>
+          <?php render_section_add_button($sname, $sfolder); ?>
+          <form method="post" action="" style="display:inline">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete_section">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+            <input type="hidden" name="name" value="<?= e($sname) ?>">
+            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+          </form>
         </div>
         <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
@@ -903,7 +902,7 @@ $sectionInput =
         <?= section_collapse_button() ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
-        <span class="sec-right"><?php render_section_add_button(CALENDAR_SECTION, $view); ?></span>
+        <?php render_section_add_button(CALENDAR_SECTION, $view); ?>
       </div>
       <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view, $view); ?>
       <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
@@ -916,7 +915,7 @@ $sectionInput =
         <?= section_collapse_button() ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
-        <span class="sec-right"><?php render_section_add_button('', $view); ?></span>
+        <?php render_section_add_button('', $view); ?>
       </div>
       <?php render_section_add_row('', $csrf, $view, $view); ?>
       <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
@@ -1187,11 +1186,15 @@ $sectionInput =
   document.addEventListener('pointerup', clearLp);
   document.addEventListener('pointercancel', clearLp);
 
-  // Leave edit mode by tapping empty space or pressing Escape (no Edit button to press).
+  // Leave edit mode by tapping away from what you're editing (no Edit button to press).
+  // A tap stays in edit only if it lands on the thing you're editing or an edit control —
+  // a reminder's text (which starts editing it), a section name field, a handle, a
+  // delete/add/collapse/check button, the toolbar, or a modal.
   document.addEventListener('click', (e) => {
     if (!editing() || suppressClick) return;
-    if (e.target.closest('li[data-id], .section-head, .secadd-row, .newsection, .foldernav,'
-        + ' button, a, input, textarea, select, .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
+    if (e.target.closest('.textedit, .text, .sectitle, .sec-handle, .secadd-row, .newsection,'
+        + ' .foldernav, button, a, input, textarea, select,'
+        + ' .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
     setEdit(false);
   });
   document.addEventListener('keydown', (e) => {
