@@ -5,13 +5,12 @@
  * "General" always exists and is the default folder.
  */
 
+require_once __DIR__ . '/palette.php';
+
 const FOLDER_DEFAULT = 'General';
 
-/** Colours a folder can wear. Deliberately a warm palette that shares no colour with
- *  the calendars' (CAL_COLORS, which leads with blue/green), so a reminder or note
- *  folder never reads as a calendar — reminders are their own thing at a glance. */
-const FOLDER_COLORS = ['#f97316', '#ef4444', '#db2777', '#d946ef', '#f59e0b',
-                       '#e11d48', '#c026d3', '#fb923c', '#a21caf', '#b45309'];
+// A folder's colours come from the per-app palette (app_palette('reminders'|'notes')),
+// so reminder and note folders sit at their own shades. See lib/palette.php.
 
 function folders_load(string $dir, ?string $user = null): array
 {
@@ -36,17 +35,20 @@ function folder_colors(string $dir, string $type, ?string $user = null): array
 {
     $data  = folders_load($dir, $user);
     $set   = is_array($data['colors'][$type] ?? null) ? $data['colors'][$type] : [];
+    $pal   = app_palette($type);
     $out   = [];
     foreach (array_values($data[$type] ?? []) as $i => $name) {
         $c = (string) ($set[$name] ?? '');
-        $out[$name] = in_array($c, FOLDER_COLORS, true) ? $c : FOLDER_COLORS[$i % count(FOLDER_COLORS)];
+        // A stored colour from this app's palette (own or shared) is kept; otherwise a
+        // default is handed out by position so a new folder is distinct straight away.
+        $out[$name] = palette_has($type, $c) ? $c : $pal[$i % count($pal)];
     }
     return $out;
 }
 
 function folder_color_set(string $dir, string $type, string $name, string $color): void
 {
-    if (!in_array($type, ['reminders', 'notes'], true) || !in_array($color, FOLDER_COLORS, true)) {
+    if (!in_array($type, ['reminders', 'notes'], true) || !palette_has($type, $color)) {
         return;
     }
     $data = folders_load($dir);
@@ -199,10 +201,11 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
  */
 function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                              string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
-                             string $extraButton = '', array $colors = []): void
+                             string $extraButton = '', array $colors = [], array $palette = []): void
 {
     $csrf = htmlspecialchars($csrf, ENT_QUOTES);
     $vw   = htmlspecialchars($view, ENT_QUOTES);
+    if (!$palette) { $palette = app_palette('reminders'); }
     ?>
     <div class="modal-backdrop" id="folderModal">
       <div class="foldermodal">
@@ -219,14 +222,14 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
               <?php // The swatch opens a <details> palette: picking a colour is an
                     // ordinary POST, like everything else in this window. ?>
               <details class="fcolor">
-                <summary style="background:<?= htmlspecialchars($colors[$f] ?? FOLDER_COLORS[0], ENT_QUOTES) ?>"
+                <summary style="background:<?= htmlspecialchars($colors[$f] ?? $palette[0], ENT_QUOTES) ?>"
                          title="Colour"></summary>
                 <form class="fswatches" method="post" action="">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="set_folder_color">
                   <input type="hidden" name="view" value="<?= $vw ?>">
                   <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
-                  <?php foreach (FOLDER_COLORS as $col): ?>
+                  <?php foreach ($palette as $col): ?>
                     <button type="submit" name="color" value="<?= $col ?>" style="background:<?= $col ?>"
                             title="<?= $col ?>"></button>
                   <?php endforeach; ?>

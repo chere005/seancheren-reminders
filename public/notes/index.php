@@ -568,7 +568,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <h1>Notes</h1>
         <?php if (!$editing): ?>
           <?php render_folder_pick([['label' => '', 'options' =>
-                array_map(fn($f) => [$f, $f, $folderColors[$f] ?? FOLDER_COLORS[0]], $folders)]], $view); ?>
+                array_map(fn($f) => [$f, $f, $folderColors[$f] ?? app_palette('notes')[0]], $folders)]], $view); ?>
           <button type="button" id="folderMgr" class="titlebtn"
                   title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
         <?php endif; ?>
@@ -586,7 +586,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     <?= $sectionInput ?>
   </div>
 
-  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors); ?>
+  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors, app_palette('notes')); ?>
 
   <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">

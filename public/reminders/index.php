@@ -546,11 +546,11 @@ if ($partner && !$isShared) {
 $myColors     = folder_colors($cfg['data_dir'], 'reminders');
 $theirColors  = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
 $folderGroups = [['label' => share_name($me),
-                  'options' => array_map(fn($f) => [$f, $f, $myColors[$f] ?? FOLDER_COLORS[0]], $myFolders)]];
+                  'options' => array_map(fn($f) => [$f, $f, $myColors[$f] ?? app_palette('reminders')[0]], $myFolders)]];
 if ($sharedFolders) {
     $folderGroups[] = ['label' => share_name($partner),
                        'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f,
-                                                         $theirColors[$f] ?? FOLDER_COLORS[0]], $sharedFolders)];
+                                                         $theirColors[$f] ?? app_palette('reminders', true)[0]], $sharedFolders)];
 }
 
 // The "+ Section" control that sits on the folder row.
@@ -837,7 +837,7 @@ $sectionInput =
 
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
-                            $partner ? share_button_html() : '', $myColors);
+                            $partner ? share_button_html() : '', $myColors, app_palette('reminders'));
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
