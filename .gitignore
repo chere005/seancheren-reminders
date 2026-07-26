@@ -13,3 +13,9 @@ data/
 
 # server-generated WebP cover cache (built on NFSN, not in repo)
 public/akisbookshelf/covers/
+
+# Xcode per-user state (the project itself and its shared schemes are committed)
+ios/**/xcuserdata/
+ios/**/*.xcuserdatad
+ios/build/
+ios/DerivedData/
