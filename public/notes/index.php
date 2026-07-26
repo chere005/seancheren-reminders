@@ -8,11 +8,11 @@ require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/folders.php';
+require_once $__libDir . '/sharing.php';
 require_once $__libDir . '/richtext.php';   // note-body toolbar + sanitiser
 require_login('Notes');
 
-$cfg      = app_config();
-$dataFile = user_data_file($cfg['data_dir'], 'notes');
+$cfg = app_config();
 
 // Ungrouped notes live under a permanent, non-deletable section shown last.
 const NOTES_DEFAULT_SECTION = 'Notes';
@@ -21,17 +21,35 @@ if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(16));
 }
 
-$folders      = folders_load($cfg['data_dir'])['notes'];
+$me           = current_user() ?? '';
+$myFolders    = folders_load($cfg['data_dir'])['notes'];
 $folderColors = folder_colors($cfg['data_dir'], 'notes');
 
-// Which folder is being viewed? ('All' = every note)
-$view = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
-if ($view !== 'All' && !in_array($view, $folders, true)) {
-    $view = 'All';
+// Folders the other person shared with me, shown in the picker as "@aki:Recipes".
+$partner       = share_partner();
+$sharedFolders = shared_note_folders($cfg['data_dir'], $partner);
+
+/**
+ * Which folder is being viewed? 'All', one of mine, or '@<partner>:<folder>' for a
+ * shared one — in which case every read and write goes to their notes file instead.
+ */
+$view       = (string) ($_REQUEST['view'] ?? $_GET['folder'] ?? 'All');
+$owner      = $me;
+$viewFolder = $view;
+$isShared   = false;
+if ($partner && preg_match('/^@([A-Za-z0-9_-]+):(.*)$/s', $view, $m)
+    && $m[1] === $partner && in_array($m[2], $sharedFolders, true)) {
+    $owner = $partner; $viewFolder = $m[2]; $isShared = true;
+} elseif ($view !== 'All' && !in_array($view, $myFolders, true)) {
+    $view = $viewFolder = 'All';
 }
+
+$dataFile = user_data_file($cfg['data_dir'], 'notes', $isShared ? $owner : null);
+$folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['notes'] : $myFolders;
+
 // New notes land in the viewed folder, or the chosen default when viewing All.
 $defFolder = folder_default_get($cfg['data_dir'], 'notes');
-$addTarget = $view === 'All' ? $defFolder : $view;
+$addTarget = $viewFolder === 'All' ? $defFolder : $viewFolder;
 $listUrl   = _self_path() . '?folder=' . urlencode($view);
 
 function e(?string $s): string
@@ -75,6 +93,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit('Bad request (invalid CSRF token).');
     }
 
+    // A shared folder is someone else's list: you can work its notes, but its folders
+    // and sections stay theirs to arrange.
+    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder'], true)) {
+        http_response_code(403);
+        exit('That belongs to ' . htmlspecialchars(share_name($owner), ENT_QUOTES) . '.');
+    }
+
+    // Sharing: the same window the other apps have, now reached from the Settings ⋮.
+    if ($_POST['action'] === 'share_set' && $partner && !$isShared) {
+        share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)),
+                         folders_load($cfg['data_dir'])['reminders'], $myFolders);
+    }
+
     // Nothing destructive happens without the confirmed second press.
     if (in_array($_POST['action'], ['delete', 'delete_section', 'delete_folder'], true)
         && empty($_POST['confirm'])) {
@@ -96,8 +127,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($_POST['action'] === 'set_folder_color') {
-        folder_color_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''),
-                         (string) ($_POST['color'] ?? ''));
+        $cname = (string) ($_POST['name'] ?? '');
+        if (folder_shared_key_parse($cname)) {
+            // Recolouring a partner's shared folder: stored in my own file, keyed @partner:folder.
+            folder_shared_color_set($cfg['data_dir'], 'notes', $cname,
+                                    (string) ($_POST['color'] ?? ''), $sharedFolders);
+        } else {
+            folder_color_set($cfg['data_dir'], 'notes', $cname, (string) ($_POST['color'] ?? ''));
+        }
         header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
         exit;
     }
@@ -117,7 +154,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Section actions (bold headers grouping notes; stored in the notes file).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        $secFolder = $view === 'All' ? $defFolder : $view;   // sections belong to a folder
+        $secFolder = $viewFolder === 'All' ? $defFolder : $viewFolder;   // sections belong to a folder
         if ($name !== '' && strcasecmp($name, NOTES_DEFAULT_SECTION) !== 0) {   // "Notes" is reserved
             $notes = load_notes($dataFile);
             $dup   = false;
@@ -136,7 +173,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($_POST['action'] === 'rename_section') {
-        $secFolder = (string) ($_POST['folder'] ?? $view);
+        $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         save_notes($dataFile, section_rename(load_notes($dataFile), (string) ($_POST['name'] ?? ''),
                                              (string) ($_POST['newname'] ?? ''), $secFolder));
         header('Location: ' . $listUrl . '&edit=1');
@@ -144,7 +181,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($_POST['action'] === 'delete_section') {
         $name      = (string) ($_POST['name'] ?? '');
-        $secFolder = (string) ($_POST['folder'] ?? $view);
+        $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         $notes = load_notes($dataFile);
         // Only this folder's copy of the section goes; other folders keep theirs.
         $notes = array_filter($notes, fn($it) => !(is_section($it)
@@ -175,7 +212,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (is_section($it)) {
                 $f = $it['folder'] ?? FOLDER_DEFAULT;
                 $secExists[$f . "\x1F" . $it['name']] = true;
-                if ($view !== 'All' && $f === $view) { $thisFolderSecs[$it['name']] = $it; }
+                if ($viewFolder !== 'All' && $f === $viewFolder) { $thisFolderSecs[$it['name']] = $it; }
                 else { $otherSecs[] = $it; }
             } else {
                 $byId[$it['id']] = $it;
@@ -292,7 +329,7 @@ $all = load_notes($dataFile);
 // Section rows tagged with their folder. A folder view shows only its own; All shows every folder's.
 $secRows = [];
 foreach ($all as $it) {
-    if (is_section($it) && ($view === 'All' || ($it['folder'] ?? FOLDER_DEFAULT) === $view)) { $secRows[] = $it; }
+    if (is_section($it) && ($viewFolder === 'All' || ($it['folder'] ?? FOLDER_DEFAULT) === $viewFolder)) { $secRows[] = $it; }
 }
 $noteRows = array_values(array_filter($all, fn($it) => !is_section($it)));
 
@@ -306,6 +343,31 @@ $editing = $current !== null;
 
 $csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today = date('Y-m-d');
+
+// Folder picker contents: mine under my name, then whatever the other person shared.
+// Shared folders take my own colour override first (kept in my file), then the owner's
+// colour, then a shared-palette default — the same rule Reminders uses.
+$theirColors     = $partner ? folder_colors($cfg['data_dir'], 'notes', $partner) : [];
+$sharedOverrides = folder_shared_colors($cfg['data_dir'], 'notes');
+$sharedRows      = [];
+$folderGroups = [['label' => $sharedFolders ? share_name($me) : '',
+                  'options' => array_map(fn($f) => [$f, $f, $folderColors[$f] ?? app_palette('notes')[0]], $myFolders)]];
+if ($sharedFolders) {
+    $sharedOpts = [];
+    foreach ($sharedFolders as $i => $f) {
+        $key = '@' . $partner . ':' . $f;
+        $col = folder_shared_color($sharedOverrides, $theirColors, 'notes', $key, $f, $i);
+        $sharedOpts[] = [$key, $f, $col];
+        $sharedRows[] = ['key' => $key, 'label' => $f, 'color' => $col];
+    }
+    $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
+}
+
+// Calendars as [id, name] pairs, for the Settings share window.
+$shareCals = [];
+if ($partner && !$isShared) {
+    foreach (share_calendars($cfg['data_dir'], $me) as $cid => $cname) { $shareCals[] = [$cid, $cname]; }
+}
 
 // The "+ Section" control for the list view.
 $sectionInput =
@@ -321,8 +383,8 @@ $sectionInput =
 if (!$editing) {
     // Build the grouped list for the current folder.
     $listNotes = $noteRows;
-    if ($view !== 'All') {
-        $listNotes = array_values(array_filter($listNotes, fn($n) => ($n['folder'] ?? FOLDER_DEFAULT) === $view));
+    if ($viewFolder !== 'All') {
+        $listNotes = array_values(array_filter($listNotes, fn($n) => ($n['folder'] ?? FOLDER_DEFAULT) === $viewFolder));
     }
     // Stored order is drag order, as in Reminders and the bookshelf's notes.
 
@@ -557,6 +619,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
 <?= rt_styles() ?>
+<?= share_modal_styles() ?>
   </style>
 </head>
 <body>
@@ -567,14 +630,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <div class="titlebar">
         <h1>Notes</h1>
         <?php if (!$editing): ?>
-          <?php render_folder_pick([['label' => '', 'options' =>
-                array_map(fn($f) => [$f, $f, $folderColors[$f] ?? app_palette('notes')[0]], $folders)]], $view); ?>
-          <button type="button" id="folderMgr" class="titlebtn"
-                  title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
+          <?php render_folder_pick($folderGroups, $view); ?>
+          <?php if (!$isShared): ?>
+            <button type="button" id="folderMgr" class="titlebtn"
+                    title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
+          <?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
-    <?= render_user_menu() ?>
+    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared) ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -586,7 +650,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     <?= $sectionInput ?>
   </div>
 
-  <?php render_folder_modal($folders, $csrf, $view, $defFolder, 'New notes go to', '', $folderColors, app_palette('notes')); ?>
+  <?php if (!$isShared) {
+        render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New notes go to', '',
+                            $folderColors, app_palette('notes'), $sharedRows, app_palette('notes', true));
+      } ?>
+  <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
   <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">
@@ -818,6 +886,19 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
   })();
 </script>
+<script>
+  // What the share window (in Settings) draws: my calendars, my reminder + note folders,
+  // and what's currently ticked. A function so it always reflects the latest state.
+  window.SHARES = <?= json_encode(($partner && !$isShared) ? shares_load($cfg['data_dir'], $me) : ['calendars' => [], 'folders' => [], 'notes' => []]) ?>;
+  window.shareData = () => ({
+    cals: <?= json_encode($shareCals) ?>,
+    folders: <?= json_encode(($partner && !$isShared) ? folders_load($cfg['data_dir'])['reminders'] : []) ?>,
+    notefolders: <?= json_encode(($partner && !$isShared) ? $myFolders : []) ?>,
+    shares: window.SHARES
+  });
+  window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };
+</script>
+<?php if ($partner && !$isShared) { echo share_modal_script($csrf); } ?>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
 <?= rt_script() ?>

@@ -234,7 +234,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // Sharing: the same window the Calendar has, so it can be reached from either app.
     if ($_POST['action'] === 'share_set' && $partner && !$isShared) {
-        share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)), $myFolders);
+        share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)),
+                         $myFolders, folders_load($cfg['data_dir'])['notes']);
     }
 
     // Folder actions don't touch the reminders list.
@@ -252,8 +253,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
     if ($_POST['action'] === 'set_folder_color') {
-        folder_color_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''),
-                         (string) ($_POST['color'] ?? ''));
+        $cname = (string) ($_POST['name'] ?? '');
+        if (folder_shared_key_parse($cname)) {
+            // Recolouring a partner's shared folder: stored in my own file, keyed @partner:folder.
+            folder_shared_color_set($cfg['data_dir'], 'reminders', $cname,
+                                    (string) ($_POST['color'] ?? ''), $sharedFolders);
+        } else {
+            folder_color_set($cfg['data_dir'], 'reminders', $cname, (string) ($_POST['color'] ?? ''));
+        }
         header('Location: ' . $editBack);
         exit;
     }
@@ -543,14 +550,23 @@ if ($partner && !$isShared) {
 }
 
 // Folder picker contents: mine under my name, then whatever the other person shared.
-$myColors     = folder_colors($cfg['data_dir'], 'reminders');
-$theirColors  = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
+// Shared folders take my own colour override first (kept in my file), then the owner's
+// colour, then a shared-palette default — so I can recolour theirs without touching it.
+$myColors        = folder_colors($cfg['data_dir'], 'reminders');
+$theirColors     = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
+$sharedOverrides = folder_shared_colors($cfg['data_dir'], 'reminders');
+$sharedRows      = [];
 $folderGroups = [['label' => share_name($me),
                   'options' => array_map(fn($f) => [$f, $f, $myColors[$f] ?? app_palette('reminders')[0]], $myFolders)]];
 if ($sharedFolders) {
-    $folderGroups[] = ['label' => share_name($partner),
-                       'options' => array_map(fn($f) => ['@' . $partner . ':' . $f, $f,
-                                                         $theirColors[$f] ?? app_palette('reminders', true)[0]], $sharedFolders)];
+    $sharedOpts = [];
+    foreach ($sharedFolders as $i => $f) {
+        $key = '@' . $partner . ':' . $f;
+        $col = folder_shared_color($sharedOverrides, $theirColors, 'reminders', $key, $f, $i);
+        $sharedOpts[]  = [$key, $f, $col];
+        $sharedRows[]  = ['key' => $key, 'label' => $f, 'color' => $col];
+    }
+    $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
 }
 
 // The "+ Section" control that sits on the folder row.
@@ -824,7 +840,7 @@ $sectionInput =
         </div>
       </div>
     </div>
-    <?= render_user_menu(false, 'editBtn', $shareExtra) ?>
+    <?= render_user_menu(false, 'editBtn', $shareExtra, $partner && !$isShared) ?>
   </header>
 
   <?php // Completed and Section keep the row under the header; the folder picker
@@ -837,7 +853,8 @@ $sectionInput =
 
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
-                            $partner ? share_button_html() : '', $myColors, app_palette('reminders'));
+                            '', $myColors, app_palette('reminders'),
+                            $sharedRows, app_palette('reminders', true));
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
@@ -984,6 +1001,7 @@ $sectionInput =
   window.shareData = () => ({
     cals: <?= json_encode($shareCals) ?>,
     folders: <?= json_encode($myFolders) ?>,
+    notefolders: <?= json_encode(($partner && !$isShared) ? folders_load($cfg['data_dir'])['notes'] : []) ?>,
     shares: window.SHARES
   });
   window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };

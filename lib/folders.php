@@ -57,6 +57,65 @@ function folder_color_set(string $dir, string $type, string $name, string $color
     folders_save($dir, $data);
 }
 
+/**
+ * A view key names a partner's shared folder as "@<partner>:<Folder>". These are how
+ * shared folders are addressed in the picker, and how the viewer's own colour overrides
+ * for them are keyed. Returns [partner, folder] or null if it isn't one.
+ */
+function folder_shared_key_parse(string $key): ?array
+{
+    return preg_match('/^@([A-Za-z0-9_-]+):(.*)$/s', $key, $m) ? [$m[1], $m[2]] : null;
+}
+
+/**
+ * The viewer's own colour overrides for a partner's shared folders, keyed by the full
+ * "@<partner>:<Folder>" view key. Stored in the viewer's folders file under
+ * colors.shared[$type], so recolouring someone else's folder never touches their data.
+ */
+function folder_shared_colors(string $dir, string $type, ?string $user = null): array
+{
+    $data = folders_load($dir, $user);
+    $set  = $data['colors']['shared'][$type] ?? null;
+    return is_array($set) ? $set : [];
+}
+
+/**
+ * Resolve a shared folder's colour for the viewer: their own override first, then the
+ * owner's own colour for it, then the lighter shared-palette default by position. The
+ * override wins so each person can recolour the other's folders without conflict.
+ */
+function folder_shared_color(array $overrides, array $ownerColors, string $type,
+                             string $key, string $folder, int $pos): string
+{
+    if (isset($overrides[$key]) && palette_has($type, (string) $overrides[$key])) {
+        return (string) $overrides[$key];
+    }
+    if (isset($ownerColors[$folder])) {
+        return (string) $ownerColors[$folder];
+    }
+    $pal = app_palette($type, true);
+    return $pal[$pos % count($pal)];
+}
+
+/**
+ * Store the viewer's colour override for a partner's shared folder. The colour must be a
+ * lighter shared-palette variant, and the key must name a real shared folder — validated
+ * by the caller passing the list of shared folders currently visible.
+ */
+function folder_shared_color_set(string $dir, string $type, string $key, string $color,
+                                 array $sharedFolders): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)
+        || !in_array($color, app_palette($type, true), true)) {
+        return;
+    }
+    $parsed = folder_shared_key_parse($key);
+    if (!$parsed || !in_array($parsed[1], $sharedFolders, true)) { return; }
+    $data = folders_load($dir);
+    $data['colors']['shared'][$type][$key] = $color;
+    folders_save($dir, $data);
+}
+
 function folders_save(string $dir, array $data): void
 {
     $file = user_data_file($dir, 'folders');
@@ -201,11 +260,13 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
  */
 function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                              string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
-                             string $extraButton = '', array $colors = [], array $palette = []): void
+                             string $extraButton = '', array $colors = [], array $palette = [],
+                             array $sharedRows = [], array $sharedPalette = []): void
 {
     $csrf = htmlspecialchars($csrf, ENT_QUOTES);
     $vw   = htmlspecialchars($view, ENT_QUOTES);
     if (!$palette) { $palette = app_palette('reminders'); }
+    if (!$sharedPalette) { $sharedPalette = app_palette('reminders', true); }
     ?>
     <div class="modal-backdrop" id="folderModal">
       <div class="foldermodal">
@@ -249,6 +310,32 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
             </li>
           <?php endforeach; ?>
         </ul>
+        <?php // Folders the other person shared with me: I can recolour how they show in
+              // my picker (stored in my own file), but nothing else about them is mine. ?>
+        <?php if ($sharedRows): ?>
+          <h3 class="fshared-h">Shared with me</h3>
+          <ul class="flist">
+            <?php foreach ($sharedRows as $r): ?>
+              <li>
+                <details class="fcolor">
+                  <summary style="background:<?= htmlspecialchars($r['color'], ENT_QUOTES) ?>"
+                           title="Colour"></summary>
+                  <form class="fswatches" method="post" action="">
+                    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                    <input type="hidden" name="action" value="set_folder_color">
+                    <input type="hidden" name="view" value="<?= $vw ?>">
+                    <input type="hidden" name="name" value="<?= htmlspecialchars($r['key'], ENT_QUOTES) ?>">
+                    <?php foreach ($sharedPalette as $col): ?>
+                      <button type="submit" name="color" value="<?= $col ?>" style="background:<?= $col ?>"
+                              title="<?= $col ?>"></button>
+                    <?php endforeach; ?>
+                  </form>
+                </details>
+                <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
@@ -329,6 +416,10 @@ function folder_nav_styles(): string
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
     }
     .foldermodal .addrow .plus:hover { background: #52e0ac; }
+    .foldermodal .fshared-h {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #777; margin: 1rem 0 0.5rem;
+    }
     .foldermodal .flist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
     .foldermodal .flist li {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;

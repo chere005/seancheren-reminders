@@ -85,7 +85,8 @@ function folder_icon_svg(): string
  * toggle (a pencil) beside them. $editId is the button id the page's own script
  * already listens on.
  */
-function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', string $settingsExtra = ''): string
+function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', string $settingsExtra = '',
+                          bool $showShare = false): string
 {
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
     // One flex child, because the header is space-between: loose buttons would be
@@ -97,7 +98,7 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
         ? '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
           . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
         : '';
-    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html($settingsExtra);
+    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html($settingsExtra, $showShare);
 }
 
 /**
@@ -112,7 +113,7 @@ function settings_button(): string
     return '<button type="button" class="setbtn" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
 }
 
-function settings_modal_html(string $extra = ''): string
+function settings_modal_html(string $extra = '', bool $showShare = false): string
 {
     $csrf = htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES);
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
@@ -123,6 +124,10 @@ function settings_modal_html(string $extra = ''): string
         $themes .= '<button type="button" class="themebtn' . $on . '" data-theme="' . $key . '"'
                  . ' style="background:' . $accent . '" title="' . $label . '" aria-label="' . $label . '"></button>';
     }
+    // The footer is three actions stacked in a column: Change password (left), Share
+    // (centred, only when there's someone to share with) and Done (right). The password
+    // button lives here but submits the form above it through its `form` attribute.
+    $share = $showShare ? share_button_html() : '';
     return <<<HTML
 <div class="setmodal-backdrop" id="setBackdrop">
   <div class="setmodal">
@@ -135,14 +140,17 @@ function settings_modal_html(string $extra = ''): string
       <label>New password<input type="password" name="new" autocomplete="new-password"></label>
       <label>Repeat new password<input type="password" name="again" autocomplete="new-password"></label>
       <p class="setmsg" id="setMsg" hidden></p>
-      <button type="submit" class="setsave">Change password</button>
     </form>
     <div class="setthemes">
       <p class="setlabel">Theme</p>
       <div class="themerow">{$themes}</div>
     </div>
     {$extra}
-    <button type="button" class="setdone" id="setDone">Done</button>
+    <div class="setactions">
+      <button type="submit" form="pwForm" class="setsave">Change password</button>
+      {$share}
+      <button type="button" class="setdone" id="setDone">Done</button>
+    </div>
   </div>
 </div>
 HTML;
@@ -193,8 +201,14 @@ function settings_modal_styles(): string
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .setmodal .setsave:hover { background: #52e0ac; }
+    /* Three actions stacked: Change password to the left, Share centred, Done to the
+       right — so the middle one reads as the shared, mutual action between the two. */
+    .setmodal .setactions { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1.1rem; }
+    .setmodal .setactions .setsave { align-self: flex-start; }
+    .setmodal .setactions .sh-open { align-self: center; margin: 0; }
+    .setmodal .setactions .setdone { align-self: flex-end; }
     .setmodal .setdone {
-      display: block; margin: 1.1rem 0 0 auto; padding: 0.35rem 0.9rem; border: 1px solid #444;
+      padding: 0.35rem 0.9rem; border: 1px solid #444;
       background: none; color: #ccc; border-radius: 999px; font-size: 0.9rem; cursor: pointer;
       font-family: inherit;
     }
@@ -224,6 +238,10 @@ function settings_modal_script(): string
   var close = function () { back.classList.remove('open'); form.reset(); show(''); };
   btn.addEventListener('click', function () { back.classList.add('open'); });
   document.getElementById('setDone').addEventListener('click', close);
+  // Share opens its own window (in lib/sharing.php). Close Settings first so it doesn't
+  // sit behind it — the share modal's backdrop is a layer below this one.
+  var shareOpen = document.getElementById('shareBtn');
+  if (shareOpen) { shareOpen.addEventListener('click', function () { back.classList.remove('open'); }); }
   back.addEventListener('click', function (e) { if (e.target === back) { close(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
   // Themes: post the pick, then reload so every rule picks the new accent up.

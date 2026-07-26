@@ -223,7 +223,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($action === 'share_set' && $partner) {
         share_handle_set($cfg['data_dir'], $me,
                          array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id'),
-                         $remFolders);
+                         $remFolders, folders_load($cfg['data_dir'])['notes']);
     }
 
     // An event's calendar, ignored unless it names one that exists.
@@ -907,7 +907,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars"><?= folder_icon_svg() ?></button>
       </div>
     </div>
-    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>') ?>
+    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>', (bool) $partner) ?>
   </header>
 
 
@@ -1125,9 +1125,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <p class="chint">Which folders' reminders show up on the calendar.</p>
     <ul class="callist" id="folderRows"></ul>
     <div class="buttons" style="margin-top:1.1rem">
-      <?php if ($partner): ?>
-        <?= share_button_html() ?>
-      <?php endif; ?>
       <button type="button" class="ok" id="calDone">Done</button>
     </div>
   </div>
@@ -1672,6 +1669,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   window.shareData = () => ({
     cals: onlyCals().map(c => [c.id, c.name]),
     folders: FOLDERS,
+    notefolders: <?= json_encode($partner ? folders_load($cfg['data_dir'])['notes'] : []) ?>,
     shares: SHARES
   });
   window.onSharesChanged = (s) => { SHARES = s; calDirty = true; window.shareRender(); };
