@@ -20,4 +20,8 @@ return [
 
     // Where reminder data is stored (outside the web root).
     'data_dir' => __DIR__ . '/../data',
+
+    // The clock every page runs on. The server keeps UTC; leaving this unset means
+    // America/Chicago, so "today" turns over at local midnight.
+    'timezone' => 'America/Chicago',
 ];

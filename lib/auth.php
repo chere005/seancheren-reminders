@@ -23,6 +23,10 @@ function app_config(): array
     return $config;
 }
 
+// Everything in the suite runs on one clock. The server keeps UTC, so without this
+// "today" rolls over in the evening and the calendar advances a day early.
+date_default_timezone_set(app_config()['timezone'] ?? 'America/Chicago');
+
 /** Current path without query string, for safe self-redirects. */
 function _self_path(): string
 {
