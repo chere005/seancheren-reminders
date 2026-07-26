@@ -17,13 +17,24 @@ function share_partner(?string $user = null): ?string
     return SHARE_PAIRS[$u] ?? null;
 }
 
-/** What $user has shared out: ['calendars' => [calendar ids], 'folders' => [folder names]]. */
+/**
+ * The three shareable kinds and the shares-file key each lives under. Calendars are ids,
+ * reminder and note folders are names — kept in separate buckets so a reminder folder and
+ * a note folder of the same name don't collide.
+ */
+const SHARE_KINDS = ['calendar' => 'calendars', 'folder' => 'folders', 'notefolder' => 'notes'];
+
+/**
+ * What $user has shared out, keyed by bucket:
+ * ['calendars' => [calendar ids], 'folders' => [reminder folders], 'notes' => [note folders]].
+ */
 function shares_load(string $dir, string $user): array
 {
     $d = store_read(user_data_file($dir, 'shares', $user));
     return [
         'calendars' => array_values(array_filter((array) ($d['calendars'] ?? []), 'is_string')),
         'folders'   => array_values(array_filter((array) ($d['folders'] ?? []), 'is_string')),
+        'notes'     => array_values(array_filter((array) ($d['notes'] ?? []), 'is_string')),
     ];
 }
 
@@ -32,6 +43,7 @@ function shares_save(string $dir, string $user, array $shares): void
     store_write(user_data_file($dir, 'shares', $user), [
         'calendars' => array_values($shares['calendars'] ?? []),
         'folders'   => array_values($shares['folders'] ?? []),
+        'notes'     => array_values($shares['notes'] ?? []),
     ]);
 }
 
@@ -39,11 +51,27 @@ function shares_save(string $dir, string $user, array $shares): void
 function shares_toggle(string $dir, string $user, string $kind, string $key, bool $on): array
 {
     $shares = shares_load($dir, $user);
-    $k      = $kind === 'calendar' ? 'calendars' : 'folders';
+    $k      = SHARE_KINDS[$kind] ?? 'folders';
     $shares[$k] = array_values(array_filter($shares[$k], fn($x) => $x !== $key));
     if ($on) { $shares[$k][] = $key; }
     shares_save($dir, $user, $shares);
     return $shares;
+}
+
+/** The note folders $partner has shared with the viewer, validated against what they own. */
+function shared_note_folders(string $dir, ?string $partner): array
+{
+    if (!$partner) { return []; }
+    return array_values(array_intersect(folders_load($dir, $partner)['notes'],
+                                        shares_load($dir, $partner)['notes']));
+}
+
+/** The reminder folders $partner has shared with the viewer, validated against what they own. */
+function shared_reminder_folders(string $dir, ?string $partner): array
+{
+    if (!$partner) { return []; }
+    return array_values(array_intersect(folders_load($dir, $partner)['reminders'],
+                                        shares_load($dir, $partner)['folders']));
 }
 
 /** A display name for a username — just capitalised, these are first names. */
@@ -71,17 +99,18 @@ function share_calendars(string $dir, string $user): array
 }
 
 /**
- * Handle a posted `share_set` and answer with the new share list. $calIds and
- * $folders are what this user actually owns — a key outside them is ignored, so
- * the window can never share something that isn't theirs.
+ * Handle a posted `share_set` and answer with the new share list. $calIds, $folders and
+ * $noteFolders are what this user actually owns — a key outside its kind's pool is
+ * ignored, so the window can never share something that isn't theirs.
  */
-function share_handle_set(string $dir, string $user, array $calIds, array $folders): void
+function share_handle_set(string $dir, string $user, array $calIds, array $folders,
+                          array $noteFolders = []): void
 {
     $kind = (string) ($_POST['kind'] ?? '');
     $key  = (string) ($_POST['key'] ?? '');
-    $pool = $kind === 'calendar' ? $calIds : $folders;
+    $pool = ['calendar' => $calIds, 'folder' => $folders, 'notefolder' => $noteFolders][$kind] ?? null;
     $shares = shares_load($dir, $user);
-    if (in_array($kind, ['calendar', 'folder'], true) && in_array($key, $pool, true)) {
+    if ($pool !== null && in_array($key, $pool, true)) {
         $shares = shares_toggle($dir, $user, $kind, $key, !empty($_POST['on']));
     }
     header('Content-Type: application/json');
@@ -96,11 +125,13 @@ function share_modal_html(string $partner): string
     <div class="modal-backdrop" id="shareModal">
       <div class="sh-modal">
         <h2>Shared with {$who}</h2>
-        <p class="sh-hint">Ticked calendars and reminder folders show up in {$who}&rsquo;s apps. Nothing is copied — {$who} reads yours.</p>
+        <p class="sh-hint">Ticked calendars, reminder folders and note folders show up in {$who}&rsquo;s apps. Nothing is copied — {$who} reads yours.</p>
         <h3>Calendars</h3>
         <ul class="sh-list" id="shareCals"></ul>
         <h3>Reminders</h3>
         <ul class="sh-list" id="shareFolders"></ul>
+        <h3>Notes</h3>
+        <ul class="sh-list" id="shareNotes"></ul>
         <div class="sh-actions"><button type="button" class="sh-done" id="shareDone">Done</button></div>
       </div>
     </div>
@@ -154,7 +185,8 @@ function share_modal_script(string $csrf): string
 <script>(function () {
   const modal = document.getElementById('shareModal'), open = document.getElementById('shareBtn');
   if (!modal || !open || typeof window.shareData !== 'function') { return; }
-  const calList = document.getElementById('shareCals'), folList = document.getElementById('shareFolders');
+  const calList = document.getElementById('shareCals'), folList = document.getElementById('shareFolders'),
+        noteList = document.getElementById('shareNotes');
 
   const post = (kind, key, on) =>
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -182,12 +214,18 @@ function share_modal_script(string $csrf): string
 
   window.shareRender = () => {
     const d = window.shareData() || {};
-    const shares = d.shares || {}, cals = d.cals || [], folders = d.folders || [];
+    const shares = d.shares || {}, cals = d.cals || [], folders = d.folders || [], notes = d.notefolders || [];
     calList.innerHTML = ''; folList.innerHTML = '';
+    if (noteList) { noteList.innerHTML = ''; }
     cals.forEach(([id, name]) => calList.appendChild(
       row(name, (shares.calendars || []).indexOf(id) !== -1, on => post('calendar', id, on))));
     folders.forEach(f => folList.appendChild(
       row(f, (shares.folders || []).indexOf(f) !== -1, on => post('folder', f, on))));
+    if (noteList) {
+      notes.forEach(f => noteList.appendChild(
+        row(f, (shares.notes || []).indexOf(f) !== -1, on => post('notefolder', f, on))));
+      if (!notes.length) { noteList.appendChild(empty('No note folders yet.')); }
+    }
     if (!cals.length)    { calList.appendChild(empty('No calendars yet.')); }
     if (!folders.length) { folList.appendChild(empty('No reminder folders yet.')); }
   };
