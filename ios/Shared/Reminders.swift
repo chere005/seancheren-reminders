@@ -70,7 +70,7 @@ enum RemindersError: LocalizedError {
 enum RemindersAPI {
     static func fetch(base: URL = Site.base, token: String = Site.token) async throws -> ReminderList {
         guard !token.isEmpty else { throw RemindersError.noToken }
-        var comps = URLComponents(url: base.appendingPathComponent("api/reminders.php"),
+        var comps = URLComponents(url: Site.url("/api/reminders.php", base: base),
                                   resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "token", value: token)]
 
