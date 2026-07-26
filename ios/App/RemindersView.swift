@@ -32,6 +32,7 @@ struct RemindersView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     FolderMenu(kind: .reminder, selection: $folder)
                 }
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Toggle("Completed", systemImage: "checkmark.square", isOn: $showCompleted)
@@ -70,6 +71,8 @@ struct RemindersView: View {
 
         Section {
             ForEach(rows) { row($0) }
+                .onMove { store.moveReminders(rows, from: $0, to: $1) }
+                .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
             if drafting == ref {
                 HStack(spacing: 10) {
                     Image(systemName: "circle").foregroundStyle(.tertiary)
@@ -133,9 +136,6 @@ struct RemindersView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editing = reminder }
-        .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) { store.delete(reminder) }
-        }
     }
 
     private func subtitle(_ reminder: Reminder) -> String? {

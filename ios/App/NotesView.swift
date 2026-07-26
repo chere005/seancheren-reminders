@@ -25,6 +25,7 @@ struct NotesView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     FolderMenu(kind: .note, selection: $folder)
                 }
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("New note", systemImage: "square.and.pencil") { newNote(group: nil) }
@@ -57,6 +58,8 @@ struct NotesView: View {
         let rows = store.notes(folder: folder, group: group)
         Section {
             ForEach(rows) { row($0) }
+                .onMove { store.moveNotes(rows, from: $0, to: $1) }
+                .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
         } header: {
             HStack(spacing: 12) {
                 Button { newNote(group: group) } label: { Image(systemName: "plus") }
@@ -90,9 +93,6 @@ struct NotesView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editing = note }
-        .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) { store.delete(note) }
-        }
     }
 
     private func firstLine(_ body: String) -> String {

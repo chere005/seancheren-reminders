@@ -176,6 +176,10 @@ struct Cal: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var color = 0
+    /// Non-nil marks this row as a *set* — a saved view over several calendars' ids —
+    /// rather than a calendar of its own. Kept in the same list, the way the web does.
+    var members: [UUID]? = nil
+    var isSet: Bool { members != nil }
 }
 
 struct Event: Identifiable, Codable, Hashable {
@@ -213,6 +217,8 @@ struct AppData: Codable {
     var defaultFolder: [String: UUID] = [:]
     var lastFolder: [String: UUID] = [:]
     var defaultCal: UUID?
+    /// The calendar or set the Calendar screen last had selected (nil = all).
+    var lastCal: UUID?
 
     /// A first run: one General folder each, one calendar, nothing in them.
     static var starter: AppData {

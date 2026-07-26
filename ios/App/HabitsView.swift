@@ -31,6 +31,7 @@ struct HabitsView: View {
             }
             .navigationTitle("Habits")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("New habit", systemImage: "plus") { newHabit(group: nil) }
@@ -74,6 +75,8 @@ struct HabitsView: View {
         let rows = store.habits(group: group)
         Section {
             ForEach(rows) { row($0) }
+                .onMove { store.moveHabits(rows, from: $0, to: $1) }
+                .onDelete { idx in idx.forEach { store.deleteHabit(rows[$0]) } }
         } header: {
             HStack(spacing: 12) {
                 Button { newHabit(group: group) } label: { Image(systemName: "plus") }
@@ -111,9 +114,6 @@ struct HabitsView: View {
                 .buttonStyle(.borderless)
                 .frame(width: 30)
             }
-        }
-        .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) { store.deleteHabit(habit) }
         }
     }
 

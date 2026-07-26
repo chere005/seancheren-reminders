@@ -17,9 +17,17 @@ struct CalendarView: View {
     @State private var draft = ""
     @FocusState private var draftFocused: Bool
 
+    // Week vs month view (remembered), and which calendar/set the view is scoped to.
+    @AppStorage("calWeekMode") private var weekMode = false
+    @State private var calSel: UUID?
+    @State private var restored = false
+
     private let cal = Calendar.current
     private var today: Date { Date().day }
     private let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
+
+    /// The set of calendar ids in scope (nil = all), from the current selection.
+    private var scope: Set<UUID>? { store.calScope(calSel) }
 
     var body: some View {
         NavigationStack {
@@ -35,8 +43,10 @@ struct CalendarView: View {
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) { scopeMenu }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Toggle("Week view", systemImage: "calendar.day.timeline.left", isOn: $weekMode)
                         Button("Calendars…", systemImage: "calendar") { managing = true }
                         Button("Today", systemImage: "arrow.uturn.backward") { goToday() }
                     } label: {
@@ -48,6 +58,35 @@ struct CalendarView: View {
             .sheet(item: $editingReminder) { ReminderDetail(reminder: $0) }
             .sheet(item: $editingNote) { NoteDetail(note: $0) }
             .sheet(isPresented: $managing) { CalendarManager() }
+        }
+        .onAppear {
+            guard !restored else { return }
+            calSel = store.data.lastCal
+            restored = true
+        }
+        .onChange(of: calSel) {
+            guard restored else { return }
+            store.data.lastCal = calSel
+            store.touch()
+        }
+    }
+
+    /// The calendar/set filter: All, a single calendar, or a saved set.
+    private var scopeMenu: some View {
+        Menu {
+            Picker("Calendar", selection: $calSel) {
+                Text("All calendars").tag(UUID?.none)
+                ForEach(store.calendarsOnly) { c in Text(c.name).tag(UUID?.some(c.id)) }
+                if !store.calSets.isEmpty {
+                    Divider()
+                    ForEach(store.calSets) { s in Text(s.name).tag(UUID?.some(s.id)) }
+                }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Button("Calendars…", systemImage: "calendar") { managing = true }
+        } label: {
+            PickerDot(color: store.data.cal(calSel).map { Theme.color($0.color) })
         }
     }
 
@@ -72,11 +111,15 @@ struct CalendarView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            let days = monthGrid()
-            ForEach(0..<6, id: \.self) { week in
-                HStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { wd in
-                        cell(days[week * 7 + wd])
+            if weekMode {
+                HStack(spacing: 0) { ForEach(weekDays(), id: \.self) { cell($0) } }
+            } else {
+                let days = monthGrid()
+                ForEach(0..<6, id: \.self) { week in
+                    HStack(spacing: 0) {
+                        ForEach(0..<7, id: \.self) { wd in
+                            cell(days[week * 7 + wd])
+                        }
                     }
                 }
             }
@@ -105,7 +148,7 @@ struct CalendarView: View {
     }
 
     private func dots(_ day: Date) -> some View {
-        let events = store.events(on: day)
+        let events = store.events(on: day, scope: scope)
         let reminders = store.reminders(on: day, today: today)
         let hasNotes = !store.notes(on: day).isEmpty
         return HStack(spacing: 2) {
@@ -129,7 +172,7 @@ struct CalendarView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(dayTitle).font(.headline)
 
-            let events = store.events(on: selected)
+            let events = store.events(on: selected, scope: scope)
             let reminders = store.reminders(on: selected, today: today)
             let notes = store.notes(on: selected)
 
@@ -220,13 +263,26 @@ struct CalendarView: View {
         draftFocused = true
     }
 
-    private func step(_ months: Int) {
-        month = cal.date(byAdding: .month, value: months, to: month)?.startOfMonth ?? month
+    /// Arrows step a week at a time in week mode, a month at a time otherwise.
+    private func step(_ dir: Int) {
+        if weekMode {
+            selected = cal.date(byAdding: .day, value: 7 * dir, to: selected)?.day ?? selected
+            month = selected.startOfMonth
+        } else {
+            month = cal.date(byAdding: .month, value: dir, to: month)?.startOfMonth ?? month
+        }
     }
 
     private func goToday() {
         month = Date().startOfMonth
         selected = today
+    }
+
+    /// The seven days of the week containing the selected day (Sunday first).
+    private func weekDays() -> [Date] {
+        let wd = cal.component(.weekday, from: selected)   // 1 = Sunday
+        let start = cal.date(byAdding: .day, value: -(wd - 1), to: selected) ?? selected
+        return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: start)?.day }
     }
 
     // MARK: - Grid maths
@@ -288,7 +344,7 @@ struct EventDetail: View {
 
                 Section {
                     Picker("Calendar", selection: $draft.cal) {
-                        ForEach(store.data.calendars) { c in
+                        ForEach(store.calendarsOnly) { c in
                             Text(c.name).tag(UUID?.some(c.id))
                         }
                     }
@@ -349,7 +405,7 @@ struct CalendarManager: View {
                     }
                 }
                 Section {
-                    ForEach(store.data.calendars) { c in
+                    ForEach(store.calendarsOnly) { c in
                         HStack {
                             Menu {
                                 ForEach(Theme.palette.indices, id: \.self) { i in
@@ -375,7 +431,7 @@ struct CalendarManager: View {
                                     .background(arming == c.id ? Color.red : .clear, in: Circle())
                             }
                             .buttonStyle(.borderless)
-                            .disabled(store.data.calendars.count < 2)
+                            .disabled(store.calendarsOnly.count < 2)
                         }
                         .contentShape(Rectangle())
                         .onTapGesture { store.data.defaultCal = c.id; store.touch() }
@@ -383,6 +439,33 @@ struct CalendarManager: View {
                 } footer: {
                     Text("Tap a calendar to make it where new events land. Deleting one takes "
                          + "its events with it.")
+                }
+
+                // Sets: saved views over several calendars at once.
+                Section("Sets") {
+                    ForEach(store.calSets) { s in
+                        HStack {
+                            Circle().fill(Theme.color(s.color)).frame(width: 18, height: 18)
+                            Text(s.name)
+                            Spacer()
+                            Text("\(s.members?.count ?? 0)").font(.caption2).foregroundStyle(.secondary)
+                            Button {
+                                if arming == s.id { store.deleteCalendar(s); arming = nil }
+                                else { arming = s.id }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .foregroundStyle(arming == s.id ? Color.white : Color.secondary)
+                                    .padding(4)
+                                    .background(arming == s.id ? Color.red : .clear, in: Circle())
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    if store.calendarsOnly.count >= 2 {
+                        NavigationLink { SetEditor() } label: {
+                            Label("New set", systemImage: "plus")
+                        }
+                    }
                 }
             }
             .navigationTitle("Calendars")
@@ -397,5 +480,45 @@ struct CalendarManager: View {
         guard let i = store.data.calendars.firstIndex(where: { $0.id == c.id }) else { return }
         store.data.calendars[i].color = index
         store.touch()
+    }
+}
+
+// MARK: - Making a calendar set
+
+/// Name a set and tick the calendars it gathers.
+struct SetEditor: View {
+    @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var members: Set<UUID> = []
+
+    var body: some View {
+        Form {
+            Section { TextField("Set name", text: $name) }
+            Section("Calendars") {
+                ForEach(store.calendarsOnly) { c in
+                    Button {
+                        if members.contains(c.id) { members.remove(c.id) } else { members.insert(c.id) }
+                    } label: {
+                        HStack {
+                            Circle().fill(Theme.color(c.color)).frame(width: 16, height: 16)
+                            Text(c.name).foregroundStyle(.primary)
+                            Spacer()
+                            if members.contains(c.id) {
+                                Image(systemName: "checkmark").foregroundStyle(Theme.event)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("New Set")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") { store.addSet(name, members: Array(members)); dismiss() }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || members.isEmpty)
+            }
+        }
     }
 }
