@@ -816,11 +816,11 @@ $sectionInput =
       <div class="htitle">
         <div class="titlebar">
           <h1>Reminders</h1>
+          <?php render_folder_pick($folderGroups, $view); ?>
           <?php if (!$isShared): ?>
             <button type="button" id="folderMgr" class="titlebtn"
                     title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
           <?php endif; ?>
-          <?php render_folder_pick($folderGroups, $view); ?>
         </div>
       </div>
     </div>
