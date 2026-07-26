@@ -280,6 +280,16 @@ function rt_script(): string
     sync(); refresh();
   });
 
+  // Enter inside a quote stays inside it — a new line is part of the quotation until
+  // you say otherwise, and the quote button is how you say it (it lifts the caret's
+  // line back out). Without this some browsers end the blockquote on the second Enter.
+  body.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey || !inQuote()) { return; }
+    e.preventDefault();
+    document.execCommand('insertLineBreak');
+    sync();
+  });
+
   // Light the buttons that describe where the caret is. queryCommandState throws on
   // some browsers for commands they don't know, hence the try.
   const refresh = () => {
