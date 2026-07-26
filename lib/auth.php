@@ -33,16 +33,38 @@ function _self_path(): string
     return strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
 }
 
+/**
+ * Accounts people made themselves, keyed by username: ['email' => …, 'password' => …].
+ * config.php seeds the household accounts and is hand-kept on the server; anything
+ * signed up for through the login page lands here instead, in the encrypted data dir.
+ */
+function accounts_load(array $cfg): array
+{
+    $a = store_read(rtrim($cfg['data_dir'], '/') . '/accounts.json');
+    return is_array($a) ? $a : [];
+}
+
+function accounts_save(array $cfg, array $accounts): void
+{
+    store_write(rtrim($cfg['data_dir'], '/') . '/accounts.json', $accounts);
+}
+
 /** The user => password map, with backward-compat for the old single-user config. */
 function app_users(array $cfg): array
 {
+    // Signed-up accounts sit alongside the configured ones; config wins on a clash.
+    $signed = [];
+    foreach (accounts_load($cfg) as $u => $a) { $signed[$u] = (string) ($a['password'] ?? ''); }
     if (!empty($cfg['users']) && is_array($cfg['users'])) {
-        return $cfg['users'];
+        return $cfg['users'] + $signed;
+    }
+    if ($signed && !isset($cfg['auth_username'])) {
+        return $signed;
     }
     if (isset($cfg['auth_username'])) {
-        return [(string) $cfg['auth_username'] => (string) ($cfg['auth_password'] ?? '')];
+        return [(string) $cfg['auth_username'] => (string) ($cfg['auth_password'] ?? '')] + $signed;
     }
-    return [];
+    return $signed;
 }
 
 /**
@@ -129,7 +151,8 @@ function require_login(string $area = 'App'): void
     }
 
     if (empty($_SESSION['auth'])) {
-        render_login($area, $error);
+        [$stage, $suErr, $suUser] = signup_handle($cfg);
+        render_login($area, $suErr !== '' ? $suErr : $error, $stage, $suUser);
         exit;
     }
 
@@ -163,7 +186,104 @@ function require_login(string $area = 'App'): void
     }
 }
 
-function render_login(string $area, string $error = ''): void
+
+/**
+ * Self-serve sign-up. A new account isn't real until the four-digit code emailed to
+ * the address has come back, so the half-made account waits in data/signups.json
+ * (encrypted like everything else) with its code and a fifteen-minute expiry.
+ */
+function signups_file(array $cfg): string
+{
+    return rtrim($cfg['data_dir'], '/') . '/signups.json';
+}
+
+/** Tidy a wanted username; '' if it isn't one we'll allow. */
+function signup_clean_user(string $u): string
+{
+    $u = strtolower(trim($u));
+    return preg_match('/^[a-z0-9_-]{2,20}$/', $u) ? $u : '';
+}
+
+/** Post the code out. Plain mail(), which is all NFSN needs. */
+function signup_send_code(array $cfg, string $email, string $code): bool
+{
+    $from = (string) ($cfg['mail_from'] ?? 'no-reply@seancheren.com');
+    return @mail($email, 'Your verification code',
+                 "Your verification code is $code\n",
+                 "From: $from\r\nContent-Type: text/plain; charset=utf-8");
+}
+
+/**
+ * Handle the login page's sign-up and verify posts. Returns [$stage, $error, $user]:
+ * $stage is 'verify' once a code is out, so the page can open the code window.
+ */
+function signup_handle(array $cfg): array
+{
+    $action = (string) ($_POST['action'] ?? '');
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST' || !in_array($action, ['signup', 'verify'], true)) {
+        return ['login', '', ''];
+    }
+    $pending = store_read(signups_file($cfg));
+    if (!is_array($pending)) { $pending = []; }
+    // Anything past its fifteen minutes is gone, whichever way we came in.
+    $pending = array_filter($pending, fn($p) => (int) ($p['expires'] ?? 0) > time());
+
+    if ($action === 'signup') {
+        $user  = signup_clean_user((string) ($_POST['newuser'] ?? ''));
+        $email = trim((string) ($_POST['email'] ?? ''));
+        $pass  = (string) ($_POST['newpass'] ?? '');
+        if ($user === '') {
+            return ['signup', 'Pick a username: 2-20 letters, numbers, - or _.', ''];
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['signup', 'That email address doesn\'t look right.', ''];
+        }
+        if (strlen($pass) < 6) {
+            return ['signup', 'Use a password of at least 6 characters.', ''];
+        }
+        if (isset(app_users($cfg)[$user])) {
+            return ['signup', 'That username is taken.', ''];
+        }
+        $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        $pending[$user] = ['email' => $email, 'password' => $pass, 'code' => $code,
+                           'expires' => time() + 900, 'tries' => 0];
+        store_write(signups_file($cfg), $pending);
+        if (!signup_send_code($cfg, $email, $code)) {
+            return ['signup', 'Couldn\'t send the email. Try again in a moment.', ''];
+        }
+        return ['verify', '', $user];
+    }
+
+    // action === 'verify'
+    $user = signup_clean_user((string) ($_POST['newuser'] ?? ''));
+    $p    = $pending[$user] ?? null;
+    if (!$p) {
+        return ['login', 'That code expired. Start again.', ''];
+    }
+    if ((int) $p['tries'] >= 5) {
+        unset($pending[$user]);
+        store_write(signups_file($cfg), $pending);
+        return ['login', 'Too many wrong codes. Start again.', ''];
+    }
+    if (!hash_equals((string) $p['code'], trim((string) ($_POST['code'] ?? '')))) {
+        $pending[$user]['tries'] = (int) $p['tries'] + 1;
+        store_write(signups_file($cfg), $pending);
+        return ['verify', 'That code doesn\'t match.', $user];
+    }
+    $accounts = accounts_load($cfg);
+    $accounts[$user] = ['email' => $p['email'], 'password' => $p['password'], 'created' => time()];
+    accounts_save($cfg, $accounts);
+    unset($pending[$user]);
+    store_write(signups_file($cfg), $pending);
+
+    session_regenerate_id(true);
+    $_SESSION['auth'] = true;
+    $_SESSION['user'] = $user;
+    header('Location: ' . _self_path());
+    exit;
+}
+
+function render_login(string $area, string $error = '', string $stage = 'login', string $pendingUser = ''): void
 {
     $action = htmlspecialchars(_self_path(), ENT_QUOTES);
     $area   = htmlspecialchars($area, ENT_QUOTES);
@@ -206,6 +326,25 @@ function render_login(string $area, string $error = ''): void
     }
     .login-box button:hover { background: #fff; }
     .error { color: #f66; font-size: 0.85rem; margin-top: 0.75rem; text-align: center; }
+    /* Create account: a quieter button under Log in, and the form it reveals. */
+    .login-box .makebtn { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
+    .login-box .makebtn:hover { background: #222; color: #eee; }
+    .login-box .signup { margin-top: 1.25rem; border-top: 1px solid #2a2a2a; padding-top: 1.25rem; }
+    .login-box .signup[hidden] { display: none; }
+    .login-box .signup h2 { font-size: 0.95rem; margin-bottom: 0.9rem; text-align: center; }
+    /* The code window, on top of the page while we wait for the email to arrive. */
+    .codeback {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex;
+      align-items: center; justify-content: center; padding: 1rem; z-index: 20;
+    }
+    .codeback[hidden] { display: none; }
+    .codebox {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.5rem;
+      width: 100%; max-width: 320px; text-align: center;
+    }
+    .codebox h2 { font-size: 1.05rem; margin-bottom: 0.4rem; }
+    .codebox p { font-size: 0.82rem; color: #888; margin-bottom: 1rem; }
+    .codebox input { text-align: center; letter-spacing: 0.5em; font-size: 1.3rem; }
   </style>
 </head>
 <body>
@@ -221,10 +360,44 @@ function render_login(string $area, string $error = ''): void
       <input id="password" type="password" name="password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
     </form>
-    <?php if ($error !== ''): ?>
+    <button type="button" class="makebtn" id="makeBtn">Create account</button>
+    <?php if ($error !== '' && $stage !== 'verify'): ?>
       <p class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></p>
     <?php endif; ?>
+    <form class="signup" id="signupForm" method="post" action="<?= $action ?>"<?= $stage === 'signup' ? '' : ' hidden' ?>>
+      <h2>Create an account</h2>
+      <input type="hidden" name="action" value="signup">
+      <label for="newuser">Username</label>
+      <input id="newuser" type="text" name="newuser" autocapitalize="none" autocorrect="off"
+             spellcheck="false" maxlength="20" required>
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" autocomplete="email" required>
+      <label for="newpass">Password</label>
+      <input id="newpass" type="password" name="newpass" autocomplete="new-password" minlength="6" required>
+      <button type="submit">Send verification code</button>
+    </form>
   </div>
+  <?php // The account isn't made until this comes back matching what we emailed. ?>
+  <div class="codeback" id="codeBack"<?= $stage === 'verify' ? '' : ' hidden' ?>>
+    <div class="codebox">
+      <h2>Check your email</h2>
+      <p>Enter the four-digit code we sent you.</p>
+      <?php if ($stage === 'verify' && $error !== ''): ?>
+        <p class="error"><?= htmlspecialchars($error, ENT_QUOTES) ?></p>
+      <?php endif; ?>
+      <form method="post" action="<?= $action ?>">
+        <input type="hidden" name="action" value="verify">
+        <input type="hidden" name="newuser" value="<?= htmlspecialchars($pendingUser, ENT_QUOTES) ?>">
+        <input type="text" name="code" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
+               required autofocus>
+        <button type="submit">Verify</button>
+      </form>
+    </div>
+  </div>
+  <script>(function () {
+    var b = document.getElementById('makeBtn'), f = document.getElementById('signupForm');
+    b.addEventListener('click', function () { f.hidden = !f.hidden; if (!f.hidden) { f.newuser.focus(); } });
+  })();</script>
 </body>
 </html>
     <?php
