@@ -535,7 +535,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
     /* Visible-calendar picker, under the back button / title. Hand-built rather than a
        <select> so each entry can carry its calendar's colour dot. */
-    .calpick { margin: 0 0 0.9rem; padding-left: 2rem; position: relative; }   /* the Reminders offset */
+    .calpick { position: relative; display: inline-flex; }   /* rides in the title bar, right of the + */
     /* Closed, the picker is one round button wearing the selected calendar's colour. */
     .calpick-btn {
       display: inline-flex; align-items: center; justify-content: center;
@@ -614,7 +614,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell .dot.event { background: var(--k-event); }
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
     .cell.wk-hide { display: none; }
-    body.weekmode .legend, body.weekmode .calpick { display: none; }
+    body.weekmode .legend { display: none; }
     .legend { display: flex; gap: 1rem; margin-top: 0.7rem; font-size: 0.72rem; color: #888; }
     .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
     .legend .dot.reminder { background: var(--k-reminder); }
@@ -735,11 +735,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
       border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
     }
-    .modal .datewrap .cleardate {
+    /* One X for both rows: clearing the time looks like clearing the date. */
+    .modal .cleardate {
       background: none; border: 1px solid #3a3a3a; color: #999; border-radius: 6px;
       padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
     }
-    .modal .datewrap .cleardate:hover { border-color: #f66; color: #f66; }
+    .modal .cleardate:hover { border-color: #f66; color: #f66; }
     .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
     .modal .buttons .del {
       margin-right: auto; background: none; border: none; color: #666;
@@ -832,17 +833,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <body>
 <div class="cal-top">
  <div class="wrap">
-  <header>
-    <div class="hleft">
-      <?= back_button() ?>
-      <div class="titlebar">
-        <h1>Calendar</h1>
-        <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars">+</button>
-      </div>
-    </div>
-    <?= render_user_menu() ?>
-  </header>
-
   <?php
     // Custom picker rather than a <select>: a native option can't carry a colour dot.
     $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
@@ -864,27 +854,38 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       foreach ($opts as [$v, $n, $col]) { if ($calView === $v) { $curName = $n; $curColor = $col; } }
     }
   ?>
-  <div class="calpick">
-    <?php // Just the selected calendar's colour, round: the name is in the menu it opens. ?>
-    <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false"
-            title="<?= e($curName) ?>" aria-label="<?= e($curName) ?>">
-      <span class="cdot<?= $curColor === '' ? ' all' : '' ?>"<?= $curColor === '' ? '' : ' style="background:' . e($curColor) . '"' ?>></span>
-    </button>
-    <div class="calpick-menu" id="calSelMenu" role="listbox" hidden>
-      <a class="calpick-opt<?= $calView === 'all' ? ' on' : '' ?>" href="?cal=all">
-        <span class="cdot all"></span><span>All calendars</span>
-      </a>
-      <?php foreach ($pickGroups as [$glabel, $opts]): ?>
-        <?php if (!$opts) { continue; } ?>
-        <div class="calpick-group"><?= e($glabel) ?></div>
-        <?php foreach ($opts as [$val, $name, $col]): ?>
-          <a class="calpick-opt<?= $calView === $val ? ' on' : '' ?>" href="?cal=<?= urlencode($val) ?>">
-            <span class="cdot" style="background:<?= e($col) ?>"></span><span><?= e($name) ?></span>
+  <header>
+    <div class="hleft">
+      <?= back_button() ?>
+      <div class="titlebar">
+        <h1>Calendar</h1>
+        <button type="button" id="calMgr" class="titlebtn" title="Manage calendars" aria-label="Manage calendars">+</button>
+      <div class="calpick">
+        <?php // Just the selected calendar's colour, round: the name is in the menu it opens. ?>
+        <button type="button" class="calpick-btn" id="calSelBtn" aria-haspopup="listbox" aria-expanded="false"
+                title="<?= e($curName) ?>" aria-label="<?= e($curName) ?>">
+          <span class="cdot<?= $curColor === '' ? ' all' : '' ?>"<?= $curColor === '' ? '' : ' style="background:' . e($curColor) . '"' ?>></span>
+        </button>
+        <div class="calpick-menu" id="calSelMenu" role="listbox" hidden>
+          <a class="calpick-opt<?= $calView === 'all' ? ' on' : '' ?>" href="?cal=all">
+            <span class="cdot all"></span><span>All calendars</span>
           </a>
-        <?php endforeach; ?>
-      <?php endforeach; ?>
+          <?php foreach ($pickGroups as [$glabel, $opts]): ?>
+            <?php if (!$opts) { continue; } ?>
+            <div class="calpick-group"><?= e($glabel) ?></div>
+            <?php foreach ($opts as [$val, $name, $col]): ?>
+              <a class="calpick-opt<?= $calView === $val ? ' on' : '' ?>" href="?cal=<?= urlencode($val) ?>">
+                <span class="cdot" style="background:<?= e($col) ?>"></span><span><?= e($name) ?></span>
+              </a>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      </div>
     </div>
-  </div>
+    <?= render_user_menu() ?>
+  </header>
+
 
   <div class="monthnav">
     <a href="?ym=<?= $prev ?>" title="Previous month">&#8592;</a>
