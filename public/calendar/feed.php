@@ -82,9 +82,16 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
         $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
         if (empty($r['due']) && !$rides) { continue; }
         $eff = $rides ? $today : (($r['due'] < $today) ? $today : $r['due']);
-        if ($eff >= $today && $eff <= $until) {
-            $items[] = ['date' => $eff, 'kind' => 'reminder', 'text' => (string) ($r['text'] ?? ''),
-                        'time' => (string) ($r['time'] ?? ''), 'overdue' => (!$rides && $eff !== $r['due'])];
+        // Its own (possibly rolled) date, then any repeats inside the window.
+        $days = ($eff >= $today && $eff <= $until) ? [[$eff, (!$rides && $eff !== $r['due'])]] : [];
+        if (!$rides) {
+            foreach (repeat_dates((string) $r['due'], repeat_get($r), $today, $until) as $d) {
+                if ($d > $eff) { $days[] = [$d, false]; }
+            }
+        }
+        foreach ($days as [$d, $wasRolled]) {
+            $items[] = ['date' => $d, 'kind' => 'reminder', 'text' => (string) ($r['text'] ?? ''),
+                        'time' => (string) ($r['time'] ?? ''), 'overdue' => $wasRolled];
         }
     }
     foreach (loadlist(ufile($dir, $user, 'events')) as $e) {
@@ -98,8 +105,10 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
             if ($ec === '') { $ec = $defCal; }
             if (!in_array($ec, $visibleCals, true)) { continue; }
         }
-        $d = (string) ($e['date'] ?? '');
-        if ($d >= $today && $d <= $until) { $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''), 'time' => (string) ($e['time'] ?? ''), 'overdue' => false]; }
+        foreach (repeat_dates((string) ($e['date'] ?? ''), repeat_get($e), $today, $until) as $d) {
+            $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''),
+                        'time' => (string) ($e['time'] ?? ''), 'overdue' => false];
+        }
     }
     foreach (loadlist(ufile($dir, $user, 'notes')) as $n) {
         if (($n['type'] ?? '') === 'section') { continue; }

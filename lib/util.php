@@ -98,3 +98,96 @@ function parse_when_from_text(string $text): array
     [$text, $time] = parse_time_from_text($text);
     return [$text, $date, $time];
 }
+
+/**
+ * Repeating reminders and events.
+ *
+ * A rule is ['n' => 2, 'unit' => 'week'] — "every 2 weeks" — stored on the item
+ * itself as `repeat`; absent or null means it happens once. There is only ever the
+ * one stored row: the calendar expands it into the days it lands on, and ticking a
+ * repeating reminder rolls its due date to the next occurrence rather than marking
+ * the series done.
+ *
+ * Month and year steps keep the day of the month and clamp it to the target month,
+ * so the 31st repeats monthly as the 30th, the 28th and so on rather than sliding
+ * into the following month the way strtotime('+1 month') does.
+ */
+const REPEAT_UNITS = ['day', 'week', 'month', 'year'];
+const REPEAT_MAX   = 400;   // a hard stop, so a bad rule can't spin
+
+/** A rule from posted fields, or null when there isn't one. */
+function repeat_clean($unit, $n): ?array
+{
+    $unit = (string) $unit;
+    if (!in_array($unit, REPEAT_UNITS, true)) {
+        return null;
+    }
+    $n = (int) $n;
+    if ($n < 1)   { $n = 1; }
+    if ($n > 999) { $n = 999; }
+    return ['n' => $n, 'unit' => $unit];
+}
+
+/** A stored rule, validated on read like every other stored value. */
+function repeat_get(array $item): ?array
+{
+    $rep = $item['repeat'] ?? null;
+    return is_array($rep) ? repeat_clean($rep['unit'] ?? '', $rep['n'] ?? 1) : null;
+}
+
+/** The occurrence $i steps after "YYYY-MM-DD" $start. */
+function repeat_step(string $start, array $rep, int $i): string
+{
+    [$y, $m, $d] = array_map('intval', explode('-', $start));
+    $n = $rep['n'] * $i;
+    switch ($rep['unit']) {
+        case 'day':   return date('Y-m-d', mktime(0, 0, 0, $m, $d + $n, $y));
+        case 'week':  return date('Y-m-d', mktime(0, 0, 0, $m, $d + $n * 7, $y));
+        case 'month': $m += $n; break;
+        case 'year':  $y += $n; break;
+    }
+    $first = mktime(0, 0, 0, $m, 1, $y);
+    return date('Y-m-d', mktime(0, 0, 0, (int) date('n', $first), min($d, (int) date('t', $first)), (int) date('Y', $first)));
+}
+
+/**
+ * Every occurrence of $start's rule landing in [$from, $to] (all YYYY-MM-DD).
+ * A one-off is just itself when it falls in the window.
+ */
+function repeat_dates(string $start, ?array $rep, string $from, string $to): array
+{
+    if ($start === '' || $to < $from) {
+        return [];
+    }
+    if ($rep === null) {
+        return ($start >= $from && $start <= $to) ? [$start] : [];
+    }
+    $out = [];
+    for ($i = 0; $i < REPEAT_MAX; $i++) {
+        $d = repeat_step($start, $rep, $i);
+        if ($d > $to)    { break; }
+        if ($d >= $from) { $out[] = $d; }
+    }
+    return $out;
+}
+
+/** The first occurrence strictly after $after, for rolling a ticked reminder on. */
+function repeat_next(string $start, array $rep, string $after): string
+{
+    for ($i = 1; $i < REPEAT_MAX; $i++) {
+        $d = repeat_step($start, $rep, $i);
+        if ($d > $after) { return $d; }
+    }
+    return $start;
+}
+
+/** "Every 2 weeks" / "Every day", for showing on a row. */
+function repeat_label(?array $rep): string
+{
+    if ($rep === null) {
+        return '';
+    }
+    return $rep['n'] === 1
+        ? 'Every ' . $rep['unit']
+        : 'Every ' . $rep['n'] . ' ' . $rep['unit'] . 's';
+}

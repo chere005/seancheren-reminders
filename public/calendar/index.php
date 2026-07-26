@@ -219,12 +219,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     [$ptext, $pdate, $ptime] = parse_when_from_text($text);
     $effDate = $dateOk ? $date : $pdate;
 
+    // "Every 2 weeks" from the window's repeat row; null when it happens once.
+    $rep = repeat_clean($_POST['rep_unit'] ?? '', $_POST['rep_n'] ?? 1);
+
     if ($action === 'add_event' && $text !== '') {
         $file = user_data_file($cfg['data_dir'], 'events');
         $list = load_json_list($file);
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                    'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
-                   'cal' => $evCalOk, 'created' => time()];
+                   'cal' => $evCalOk, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
         // A reminder belongs to a folder and a group, never to a calendar. It lands in
@@ -238,7 +241,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                    'due' => $effDate, 'time' => $ptime, 'done' => false,
                    'folder' => folder_default_get($cfg['data_dir'], 'reminders'),
-                   'section' => $section, 'created' => time()];
+                   'section' => $section, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_note' && $text !== '') {
         $file  = user_data_file($cfg['data_dir'], 'notes');
@@ -257,7 +260,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($list as &$it) {
             // Only ever reach into a folder they actually shared.
             if ($owner !== null && !in_array($it['folder'] ?? FOLDER_DEFAULT, $sharedFolders, true)) { continue; }
-            if (($it['id'] ?? '') === $id) { $it['done'] = empty($it['done']); break; }
+            if (($it['id'] ?? '') === $id) {
+                $rr = repeat_get($it);
+                if ($rr !== null && empty($it['done']) && !empty($it['due'])) {
+                    // A repeat never finishes: ticking it moves it to the next date.
+                    // Never backwards, so a long-overdue one lands on its next future day.
+                    $it['due'] = repeat_next($it['due'], $rr, max($it['due'], date('Y-m-d')));
+                } else {
+                    $it['done'] = empty($it['done']);
+                }
+                break;
+            }
         }
         unset($it);
         save_json_list($file, $list);
@@ -270,7 +283,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 // ("Vet 8/3 2pm"), and the window's own fields win over what was typed.
                 $it[$spec['textField']] = mb_substr($ptext, 0, $kind === 'note' ? 200 : 500);
                 $it[$spec['dateField']] = $effDate;
-                if ($kind !== 'note')  { $it['time'] = $timeOk ? $time : $ptime; }
+                if ($kind !== 'note')  { $it['time'] = $timeOk ? $time : $ptime; $it['repeat'] = $rep; }
                 if ($kind === 'event') { $it['cal'] = $evCalOk; }
                 if ($kind === 'note')  { $it['updated'] = time(); }
                 break;
@@ -352,7 +365,23 @@ if (strncmp($calView, 'f:', 2) === 0) {
 
 // --- Sync: gather this user's dated reminders + notes for the visible month ---
 $monthPrefix = sprintf('%04d-%02d', $year, $month);
+$monthFrom   = $monthPrefix . '-01';
+$monthTo     = sprintf('%s-%02d', $monthPrefix, $daysInMo);
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
+
+/**
+ * The days a reminder shows on this month: its own (possibly rolled-forward) due
+ * date, then any later repeats. Each entry is [ymd, wasRolled]. A repeat's earlier
+ * occurrences aren't drawn — ticking one moves the stored due on, so the row always
+ * sits on the next date it owes.
+ */
+$remDays = function (string $due, ?array $rep, string $eff) use ($monthPrefix, $monthFrom, $monthTo): array {
+    $out = (strpos($eff, $monthPrefix) === 0) ? [[$eff, $eff !== $due]] : [];
+    foreach (repeat_dates($due, $rep, $monthFrom, $monthTo) as $d) {
+        if ($d > $eff) { $out[] = [$d, false]; }
+    }
+    return $out;
+};
 
 foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
     // Undated items in the permanent "Calendar" section ride along under today.
@@ -362,11 +391,12 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
     $done = !empty($r['done']);                                    // done are hidden until "Completed"
     $eff  = $rides ? $todayYmd
           : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);   // overdue rolls onto today; done/future stay
-    if (strpos($eff, $monthPrefix) === 0) {
+    $rep = repeat_get($r);
+    foreach ($rides ? [[$todayYmd, false]] : $remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
         // A riding item isn't late — it just lives on today — so don't mark it overdue.
-        $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                          'done' => $done, 'rolled' => (!$rides && $eff !== $r['due']),
-                          'due' => $r['due'] ?? null];
+        $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
+                        'done' => $done, 'rolled' => (!$rides && $wasRolled),
+                        'due' => $r['due'] ?? null, 'rep' => $rep];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
@@ -375,10 +405,11 @@ foreach ($evList as $ev) {
     // An event with no (or a stale) calendar belongs to the first one.
     $ec = in_array($ev['cal'] ?? '', $calIds, true) ? $ev['cal'] : $defCal;
     if ($visibleCals !== null && !in_array($ec, $visibleCals, true)) { continue; }
-    if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
-        $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
-                                 'time' => $ev['time'] ?? '', 'done' => false,
-                                 'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0]];
+    foreach (repeat_dates((string) ($ev['date'] ?? ''), repeat_get($ev), $monthFrom, $monthTo) as $d) {
+        $byDay[$d][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
+                        'time' => $ev['time'] ?? '', 'done' => false, 'rep' => repeat_get($ev),
+                        'start' => $ev['date'] ?? '',
+                        'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0]];
     }
 }
 
@@ -393,10 +424,11 @@ if ($partner) {
         if ($onlyFolder !== null ? $f !== $onlyFolder : in_array($f, $hidShared, true)) { continue; }
         $done = !empty($r['done']);
         $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
-        if (strpos($eff, $monthPrefix) === 0) {
-            $byDay[$eff][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                              'done' => $done, 'rolled' => ($eff !== $r['due']), 'due' => $r['due'],
-                              'owner' => $partner];
+        $rep = repeat_get($r);
+        foreach ($remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
+            $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
+                            'done' => $done, 'rolled' => $wasRolled, 'due' => $r['due'],
+                            'rep' => $rep, 'owner' => $partner];
         }
     }
     if ($sharedIds) {
@@ -406,11 +438,12 @@ if ($partner) {
             $ec = in_array($ev['cal'] ?? '', $theirCalIds, true) ? $ev['cal'] : $theirDef;
             if (!in_array($ec, $sharedIds, true)) { continue; }              // not shared with me
             if ($visibleCals !== null && !in_array($ec, $visibleCals, true)) { continue; }
-            if (!empty($ev['date']) && strpos($ev['date'], $monthPrefix) === 0) {
-                $byDay[$ev['date']][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
-                                         'time' => $ev['time'] ?? '', 'done' => false,
-                                         'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0],
-                                         'owner' => $partner];
+            foreach (repeat_dates((string) ($ev['date'] ?? ''), repeat_get($ev), $monthFrom, $monthTo) as $d) {
+                $byDay[$d][] = ['kind' => 'event', 'id' => $ev['id'] ?? '', 'text' => $ev['text'] ?? '',
+                                'time' => $ev['time'] ?? '', 'done' => false, 'rep' => repeat_get($ev),
+                                'start' => $ev['date'] ?? '',
+                                'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0],
+                                'owner' => $partner];
             }
         }
     }
@@ -709,6 +742,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .modal .calrow .tlabel { font-size: 0.85rem; color: #aaa; }
     .modal .calrow .secnote { font-size: 0.78rem; color: #777; white-space: nowrap; }
+    .modal .reprow .repevery { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #aaa; }
+    .modal .reprow input[type=number] {
+      width: 60px; padding: 0.35rem 0.5rem; background: #222; border: 1px solid #444;
+      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
+    }
+    .modal .reprow input[type=number]:focus { outline: none; border-color: #888; }
+    /* A repeating row says so next to its time. */
+    .dp-item .rep { font-size: 0.7rem; color: #777; white-space: nowrap; }
 
     /* --- Manage-calendars modal --- */
     .calmodal { max-height: 85vh; overflow-y: auto; }
@@ -939,6 +980,21 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <input type="time" name="time" id="mTime" value="">
       <button type="button" class="cleardate" id="mClearTime" title="Remove time">&times;</button>
     </div>
+    <?php // "Repeat every 2 weeks". Never is the default; picking a unit reveals the
+          // count, which starts at 1 — so choosing "week(s)" alone means every week. ?>
+    <div class="calrow reprow" id="mRepRow" hidden>
+      <span class="tlabel">Repeat</span>
+      <select name="rep_unit" id="mRepUnit">
+        <option value="">Never</option>
+        <option value="day">day(s)</option>
+        <option value="week">week(s)</option>
+        <option value="month">month(s)</option>
+        <option value="year">year(s)</option>
+      </select>
+      <span class="repevery" id="mRepEvery" hidden>every
+        <input type="number" name="rep_n" id="mRepN" value="1" min="1" max="999" inputmode="numeric">
+      </span>
+    </div>
     <div class="calrow" id="mCalRow" hidden>
       <span class="tlabel">Calendar</span>
       <select name="cal" id="mCal">
@@ -1089,11 +1145,30 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const mSecRow  = document.getElementById('mSecRow');   // reminders file under a group, not a calendar
   // Time and calendar are event-only fields, so they show and hide together. A
   // reminder gets the group picker in their place — it belongs to a folder, not a calendar.
+  const mRepRow  = document.getElementById('mRepRow');
+  const mRepUnit = document.getElementById('mRepUnit');
+  const mRepN    = document.getElementById('mRepN');
+  const mRepEvery = document.getElementById('mRepEvery');
+  // Notes don't repeat — they're a page, not something that happens again.
+  const showRep = (kind, rep) => {
+    mRepRow.hidden = (kind === 'note');
+    mRepUnit.value = (rep && rep.unit) || '';
+    mRepN.value    = (rep && rep.n) || 1;
+    mRepEvery.hidden = mRepUnit.value === '';
+  };
+  mRepUnit.addEventListener('change', () => {
+    mRepEvery.hidden = mRepUnit.value === '';
+    if (!mRepEvery.hidden && !(+mRepN.value > 0)) { mRepN.value = 1; }
+  });
   const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };
   const hideTime = (kind) => { mTime.value = ''; mTimeRow.hidden = true; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
   document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
-    r.addEventListener('change', () => { if (r.checked) (r.value === 'event' ? showTime(mTime.value) : hideTime(r.value)); });
+    r.addEventListener('change', () => {
+      if (!r.checked) { return; }
+      r.value === 'event' ? showTime(mTime.value) : hideTime(r.value);
+      showRep(r.value, { unit: mRepUnit.value, n: mRepN.value });
+    });
   });
   const fmtTime = (t) => {
     const [h, m] = t.split(':').map(Number);
@@ -1115,13 +1190,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
     mCal.value = newEventCal();            // the calendar you're looking at, else the default
     showTime('');
+    showRep('event', null);
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
   };
 
   // EDIT mode — from tapping an item in the day panel.
-  const openEdit = (id, kind, text, date, time, cal) => {
+  const openEdit = (id, kind, text, date, time, cal, rep) => {
     mHeading.textContent = 'Edit ' + kind;
     mAction.value = 'edit_item';
     mId.value = id;
@@ -1132,6 +1208,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mOk.textContent = 'Save';
     mText.value = text;
     if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); } else { hideTime(''); }
+    showRep(kind, rep);
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
@@ -1253,6 +1330,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.appendChild(tm);
       }
       row.appendChild(txt);
+      if (it.rep) {
+        const rp = document.createElement('span');
+        rp.className = 'rep';
+        rp.textContent = it.rep.n > 1 ? 'Every ' + it.rep.n + ' ' + it.rep.unit + 's' : 'Every ' + it.rep.unit;
+        row.appendChild(rp);
+      }
       if (overdue && it.due) {                 // overdue reminder: show its original date in grey
         const od = document.createElement('span');
         od.className = 'origdate';
@@ -1284,7 +1367,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.appendChild(del);
         row.addEventListener('click', () => {
           if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }   // notes open in the Notes tab
-          openEdit(it.id, it.kind, it.text, date, it.time || '', it.cal || '');
+          // Editing any occurrence edits the series — there's only the one stored row.
+          openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
         });
       }
       groups[it.kind].appendChild(row);

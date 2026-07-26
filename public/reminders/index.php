@@ -374,7 +374,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $id = (string) ($_POST['id'] ?? '');
             foreach ($list as &$r) {
                 if (!is_section($r) && $r['id'] === $id) {
-                    $r['done'] = !$r['done'];
+                    $rep = repeat_get($r);
+                    if ($rep !== null && !$r['done'] && !empty($r['due'])) {
+                        // A repeat never finishes: ticking it moves it to the next date.
+                        $r['due'] = repeat_next($r['due'], $rep, max($r['due'], date('Y-m-d')));
+                    } else {
+                        $r['done'] = !$r['done'];
+                    }
                     break;
                 }
             }
