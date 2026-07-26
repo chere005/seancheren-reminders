@@ -46,6 +46,23 @@ const CAL_COLORS = [KIND_BLUE, '#34d399', '#f0a860', '#f472b6', '#8b6ef0',
  */
 function is_calset(array $it): bool { return ($it['type'] ?? '') === 'set'; }
 
+/**
+ * A dot's background: one colour on its own, or several as equal pie segments.
+ * A set doesn't own a colour any more — it wears its members'.
+ */
+function cal_pie_bg(array $colors): string
+{
+    $colors = array_values(array_filter($colors));
+    if (!$colors) { return '#94a3b8'; }               // empty set: plain grey
+    if (count($colors) === 1) { return $colors[0]; }
+    $n = count($colors);
+    $stops = [];
+    foreach ($colors as $i => $c) {
+        $stops[] = sprintf('%s %.3f%% %.3f%%', $c, $i * 100 / $n, ($i + 1) * 100 / $n);
+    }
+    return 'conic-gradient(' . implode(',', $stops) . ')';
+}
+
 /** Always hands back at least one calendar, creating the default one on first use. */
 function load_calendars(string $file): array
 {
@@ -774,6 +791,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; border: 1px solid #444;
       cursor: pointer; padding: 0;
     }
+    /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
+    .callist .setrow .cswatch { border-radius: 50%; }
     .callist .cdel {
       flex: 0 0 auto; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
@@ -825,7 +844,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     // Custom picker rather than a <select>: a native option can't carry a colour dot.
     $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
     if ($setsOnly) {
-      $pickGroups[] = ['Calendar sets', array_map(fn($x) => [$x['id'], $x['name'], $x['color'] ?? '#94a3b8'], $setsOnly)];
+      $pickGroups[] = ['Calendar sets', array_map(
+        fn($x) => [$x['id'], $x['name'],
+                   cal_pie_bg(array_map(fn($id) => $calColor[$id] ?? CAL_COLORS[0],
+                                        array_values(array_intersect($pickIds, $x['cals'] ?? []))))],
+        $setsOnly)];
     }
     if ($sharedCals || $sharedFolders) {
       $pickGroups[] = [share_name($partner), array_merge(
@@ -1449,6 +1472,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const isSet    = c => c.type === 'set';
   const onlyCals = () => CALS.filter(c => !isSet(c));
   const onlySets = () => CALS.filter(isSet);
+  // Colours by calendar id — mine plus the partner's — so a set can draw its members.
+  const colorOf = id => (onlyCals().concat(SHARED_CALS).find(c => c.id === id) || {}).color;
+  // One colour, or several as equal pie segments. Mirrors cal_pie_bg() in PHP.
+  const pieBg = cols => {
+    cols = cols.filter(Boolean);
+    if (!cols.length) return '#94a3b8';
+    if (cols.length === 1) return cols[0];
+    const n = cols.length;
+    return 'conic-gradient(' + cols.map((c, i) =>
+      c + ' ' + (i * 100 / n).toFixed(3) + '% ' + ((i + 1) * 100 / n).toFixed(3) + '%').join(',') + ')';
+  };
 
   // Every change posts here and gets the whole list back, so the UI never guesses.
   const calApi = (action, extra) => {
@@ -1527,10 +1561,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       li.className = 'setrow'; li.dataset.id = s.id;
       const handle = document.createElement('span');
       handle.className = 'chandle'; handle.textContent = '☰'; handle.title = 'Drag to reorder';
-      const sw = document.createElement('button');
-      sw.type = 'button'; sw.className = 'cswatch';
-      sw.style.background = s.color || '#94a3b8'; sw.title = 'Choose colour';
-      sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, s.id); });
+      // A set has no colour of its own: the swatch is its members', in pie segments.
+      const sw = document.createElement('span');
+      sw.className = 'cswatch'; sw.style.cursor = 'default';
+      sw.style.background = pieBg((s.cals || []).map(colorOf));
       const name = document.createElement('span');
       name.className = 'cname'; name.textContent = s.name;
       const count = document.createElement('span');
