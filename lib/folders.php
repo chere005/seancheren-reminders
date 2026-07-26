@@ -188,7 +188,7 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                   <input type="hidden" name="action" value="delete_folder">
                   <input type="hidden" name="view" value="<?= $vw ?>">
                   <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
-                  <button type="submit" class="fdel needs-confirm" data-confirm="Delete?"
+                  <button type="submit" class="fdel needs-confirm"
                           title="Delete folder">&times;</button>
                 </form>
               <?php endif; ?>

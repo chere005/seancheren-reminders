@@ -238,7 +238,7 @@ function confirm_delete_script(): string
   var armed = null, timer = null;
   function disarm() {
     if (timer) { clearTimeout(timer); timer = null; }
-    if (armed) { armed.classList.remove('armed'); armed.textContent = armed.dataset.label; armed = null; }
+    if (armed) { armed.classList.remove('armed'); armed = null; }
   }
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('.needs-confirm');
@@ -258,8 +258,8 @@ function confirm_delete_script(): string
     e.stopPropagation();
     disarm();
     armed = b;
-    b.dataset.label = b.textContent;
-    if (b.dataset.confirm) { b.textContent = b.dataset.confirm; }
+    // The button keeps its own label — arming just fills it red. A × that turned into
+    // the word "Delete?" resized the row it sat in and read as a different control.
     b.classList.add('armed');
     timer = setTimeout(disarm, 4000);
   }, true);
