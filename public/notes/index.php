@@ -163,8 +163,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
             }
             if (!$dup) {
-                $notes[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
-                            'name' => $name, 'folder' => $secFolder, 'created' => time()];
+                // Prepend so a new section lands at the top of the list.
+                array_unshift($notes, ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
+                            'name' => $name, 'folder' => $secFolder, 'created' => time()]);
                 save_notes($dataFile, $notes);
             }
         }
@@ -263,7 +264,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $section = (string) ($_POST['section'] ?? '');
             if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
             $id      = bin2hex(random_bytes(6));
-            $notes[] = [
+            // Prepend so a new note lands at the top of its section.
+            array_unshift($notes, [
                 'id'      => $id,
                 'title'   => date('m/d/Y h:i a') . ' - Note',
                 'date'    => null,
@@ -272,7 +274,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 'section' => $section,
                 'created' => time(),
                 'updated' => time(),
-            ];
+            ]);
             save_notes($dataFile, $notes);
             header('Location: ' . _self_path() . $vq . '&id=' . $id);   // open the new note
             exit;
@@ -446,6 +448,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     body {
       font-family: system-ui, sans-serif; background: #111; color: #eee;
       min-height: 100vh; padding: 1.5rem 1rem;
+      overscroll-behavior-y: none;               /* no rubber-band scroll when it all fits */
     }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header {
@@ -629,16 +632,19 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <?= back_button() ?>
       <div class="titlebar">
         <h1>Notes</h1>
-        <?php if (!$editing): ?>
-          <?php render_folder_pick($folderGroups, $view); ?>
-          <?php if (!$isShared): ?>
-            <button type="button" id="folderMgr" class="titlebtn"
-                    title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
-          <?php endif; ?>
-        <?php endif; ?>
       </div>
     </div>
-    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared) ?>
+    <?php
+      // The folder picker rides on the right by the ⋮ (list view only); "Manage folders"
+      // is the last row of its dropdown rather than a button of its own.
+      $titleControls = '';
+      if (!$editing) {
+          ob_start();
+          render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders');
+          $titleControls = ob_get_clean();
+      }
+    ?>
+    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -664,27 +670,29 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <?php // Sections always render, empty or not — like the permanent Notes group below.
             // Each belongs to one folder; its rename and delete carry that folder. ?>
       <div class="section-head" data-folder="<?= e($sfolder) ?>">
-        <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+        <?= section_collapse_button() ?>
         <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
               '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-        <?= section_edit_button() ?>
-        <form method="post" action="" style="display:inline">
-          <input type="hidden" name="csrf" value="<?= $csrf ?>">
-          <input type="hidden" name="action" value="delete_section">
-          <input type="hidden" name="view" value="<?= e($view) ?>">
-          <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-          <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-        </form>
+        <span class="sec-right">
+          <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+          <form method="post" action="" style="display:inline">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="delete_section">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+            <input type="hidden" name="name" value="<?= e($sname) ?>">
+            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+          </form>
+        </span>
       </div>
       <?php render_note_rows($rows, $view, $csrf, $sname, ''); ?>
     <?php endforeach; ?>
 
     <!-- Permanent "Notes" group: always last, not deletable. -->
     <div class="section-head">
-      <?php render_section_add('', $csrf, $view, $addTarget); ?>
+      <?= section_collapse_button() ?>
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
-      <?= section_edit_button() ?>
+      <span class="sec-right"><?php render_section_add('', $csrf, $view, $addTarget); ?></span>
     </div>
     <?php render_note_rows($ungrouped, $view, $csrf); ?>
    </div>
@@ -802,7 +810,55 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
   setEdit(new URLSearchParams(location.search).get('edit') === '1');
   window.sectionEditToggle = () => setEdit(!document.body.classList.contains('editing'));
-  document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
+
+  // ----- Enter/leave edit mode by gesture (no Edit button any more) -----
+  // Long-press a note or section on touch, or double-click on the desktop.
+  const editingNow = () => document.body.classList.contains('editing');
+  const gBlocked = (t) => t.closest('.ndel, .sec-add, .section-del, .sec-collapse, button, input, textarea, select');
+  const gestureEdit = (target) => {
+    if (!target.closest('li[data-id], .section-head')) return;
+    setEdit(true);
+  };
+  let gSuppress = false;
+  document.addEventListener('click', (e) => { if (gSuppress) { e.preventDefault(); e.stopPropagation(); gSuppress = false; } }, true);
+  // Touch/pen: long-press. Suppress the click that follows so a note link doesn't open.
+  let lpT = null, lpX = 0, lpY = 0, lpEl = null;
+  const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || editingNow()) return;
+    if (gBlocked(e.target) || !e.target.closest('li[data-id], .section-head')) return;
+    lpEl = e.target; lpX = e.clientX; lpY = e.clientY;
+    lpT = setTimeout(() => {
+      lpT = null; if (navigator.vibrate) navigator.vibrate(12);
+      gestureEdit(lpEl); gSuppress = true; setTimeout(() => { gSuppress = false; }, 600);
+    }, 500);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (lpT && (Math.abs(e.clientX - lpX) > 10 || Math.abs(e.clientY - lpY) > 10)) clearLp();
+  });
+  document.addEventListener('pointerup', clearLp);
+  document.addEventListener('pointercancel', clearLp);
+  // Desktop: a note is a link, so distinguish a single click (open) from a double
+  // click (edit) with a short delay; only on a fine pointer, so touch taps stay instant.
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+    let clickT = null;
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('.noteitem'); if (!a) return;
+      if (editingNow()) { e.preventDefault(); return; }   // in edit mode a click doesn't navigate
+      e.preventDefault();
+      if (clickT) { clearTimeout(clickT); clickT = null; setEdit(true); return; }
+      const href = a.href;
+      clickT = setTimeout(() => { clickT = null; location.href = href; }, 220);
+    });
+  }
+  // Leave edit mode by tapping empty space or pressing Escape.
+  document.addEventListener('click', (e) => {
+    if (!editingNow() || gSuppress) return;
+    if (e.target.closest('li[data-id], .section-head, .listbar, button, a, input, textarea, select,'
+        + ' .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
+    setEdit(false);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editingNow()) setEdit(false); });
 
   // "+ Section" turns into the field it's asking for, and turns back if you leave it
   // empty — the same gesture as the "+" on a section header, and the same size as the

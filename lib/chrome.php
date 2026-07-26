@@ -60,6 +60,24 @@ function chrome_styles(): string
     }
     .sec-edit:hover { border-color: #888; color: #ccc; }
     body.editing .sec-edit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    /* A section's collapse chevron sits where its "+" used to — subtle, and it steps
+       aside in edit mode (where the drag handle takes that slot). Collapsing hides the
+       section's rows: for Reminders the whole group but its head, for Notes the list. */
+    .sec-collapse {
+      flex: 0 0 auto; width: 20px; height: 20px; padding: 0; margin: 0; background: none;
+      border: none; color: #555; cursor: pointer; font-size: 0.7rem; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.15s ease; font-family: inherit;
+    }
+    .sec-collapse:hover { color: #aaa; }
+    .section-group.collapsed > .section-head .sec-collapse,
+    .section-head.collapsed .sec-collapse { transform: rotate(-90deg); }
+    body.editing .sec-collapse { display: none; }
+    .section-group.collapsed > *:not(.section-head) { display: none; }
+    .section-head.collapsed + .nlist { display: none; }
+    /* The "+" (and the delete ×) live at the right end of a section header now. */
+    .section-head .sec-right { margin-left: auto; display: inline-flex; align-items: center; gap: 0.75rem; }
+    .section-head .sec-right form { margin-left: 0; }
     CSS
     . settings_modal_styles()
     . confirm_delete_styles()
@@ -86,7 +104,7 @@ function folder_icon_svg(): string
  * already listens on.
  */
 function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', string $settingsExtra = '',
-                          bool $showShare = false): string
+                          bool $showShare = false, string $controls = ''): string
 {
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
     // One flex child, because the header is space-between: loose buttons would be
@@ -98,7 +116,9 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
         ? '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
           . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
         : '';
-    return '<div class="hright">' . $edit . $menu . '</div>' . settings_modal_html($settingsExtra, $showShare);
+    // $controls are the app's own title-bar buttons (folder/calendar picker, manage…),
+    // gathered here on the right beside the ⋮ rather than out by the app's name.
+    return '<div class="hright">' . $controls . $edit . $menu . '</div>' . settings_modal_html($settingsExtra, $showShare);
 }
 
 /**
@@ -201,12 +221,14 @@ function settings_modal_styles(): string
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .setmodal .setsave:hover { background: #52e0ac; }
-    /* Three actions stacked: Change password to the left, Share centred, Done to the
-       right — so the middle one reads as the shared, mutual action between the two. */
-    .setmodal .setactions { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1.1rem; }
-    .setmodal .setactions .setsave { align-self: flex-start; }
-    .setmodal .setactions .sh-open { align-self: center; margin: 0; }
-    .setmodal .setactions .setdone { align-self: flex-end; }
+    /* The three actions sit on one row: Change password on the left, then Share and Done
+       to the right; they wrap onto the next line only if the window is too narrow. */
+    .setmodal .setactions {
+      display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
+      gap: 0.6rem; margin-top: 1.25rem;
+    }
+    .setmodal .setactions .sh-open { margin: 0; }
+    .setmodal .setactions .setdone { margin-left: auto; }
     .setmodal .setdone {
       padding: 0.35rem 0.9rem; border: 1px solid #444;
       background: none; color: #ccc; border-radius: 999px; font-size: 0.9rem; cursor: pointer;
@@ -279,6 +301,48 @@ function section_edit_button(): string
 {
     // U+FE0E forces the text pencil rather than the colour emoji one.
     return '<button type="button" class="sec-edit" title="Edit" aria-label="Edit">&#9998;&#65038;</button>';
+}
+
+/** The subtle chevron that collapses a section. Sits at the left of the header, where
+ *  the "+" used to; it hides in edit mode, leaving the slot to the drag handle. */
+function section_collapse_button(): string
+{
+    return '<button type="button" class="sec-collapse" title="Collapse section" aria-label="Collapse section">&#9662;</button>';
+}
+
+/** Collapse/expand a section by tapping its chevron; the state is remembered per
+ *  page in localStorage. Works for both DOM shapes — Reminders wraps each section in
+ *  a `.section-group`, Notes puts a `ul.nlist` right after the `.section-head`. */
+function section_collapse_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var SK = 'collapsed:' + location.pathname;
+  function load() { try { return new Set(JSON.parse(localStorage.getItem(SK) || '[]')); } catch (_) { return new Set(); } }
+  function save(s) { localStorage.setItem(SK, JSON.stringify([].slice.call(s))); }
+  function keyFor(head) {
+    var g = head.closest('.section-group');
+    var f = (g && g.dataset.folder) || head.dataset.folder || '';
+    var n = g ? (g.dataset.section || '') : null;
+    if (n === null) { var ul = head.nextElementSibling; n = (ul && ul.dataset && ul.dataset.section) || ''; }
+    return f + '' + n;
+  }
+  function targetOf(head) { return head.closest('.section-group') || head; }
+  var state = load();
+  document.querySelectorAll('.section-head').forEach(function (head) {
+    if (state.has(keyFor(head))) { targetOf(head).classList.add('collapsed'); }
+  });
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.sec-collapse');
+    if (!btn) { return; }
+    e.preventDefault(); e.stopPropagation();
+    var head = btn.closest('.section-head'); if (!head) { return; }
+    var k = keyFor(head), on = targetOf(head).classList.toggle('collapsed');
+    if (on) { state.add(k); } else { state.delete(k); }
+    save(state);
+  });
+})();</script>
+JS;
 }
 
 /**
@@ -523,5 +587,6 @@ function chrome_script(): string
          . confirm_delete_script()
          . swipe_delete_script()
          . section_rename_script()
+         . section_collapse_script()
          . keep_edit_script();
 }

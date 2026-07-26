@@ -294,8 +294,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     && strcasecmp((string) ($it['name'] ?? ''), $name) === 0) { $dup = true; break; }
             }
             if (!$dup) {
-                $list[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
-                           'name' => $name, 'folder' => $secFolder, 'created' => time()];
+                // Prepend so a new section lands at the top of the list.
+                array_unshift($list, ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
+                           'name' => $name, 'folder' => $secFolder, 'created' => time()]);
                 save_reminders($dataFile, $list);
             }
         }
@@ -534,14 +535,8 @@ $doneCount = count($items) - $openCount;
 $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
 
-// "Copy as Markdown" for the settings window: the whole visible list on the clipboard.
+// "Copy as Markdown": the whole visible list, copied from the share icon in the toolbar.
 $shareMd    = reminders_markdown($secRows, $grouped, $calRows, $ungrouped);
-$shareExtra = '<div class="setextra">'
-  . '<button type="button" onclick="navigator.clipboard.writeText('
-  . "document.getElementById('shareMdText').value).then(()=>{this.textContent='Copied!';"
-  . "setTimeout(()=>this.textContent='Copy as Markdown',1500)})\">Copy as Markdown</button>"
-  . '<textarea id="shareMdText" hidden>' . e($shareMd) . '</textarea>'
-  . '</div>';
 
 // Calendars, as [id, name] pairs, for the share window.
 $shareCals = [];
@@ -598,6 +593,7 @@ $sectionInput =
     body {
       font-family: system-ui, sans-serif; background: #111; color: #eee;
       min-height: 100vh; padding: 1.5rem 1rem;   /* same top offset as the other apps */
+      overscroll-behavior-y: none;               /* no rubber-band scroll when it all fits */
     }
     .wrap { max-width: 640px; margin: 0 auto; }
     /* Tight bottom margin: the folder dropdown sits directly under this. */
@@ -626,11 +622,12 @@ $sectionInput =
     }
     /* Completed is icon-only (a ☑), so it's a 32px circle like the back button —
        unlike "+ Section", which keeps its label and stays a pill. */
-    .foldernav #doneBtn {
+    .foldernav #doneBtn, .foldernav #mdShareBtn {
       width: 32px; padding: 0; flex: 0 0 auto;
       display: inline-flex; align-items: center; justify-content: center;
     }
     .foldernav .showall:hover { border-color: #888; color: #ccc; }
+    .foldernav #mdShareBtn.copied { border-color: var(--accent); color: var(--accent); }
     body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
     /* The + on each section header, and the row it opens. The "+" sits slightly low in
@@ -832,21 +829,30 @@ $sectionInput =
       <div class="htitle">
         <div class="titlebar">
           <h1>Reminders</h1>
-          <?php render_folder_pick($folderGroups, $view); ?>
-          <?php if (!$isShared): ?>
-            <button type="button" id="folderMgr" class="titlebtn"
-                    title="Manage folders" aria-label="Manage folders"><?= folder_icon_svg() ?></button>
-          <?php endif; ?>
         </div>
       </div>
     </div>
-    <?= render_user_menu(false, 'editBtn', $shareExtra, $partner && !$isShared) ?>
+    <?php
+      // The folder picker rides on the right, by the ⋮; "Manage folders" is the last
+      // row of its dropdown rather than a button of its own.
+      ob_start();
+      render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders');
+      $titleControls = ob_get_clean();
+    ?>
+    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
   </header>
 
   <?php // Completed and Section keep the row under the header; the folder picker
         // itself has moved up beside the +. ?>
   <div class="foldernav">
     <button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
+    <button type="button" id="mdShareBtn" class="showall" title="Copy as Markdown" aria-label="Copy as Markdown">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 3v13"/><path d="M8 7l4-4 4 4"/>
+      </svg>
+    </button>
+    <textarea id="shareMdText" hidden><?= e($shareMd) ?></textarea>
     <button type="button" id="newSecBtn" class="showall">+ Section</button>
     <?= $sectionInput ?>
   </div>
@@ -868,19 +874,21 @@ $sectionInput =
             // delete forms carry that folder, so acting on it never touches another. ?>
       <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>">
         <div class="section-head">
-          <?php render_section_add_button($sname, $sfolder); ?>
+          <?= section_collapse_button() ?>
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
                 '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-          <?= section_edit_button() ?>
-          <form method="post" action="" style="display:inline">
-            <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="delete_section">
-            <input type="hidden" name="view" value="<?= e($view) ?>">
-            <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-            <input type="hidden" name="name" value="<?= e($sname) ?>">
-            <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-          </form>
+          <span class="sec-right">
+            <?php render_section_add_button($sname, $sfolder); ?>
+            <form method="post" action="" style="display:inline">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <input type="hidden" name="action" value="delete_section">
+              <input type="hidden" name="view" value="<?= e($view) ?>">
+              <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+              <input type="hidden" name="name" value="<?= e($sname) ?>">
+              <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+            </form>
+          </span>
         </div>
         <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
@@ -892,10 +900,10 @@ $sectionInput =
     <?php if ($viewFolder === 'All' || $viewFolder === $defFolder): ?>
     <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
       <div class="section-head">
-        <?php render_section_add_button(CALENDAR_SECTION, $view); ?>
+        <?= section_collapse_button() ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= CALENDAR_SECTION ?></span>
-        <?= section_edit_button() ?>
+        <span class="sec-right"><?php render_section_add_button(CALENDAR_SECTION, $view); ?></span>
       </div>
       <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view, $view); ?>
       <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
@@ -905,10 +913,10 @@ $sectionInput =
     <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
     <div class="section-group default-group" data-section="">
       <div class="section-head">
-        <?php render_section_add_button('', $view); ?>
+        <?= section_collapse_button() ?>
         <span class="sec-handle blank" aria-hidden="true"></span>
         <span class="section-title"><?= DEFAULT_SECTION ?></span>
-        <?= section_edit_button() ?>
+        <span class="sec-right"><?php render_section_add_button('', $view); ?></span>
       </div>
       <?php render_section_add_row('', $csrf, $view, $view); ?>
       <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
@@ -1137,6 +1145,60 @@ $sectionInput =
   document.addEventListener('pointerup', endDrag);
   document.addEventListener('pointercancel', endDrag);
   document.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
+
+  // ----- Copy the visible list as Markdown (the share icon in the toolbar) -----
+  const mdShareBtn = document.getElementById('mdShareBtn');
+  if (mdShareBtn) {
+    mdShareBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(document.getElementById('shareMdText').value).then(() => {
+        mdShareBtn.classList.add('copied');
+        setTimeout(() => mdShareBtn.classList.remove('copied'), 1200);
+      }).catch(() => {});
+    });
+  }
+
+  // ----- Enter edit mode by gesture (there's no Edit button) -----
+  // Long-press a reminder or section on touch, or double-click on the desktop. Landing
+  // on a reminder also opens its text for editing straight away.
+  const gestureBlocked = (t) => t.closest('.check, .del, .sec-add, .section-del, .sec-collapse, button, a, input, textarea, select');
+  const gestureEdit = (target) => {
+    const li = target.closest('li[data-id]'), head = target.closest('.section-head');
+    if (!li && !head) return;
+    if (!editing()) setEdit(true);
+    if (li) startInlineEdit(li);
+  };
+  document.addEventListener('dblclick', (e) => {
+    if (editing()) return;
+    if (gestureBlocked(e.target) && !e.target.closest('.text')) return;
+    gestureEdit(e.target);
+  });
+  let lpT = null, lpX = 0, lpY = 0, lpEl = null;
+  const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || editing()) return;      // touch/pen only; desktop uses dblclick
+    if (gestureBlocked(e.target) && !e.target.closest('.text')) return;
+    if (!e.target.closest('li[data-id], .section-head')) return;
+    lpEl = e.target; lpX = e.clientX; lpY = e.clientY;
+    lpT = setTimeout(() => { lpT = null; if (navigator.vibrate) navigator.vibrate(12); gestureEdit(lpEl); }, 500);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (lpT && (Math.abs(e.clientX - lpX) > 10 || Math.abs(e.clientY - lpY) > 10)) clearLp();
+  });
+  document.addEventListener('pointerup', clearLp);
+  document.addEventListener('pointercancel', clearLp);
+
+  // Leave edit mode by tapping empty space or pressing Escape (no Edit button to press).
+  document.addEventListener('click', (e) => {
+    if (!editing() || suppressClick) return;
+    if (e.target.closest('li[data-id], .section-head, .secadd-row, .newsection, .foldernav,'
+        + ' button, a, input, textarea, select, .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
+    setEdit(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !editing()) return;
+    if (document.querySelector('.textedit') || document.querySelector('.secadd-row:not([hidden])')) return;
+    setEdit(false);
+  });
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
