@@ -499,6 +499,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        than one folder together — bigger and a shade darker than a section header. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
     .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; }
+    /* The dot sits a little further off the name than the chevron does. */
+    .folder-head .fdot { margin-left: 0.4rem; }
     .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
@@ -506,14 +508,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        header's gap is the rows' gap, so the name sits the same distance from the +
        as from the pencil on its other side. */
     .section-head form.sec-add-form { margin-left: 0; }
-    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    /* The permanent group's plain-span title, matching the field version's metrics so
+       both sit on the same centre line as the chevron and the "+". */
+    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
-      cursor: pointer; font-family: inherit; display: inline-flex;
-      align-items: center; justify-content: center; padding: 0 0 1px;   /* nudge the low "+" up */
+      cursor: pointer; font-family: inherit; display: inline-flex; align-self: center;
+      align-items: center; justify-content: center; padding: 0;
     }
     .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .section-del {

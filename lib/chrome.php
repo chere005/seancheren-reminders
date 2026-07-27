@@ -71,8 +71,11 @@ function chrome_styles(): string
        aside in edit mode (where the drag handle takes that slot). Collapsing hides the
        section's rows: for Reminders the whole group but its head, for Notes the list. */
     /* A chevron that points down when the section is open and right when it's collapsed. */
+    /* The chevron, the name and the "+" all sit on one centre line: same box height,
+       each centred in the header's flex row rather than riding its own text baseline. */
     .sec-collapse {
-      flex: 0 0 auto; width: 18px; height: 22px; padding: 0; margin: 0 -0.4rem 0 0; background: none;
+      flex: 0 0 auto; align-self: center; width: 18px; height: 20px; padding: 0;
+      margin: 0 -0.4rem 0 0; background: none;
       border: none; color: #777; cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);
@@ -447,9 +450,12 @@ function section_rename_styles(): string
     /* It is a form, but it is the section's *name* — it must not pick up the
        `margin-left: auto` the apps give the other forms in a section head. */
     .section-head form.secrename { margin-left: 0; }
-    .secrename { display: inline-flex; min-width: 0; }
+    .secrename { display: inline-flex; align-items: center; align-self: center; min-width: 0; }
+    /* A transparent border on *both* edges, so the underline that appears in edit mode
+       doesn't shift the name off the centre line the chevron and "+" sit on. */
     .sectitle {
-      background: none; border: none; border-bottom: 1px solid transparent; padding: 0;
+      background: none; border: none; border-top: 1px solid transparent;
+      border-bottom: 1px solid transparent; padding: 0; line-height: 1.2;
       color: #f0b429; font-family: inherit; font-weight: 700; font-size: 1.15rem;
       min-width: 0; max-width: 100%;
     }
