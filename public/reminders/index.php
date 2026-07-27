@@ -761,9 +761,10 @@ $sectionInput =
        than one folder together — bigger and a shade darker than a section header, so the
        two read as different levels of the same hierarchy rather than competing. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
-    .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; }
-    /* The dot sits a little further off the name than the chevron does. */
-    .folder-head .fdot { margin-left: 0.4rem; }
+    .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; line-height: 1.2; }
+    /* Half a rem off the name — between the section +'s spacing and the old wider gap —
+       and centred on the heading's own centre line rather than its text baseline. */
+    .folder-head .fdot { margin-left: 0.15rem; align-self: center; }
     .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
 
     /* Section headers (bold), grouping reminders */
