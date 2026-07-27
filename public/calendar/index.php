@@ -718,6 +718,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       color: #777; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
     }
     .dp-ghead:hover { color: #aaa; }
+    /* The partner's groups sit a shade back, so mine read first at a glance. */
+    .dp-group.shared .dp-ghead { color: #6a6a7a; }
+    .dp-group.shared .dp-ghead:hover { color: #9a9aae; }
     .dp-gchev { display: inline-block; transform: rotate(90deg); transition: transform 0.12s; font-size: 0.85rem; }
     .dp-group.folded .dp-gchev { transform: rotate(0deg); }
     .dp-glist { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -744,12 +747,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* The pencil (and the tap-to-open it stands for) only appears in edit mode. */
     .dp-item .chev { color: #555; font-size: 0.9rem; display: none; }
     body.editing .dp-item .chev { display: inline; }
-    /* Someone else's item, shown here but owned (and edited) over in their app. */
+    /* Someone else's item, shown here but owned (and edited) over in their app. Whose
+       it is comes from the group heading now, so the row carries no name chip. */
     .dp-item.shared { cursor: default; }
-    .dp-item .owner {
-      font-size: 0.68rem; color: #888; border: 1px solid #3a3a3a; border-radius: 999px;
-      padding: 0.05rem 0.45rem; white-space: nowrap;
-    }
     .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
     .dp-none { color: #555; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
 
@@ -1488,34 +1488,49 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       dpList.appendChild(p);
       return;
     }
-    // One collapsible group per kind. Built up front in a fixed order so the panel
-    // doesn't reshuffle depending on what the day happens to hold. Whether a group is
-    // folded is a display preference, so it's remembered per kind.
+    // One collapsible group per kind *and per owner*, so my events and the partner's
+    // never share a heading — whose day you're looking at is never a guess. Built up
+    // front in a fixed order (mine before theirs, within the legend's kind order) so the
+    // panel doesn't reshuffle depending on what the day happens to hold. Whether a group
+    // is folded is a display preference, remembered per group.
     const showDone = document.body.classList.contains('show-done');
     const groups   = {};
+    const gkey  = it => it.kind + (it.owner ? ':' + it.owner : '');
+    const KNAME = { reminder: 'Reminders', event: 'Events', note: 'Notes' };
+    // Every owner present on this day, mine first, then whoever else's items are here.
+    const owners = [''];
+    for (const it of items) {
+      if (it.owner && !owners.includes(it.owner)) owners.push(it.owner);
+    }
     for (const kind of ['event', 'reminder', 'note']) {   // legend order: events, reminders, notes
-      if (!items.some(it => it.kind === kind && (showDone || !it.done))) continue;
-      const wrap = document.createElement('div');
-      wrap.className = 'dp-group';
-      const head = document.createElement('button');
-      head.type = 'button';
-      head.className = 'dp-ghead';
-      const chev = document.createElement('span');
-      chev.className = 'dp-gchev';
-      chev.textContent = '›';                // ›, rotated down by CSS when open
-      const label = document.createElement('span');
-      label.textContent = { reminder: 'Reminders', event: 'Events', note: 'Notes' }[kind];
-      head.append(chev, label);
-      const body = document.createElement('div');
-      body.className = 'dp-glist';
-      if (localStorage.getItem('calFold_' + kind) === '1') wrap.classList.add('folded');
-      head.addEventListener('click', () => {
-        const folded = wrap.classList.toggle('folded');
-        localStorage.setItem('calFold_' + kind, folded ? '1' : '0');
-      });
-      wrap.append(head, body);
-      dpList.appendChild(wrap);
-      groups[kind] = body;
+      for (const owner of owners) {
+        const key = kind + (owner ? ':' + owner : '');
+        if (!items.some(it => gkey(it) === key && (showDone || !it.done))) continue;
+        const wrap = document.createElement('div');
+        wrap.className = 'dp-group' + (owner ? ' shared' : '');
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'dp-ghead';
+        const chev = document.createElement('span');
+        chev.className = 'dp-gchev';
+        chev.textContent = '›';                // ›, rotated down by CSS when open
+        const label = document.createElement('span');
+        // "Events" for mine, "Aki's events" for theirs — the CSS upper-cases it.
+        label.textContent = owner
+          ? owner.charAt(0).toUpperCase() + owner.slice(1) + '’s ' + KNAME[kind].toLowerCase()
+          : KNAME[kind];
+        head.append(chev, label);
+        const body = document.createElement('div');
+        body.className = 'dp-glist';
+        if (localStorage.getItem('calFold_' + key) === '1') wrap.classList.add('folded');
+        head.addEventListener('click', () => {
+          const folded = wrap.classList.toggle('folded');
+          localStorage.setItem('calFold_' + key, folded ? '1' : '0');
+        });
+        wrap.append(head, body);
+        dpList.appendChild(wrap);
+        groups[key] = body;
+      }
     }
 
     for (const it of items) {
@@ -1573,15 +1588,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         od.textContent = new Date(it.due + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' });
         row.appendChild(od);
       }
-      // Someone else's item: say whose, and don't offer to edit or delete it here.
+      // Someone else's item: don't offer to edit or delete it here. Whose it is comes
+      // from the group heading above it now, so the row doesn't repeat the name.
       if (it.owner) {
         row.classList.add('shared');
         chev.textContent = '';
-        const who = document.createElement('span');
-        // Their name, capitalised here rather than read from PARTNER — that const is
-        // declared further down, and this runs during the first render.
-        who.className = 'owner'; who.textContent = it.owner.charAt(0).toUpperCase() + it.owner.slice(1);
-        row.appendChild(who);
       }
       row.appendChild(chev);
       if (!it.owner) {
@@ -1629,7 +1640,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.addEventListener('pointerup', lpCancel);
         row.addEventListener('pointercancel', lpCancel);
       }
-      groups[it.kind].appendChild(row);
+      groups[gkey(it)].appendChild(row);
     }
     // Everything on the day may have been filtered out (all done, "Completed" off).
     if (!dpList.children.length) {
