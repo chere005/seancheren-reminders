@@ -40,8 +40,15 @@ function chrome_styles(): string
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: #1c1c1c;
       border: 1px solid #333; border-radius: 8px; min-width: 120px; box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
     }
-    .usermenu .menu a { display: block; margin: 0; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
-    .usermenu .menu a:hover { background: #2a2a2a; color: #fff; }
+    /* Settings and Log out — the same menu in every app, so preferences are always in
+       the same place. The button is styled to be indistinguishable from the link. */
+    .usermenu .menu a, .usermenu .menu button {
+      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: #eee;
+      text-decoration: none; font-size: 0.9rem; text-align: left; background: none;
+      border: none; border-radius: 0; font-family: inherit; cursor: pointer;
+    }
+    .usermenu .menu a:hover, .usermenu .menu button:hover { background: #2a2a2a; color: #fff; }
+    .usermenu .menu button { border-bottom: 1px solid #333; }
     /* Edit — a pencil, as on every other Edit in the suite — sits to the left of
        the username, wearing the same pill. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
@@ -111,9 +118,11 @@ function folder_icon_svg(): string
 }
 
 /**
- * The username chip, the settings "⋮" to its left, and optionally the app's Edit
- * toggle (a pencil) beside them. $editId is the button id the page's own script
- * already listens on.
+ * The username chip and optionally the app's Edit toggle (a pencil) beside it.
+ * $editId is the button id the page's own script already listens on.
+ *
+ * There is no settings "⋮" any more: preferences live in the username's own dropdown,
+ * which is the same menu (Settings, then Log out) in every app.
  */
 function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', string $settingsExtra = '',
                           bool $showShare = false, string $controls = ''): string
@@ -121,15 +130,17 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
     // One flex child, because the header is space-between: loose buttons would be
     // spread across the row rather than gathered on the right.
-    $menu = '<div class="usercol">' . settings_button()
+    $menu = '<div class="usercol">'
           . '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
-          . '<div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div></div></div>';
+          . '<div class="menu" id="userMenu" hidden>'
+          . '<button type="button" id="setBtn">Settings</button>'
+          . '<a href="?logout">Log out</a></div></div></div>';
     $edit = $withEdit
         ? '<button type="button" class="hedit" title="Edit" aria-label="Edit" id="'
           . htmlspecialchars($editId, ENT_QUOTES) . '">&#9998;&#65038;</button>'
         : '';
     // $controls are the app's own title-bar buttons (folder/calendar picker, manage…),
-    // gathered here on the right beside the ⋮ rather than out by the app's name.
+    // gathered here on the right beside the username rather than out by the app's name.
     return '<div class="hright">' . $controls . $edit . $menu . '</div>' . settings_modal_html($settingsExtra, $showShare);
 }
 
@@ -140,11 +151,6 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
  * app has to wire anything up. Pages that don't use chrome_styles()/chrome_script()
  * (Aki's Bookshelf) emit the three helpers themselves.
  */
-function settings_button(): string
-{
-    return '<button type="button" class="setbtn" id="setBtn" title="Settings" aria-label="Settings">&#8942;</button>';
-}
-
 function settings_modal_html(string $extra = '', bool $showShare = false): string
 {
     $csrf = htmlspecialchars($_SESSION['csrf'] ?? '', ENT_QUOTES);
@@ -156,10 +162,16 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
         $themes .= '<button type="button" class="themebtn' . $on . '" data-theme="' . $key . '"'
                  . ' style="background:' . $accent . '" title="' . $label . '" aria-label="' . $label . '"></button>';
     }
-    // The footer is three actions stacked in a column: Change password (left), Share
-    // (centred, only when there's someone to share with) and Done (right). The password
-    // button lives here but submits the form above it through its `form` attribute.
-    $share = $showShare ? share_button_html() : '';
+    // The footer is one row of three same-sized icon buttons — Share, Widget, Done —
+    // and it's the same row in every app, so preferences never move around. Share needs
+    // lib/sharing.php, which not every app loads, hence the function_exists guard.
+    $share = ($showShare && function_exists('share_button_html')) ? share_button_html() : '';
+    // The iOS widget is set up from the Calendar's feed page, but the link belongs in
+    // every app's preferences so the menu reads the same wherever you opened it.
+    $widget = '<a class="setact" href="/calendar/feed.php" title="Widget" aria-label="Widget">'
+            . '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"'
+            . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></a>';
     return <<<HTML
 <div class="setmodal-backdrop" id="setBackdrop">
   <div class="setmodal">
@@ -183,7 +195,11 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
     {$extra}
     <div class="setactions">
       {$share}
-      <button type="button" class="setdone" id="setDone">Done</button>
+      {$widget}
+      <button type="button" class="setact setdone" id="setDone" title="Done" aria-label="Done">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -201,14 +217,6 @@ function settings_modal_styles(): string
       cursor: pointer; padding: 0;
     }
     .setmodal .themebtn.on { border-color: #eee; }
-    /* The "⋮" wears the username's pill, one notch narrower. Its own class, not
-       ".dots" — the Calendar's day cells already use that for their dot row. */
-    .setbtn {
-      height: 32px; width: 26px; display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid #333; border-radius: 999px; color: #ccc;
-      font-family: inherit; font-size: 1.1rem; line-height: 1; cursor: pointer; flex: 0 0 auto;
-    }
-    .setbtn:hover { border-color: #888; color: #fff; }
     /* Same shape as the calendar and folder managers. */
     .setmodal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 70;
@@ -237,20 +245,23 @@ function settings_modal_styles(): string
     .setmodal .setsave:hover { background: #52e0ac; }
     /* Change password sits on its own row, above the Theme picker. */
     .setmodal .setpwrow { margin-top: 0.9rem; }
-    /* The three actions sit on one row: Change password on the left, then Share and Done
-       to the right; they wrap onto the next line only if the window is too narrow. */
+    /* Share, Widget and Done: one row of identical round icon buttons, evenly spread and
+       vertically centred on each other, so the footer reads the same in every app. */
     .setmodal .setactions {
-      display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
+      display: flex; flex-direction: row; align-items: center; justify-content: space-around;
       gap: 0.6rem; margin-top: 1.25rem;
     }
-    .setmodal .setactions .sh-open { margin: 0; }
-    .setmodal .setactions .setdone { margin-left: auto; }
-    .setmodal .setdone {
-      padding: 0.35rem 0.9rem; border: 1px solid #444;
-      background: none; color: #ccc; border-radius: 999px; font-size: 0.9rem; cursor: pointer;
-      font-family: inherit;
+    .setmodal .setact {
+      flex: 0 0 auto; width: 40px; height: 40px; margin: 0; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid #444; background: none; color: #ccc; border-radius: 50%;
+      cursor: pointer; font-family: inherit; text-decoration: none;
     }
-    .setmodal .setdone:hover { border-color: #888; color: #fff; }
+    .setmodal .setact svg { display: block; }
+    .setmodal .setact:hover { border-color: #888; color: #fff; }
+    /* Done is the primary action of the three, so it wears the accent. */
+    .setmodal .setdone { border-color: #2a4a3d; color: var(--accent); }
+    .setmodal .setdone:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
     /* App-specific extras (Share, Widget…) sit centred above Done. */
     .setmodal .setextra {
       display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
@@ -274,7 +285,12 @@ function settings_modal_script(): string
   var form = document.getElementById('pwForm'), msg = document.getElementById('setMsg');
   var show = function (text, ok) { msg.textContent = text; msg.classList.toggle('ok', !!ok); msg.hidden = !text; };
   var close = function () { back.classList.remove('open'); form.reset(); show(''); };
-  btn.addEventListener('click', function () { back.classList.add('open'); });
+  // Settings now lives inside the username dropdown, so opening it closes that menu.
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var m = document.getElementById('userMenu'); if (m) { m.hidden = true; }
+    back.classList.add('open');
+  });
   document.getElementById('setDone').addEventListener('click', close);
   // Share opens its own window (in lib/sharing.php). Close Settings first so it doesn't
   // sit behind it — the share modal's backdrop is a layer below this one.
@@ -630,6 +646,38 @@ function keep_edit_script(): string
 JS;
 }
 
+/**
+ * Keep the scroll position across a POST→redirect→GET. Every mutation in the suite is a
+ * full navigation, so ticking a reminder halfway down the page used to land you back at
+ * the top. Stash scrollY on submit, put it back on the next load, then forget it — so a
+ * fresh visit (or a tab switch) still opens at the top the way it should.
+ */
+function keep_scroll_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var K = 'scroll:' + location.pathname;
+  var save = function () { try { sessionStorage.setItem(K, String(window.scrollY || 0)); } catch (_) {} };
+  // Anything that navigates away as the result of an action saves where we were.
+  document.addEventListener('submit', save, true);
+  // A programmatic form.submit() (the day panel's tick box, quick delete) fires no
+  // submit event at all, so patch the prototype to save on that path too.
+  var native = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () { save(); return native.apply(this, arguments); };
+  var y = null;
+  try { y = sessionStorage.getItem(K); sessionStorage.removeItem(K); } catch (_) {}
+  if (y === null) { return; }
+  var to = parseInt(y, 10); if (isNaN(to) || to <= 0) { return; }
+  // The list renders with the document, but images/fonts can still shift it — put it
+  // back once now and once after load, and don't smooth-scroll it (that reads as a jump).
+  var put = function () { window.scrollTo(0, to); };
+  put();
+  window.addEventListener('load', put);
+  setTimeout(put, 60);
+})();</script>
+JS;
+}
+
 function chrome_script(): string
 {
     return "<script>(function(){var b=document.getElementById('userBtn'),m=document.getElementById('userMenu');"
@@ -647,5 +695,6 @@ function chrome_script(): string
          . section_rename_script()
          . section_collapse_script()
          . folder_collapse_script()
+         . keep_scroll_script()
          . keep_edit_script();
 }

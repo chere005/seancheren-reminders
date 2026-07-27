@@ -240,20 +240,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $rep = repeat_clean($_POST['rep_unit'] ?? '', $_POST['rep_n'] ?? 1);
 
     if ($action === 'add_event' && $text !== '') {
-        $file = user_data_file($cfg['data_dir'], 'events');
+        // The window offers my calendars and the partner's shared ones in two separate
+        // pickers; picking one of theirs writes the event into *their* events file, the
+        // same way a shared folder's reminders are written to their owner's.
+        $shCal   = (string) ($_POST['cal_shared'] ?? '');
+        $toThem  = $partner && $shCal !== '' && in_array($shCal, $sharedIds, true);
+        $file = user_data_file($cfg['data_dir'], 'events', $toThem ? $partner : null);
         $list = load_json_list($file);
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                    'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
-                   'cal' => $evCalOk, 'repeat' => $rep, 'created' => time()];
+                   'cal' => $toThem ? $shCal : $evCalOk, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
     } elseif ($action === 'add_reminder' && $text !== '') {
-        // A reminder belongs to a folder and a group, never to a calendar. It lands in
-        // whichever folder Reminders is set to add to, under the group picked here.
-        $file     = user_data_file($cfg['data_dir'], 'reminders');
-        $list     = load_json_list($file);
-        $remFolder = folder_default_get($cfg['data_dir'], 'reminders');
-        $section  = (string) ($_POST['section'] ?? '');
-        // Sections are per-folder, so only the default folder's sections are valid here.
+        // A reminder belongs to a folder and a group, never to a calendar. Mine lands in
+        // whichever folder Reminders is set to add to; picking from the partner's picker
+        // instead carries their folder *and* group ("folder\x1Fgroup") and writes to
+        // their file — but only into a folder they still actually share with me.
+        $shSec  = (string) ($_POST['section_shared'] ?? '');
+        $toThem = false;
+        if ($partner && $shSec !== '' && strpos($shSec, "\x1F") !== false) {
+            [$shFolder, $shGroup] = explode("\x1F", $shSec, 2);
+            $toThem = in_array($shFolder, $sharedFolders, true);
+        }
+        $file      = user_data_file($cfg['data_dir'], 'reminders', $toThem ? $partner : null);
+        $list      = load_json_list($file);
+        $remFolder = $toThem ? $shFolder : folder_default_get($cfg['data_dir'], 'reminders');
+        $section   = $toThem ? $shGroup : (string) ($_POST['section'] ?? '');
+        // Sections are per-folder, so only that folder's sections are valid here.
         $secOk    = [CALENDAR_SECTION => true];
         foreach ($list as $it) {
             if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $remFolder) {
@@ -949,7 +962,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         </div>
       </div>
     <?php $titleControls = ob_get_clean(); ?>
-    <?= render_user_menu(false, 'editBtn', '<div class="setextra"><a href="/calendar/feed.php">Widget</a></div>', (bool) $partner, $titleControls) ?>
+    <?php // Widget now sits in the shared settings footer, so no app-specific extra here. ?>
+    <?= render_user_menu(false, 'editBtn', '', (bool) $partner, $titleControls) ?>
   </header>
 
 
@@ -1124,14 +1138,28 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                inputmode="numeric" autocomplete="off">
       </span>
     </div>
+    <?php // Mine and the partner's stay in separate pickers rather than one merged list,
+          // so it's always obvious whose file a new item is about to land in. Picking from
+          // one clears the other (see the JS below); an empty "theirs" means "mine". ?>
     <div class="calrow" id="mCalRow" hidden>
-      <span class="tlabel">Calendar</span>
+      <span class="tlabel"><?= $sharedCals ? e(share_name($me)) : 'Calendar' ?></span>
       <select name="cal" id="mCal">
         <?php foreach ($calsOnly as $c): ?>
           <option value="<?= e($c['id']) ?>"><?= e($c['name']) ?></option>
         <?php endforeach; ?>
       </select>
     </div>
+    <?php if ($sharedCals): ?>
+    <div class="calrow" id="mCalTheirsRow" hidden>
+      <span class="tlabel"><?= e(share_name($partner)) ?></span>
+      <select name="cal_shared" id="mCalTheirs">
+        <option value="">&mdash;</option>
+        <?php foreach ($sharedCals as $c): ?>
+          <option value="<?= e($c['id']) ?>"><?= e($c['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
     <?php
       // Reminders answer to a group, not a calendar. The list is the groups in the
       // folder new reminders go to, with the two permanent ones at the top.
@@ -1146,8 +1174,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
               && strcasecmp($nm, CALENDAR_SECTION) !== 0) { $remSections[] = $nm; }
       }
     ?>
+    <?php
+      // The partner's shared reminder folders, each with its own groups. Value carries
+      // both, since a shared reminder needs a folder as well as a group; \x1F can't
+      // occur in a folder_clean()ed name, and both halves are re-validated server-side.
+      $sharedRemGroups = [];
+      if ($sharedFolders) {
+          $theirRem = load_json_list(user_data_file($cfg['data_dir'], 'reminders', $partner));
+          foreach ($sharedFolders as $sf) {
+              $sharedRemGroups[$sf] = [[$sf . "\x1F" . CALENDAR_SECTION, CALENDAR_SECTION],
+                                       [$sf . "\x1F", 'Reminders']];
+              foreach ($theirRem as $it) {
+                  if (($it['type'] ?? '') !== 'section') { continue; }
+                  if (($it['folder'] ?? FOLDER_DEFAULT) !== $sf) { continue; }
+                  $nm = (string) ($it['name'] ?? '');
+                  if ($nm !== '' && strcasecmp($nm, CALENDAR_SECTION) !== 0) {
+                      $sharedRemGroups[$sf][] = [$sf . "\x1F" . $nm, $nm];
+                  }
+              }
+          }
+      }
+    ?>
     <div class="calrow" id="mSecRow" hidden>
-      <span class="tlabel">Group</span>
+      <span class="tlabel"><?= $sharedRemGroups ? e(share_name($me)) : 'Group' ?></span>
       <select name="section" id="mSec">
         <option value="<?= CALENDAR_SECTION ?>"><?= CALENDAR_SECTION ?></option>
         <option value="">Reminders</option>
@@ -1157,6 +1206,21 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       </select>
       <span class="secnote">in <?= e($remDefFolder) ?></span>
     </div>
+    <?php if ($sharedRemGroups): ?>
+    <div class="calrow" id="mSecTheirsRow" hidden>
+      <span class="tlabel"><?= e(share_name($partner)) ?></span>
+      <select name="section_shared" id="mSecTheirs">
+        <option value="">&mdash;</option>
+        <?php foreach ($sharedRemGroups as $sf => $opts): ?>
+          <optgroup label="<?= e($sf) ?>">
+            <?php foreach ($opts as [$val, $label]): ?>
+              <option value="<?= e($val) ?>"><?= e($label) ?></option>
+            <?php endforeach; ?>
+          </optgroup>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
     <div class="buttons">
       <button type="button" class="del needs-confirm" id="mDelete" hidden>Delete</button>
       <button type="button" class="cancel" id="mCancel">Cancel</button>
@@ -1300,8 +1364,34 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   });
   // Time applies to every kind now; only the calendar (events) and group (reminders)
   // rows are kind-specific.
-  const showTime = (val) => { mTime.value = val || ''; mTimeRow.hidden = false; mCalRow.hidden = false; mSecRow.hidden = true; };
-  const hideTime = (kind) => { mTimeRow.hidden = false; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder'; };
+  // The partner's pickers, when there are any: a second dropdown beside each of mine
+  // rather than one merged list, so whose file an item lands in is never a guess.
+  const mCalTheirsRow = document.getElementById('mCalTheirsRow');
+  const mCalTheirs    = document.getElementById('mCalTheirs');
+  const mSecTheirsRow = document.getElementById('mSecTheirsRow');
+  const mSecTheirs    = document.getElementById('mSecTheirs');
+  const mSec          = document.getElementById('mSec');
+  // Picking one side clears the other, so exactly one owner is ever selected. Mine has
+  // no blank option (a group is always implied), so it clears by dropping its selection.
+  if (mCal && mCalTheirs) {
+    mCalTheirs.addEventListener('change', () => { if (mCalTheirs.value) mCal.selectedIndex = -1; });
+    mCal.addEventListener('change', () => { mCalTheirs.value = ''; });
+  }
+  if (mSec && mSecTheirs) {
+    mSecTheirs.addEventListener('change', () => { if (mSecTheirs.value) mSec.selectedIndex = -1; });
+    mSec.addEventListener('change', () => { mSecTheirs.value = ''; });
+  }
+  const showTime = (val) => {
+    mTime.value = val || ''; mTimeRow.hidden = false;
+    mCalRow.hidden = false; mSecRow.hidden = true;
+    if (mCalTheirsRow) mCalTheirsRow.hidden = false;
+    if (mSecTheirsRow) mSecTheirsRow.hidden = true;
+  };
+  const hideTime = (kind) => {
+    mTimeRow.hidden = false; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder';
+    if (mCalTheirsRow) mCalTheirsRow.hidden = true;
+    if (mSecTheirsRow) mSecTheirsRow.hidden = kind !== 'reminder';
+  };
   document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
     r.addEventListener('change', () => {
@@ -2031,16 +2121,32 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     });
 
     // Swipe up on the calendar half to collapse it, down to open it back out.
-    let sy = null, sx = null;
+    let sy = null, sx = null, swiping = false;
     const wrap = document.querySelector('.cal-top') || grid.parentElement;
     wrap.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) { sy = null; return; }
-      sy = e.touches[0].clientY; sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY; sx = e.touches[0].clientX; swiping = false;
     }, { passive: true });
+    // Once the finger has clearly moved, this is a swipe and not a tap. Marking it here
+    // (rather than only at touchend) lets the day cells ignore the synthetic click the
+    // browser fires on whichever cell the finger happened to lift off — without this,
+    // paging through months also "selected" a day on every swipe.
+    wrap.addEventListener('touchmove', (e) => {
+      if (sy === null || swiping) { return; }
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - sx) > 12 || Math.abs(t.clientY - sy) > 12) { swiping = true; }
+    }, { passive: true });
+    // Capture-phase, so it beats the .cell click handler that selects a day.
+    wrap.addEventListener('click', (e) => {
+      if (!swiping) { return; }
+      e.preventDefault(); e.stopPropagation();
+    }, true);
     wrap.addEventListener('touchend', (e) => {
       if (sy === null) { return; }
       const t = e.changedTouches[0], dy = t.clientY - sy, dx = t.clientX - sx;
       sy = null;
+      // The synthetic click lands just after touchend; clear the flag behind it.
+      if (swiping) { setTimeout(() => { swiping = false; }, 350); }
       // A firm sideways swipe steps a month: left = forward, right = back.
       if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)) {
         location.href = dx < 0 ? '?ym=<?= $next ?>' : '?ym=<?= $prev ?>';

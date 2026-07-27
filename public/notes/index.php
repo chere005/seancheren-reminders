@@ -366,6 +366,16 @@ if ($sharedFolders) {
     $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
 }
 
+/** The colour of a folder as this viewer sees it, for the dot on a section header —
+ *  the same resolution the picker uses. (Reminders carries the identical helper.) */
+$folderDotColor = function (string $f) use ($isShared, $partner, $folderColors, $theirColors,
+                                            $sharedOverrides, $sharedFolders): string {
+    if (!$isShared) { return $folderColors[$f] ?? app_palette('notes')[0]; }
+    $i = array_search($f, $sharedFolders, true);
+    return folder_shared_color($sharedOverrides, $theirColors, 'notes',
+                               '@' . $partner . ':' . $f, $f, $i === false ? 0 : (int) $i);
+};
+
 // Calendars as [id, name] pairs, for the Settings share window.
 $shareCals = [];
 if ($partner && !$isShared) {
@@ -497,6 +507,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        as from the pencil on its other side. */
     .section-head form.sec-add-form { margin-left: 0; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    /* The folder's colour, right of the section's name — the same dot the picker wears. */
+    .fdot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
@@ -695,6 +707,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <?= section_collapse_button() ?>
         <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
               '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
+        <?php // Which folder this section belongs to, at a glance — the picker's colour. ?>
+        <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>"
+              title="<?= e($sfolder) ?>" aria-hidden="true"></span>
         <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
         <form method="post" action="" style="display:inline">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">

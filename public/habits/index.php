@@ -20,7 +20,7 @@ function is_section(array $it): bool { return ($it['type'] ?? '') === 'section';
 
 // Render one habit's name bubble + 7 day cells into the grid.
 function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0): void { ?>
-        <div class="hname">
+        <div class="hname" data-id="<?= e($h['id']) ?>">
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -59,6 +59,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'done' => $now]);
+        exit;
+    }
+
+    // Inline rename of a habit (AJAX, from a double-tap or an edit-mode tap on its name).
+    if ($_POST['action'] === 'rename_habit') {
+        $id   = (string) ($_POST['id'] ?? '');
+        $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
+        if ($name !== '') {
+            foreach ($habits as &$h) {
+                if (!is_section($h) && ($h['id'] ?? '') === $id) { $h['name'] = mb_substr($name, 0, 60); break; }
+            }
+            unset($h);
+            save_habits($dataFile, $habits);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -214,10 +230,17 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
       padding: 0.35rem 0.5rem; min-height: 28px; display: flex; align-items: center; overflow: hidden;
     }
-    .hname .hlabel { color: #d9d2f0; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hname .hlabel { color: #d9d2f0; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hname .del { display: none; margin-left: auto; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
     body.editing .hname .del { display: inline-block; }
     .hname .del:hover { border-color: #f66; color: #f66; }
+    /* In edit mode the name is a field; a double-tap opens it outside edit mode too. */
+    body.editing .hname .hlabel { cursor: text; }
+    .hname .hedit-name {
+      flex: 1; min-width: 0; font-size: 1.02rem; font-family: inherit; padding: 0.1rem 0.3rem;
+      background: #241f33; border: 1px solid #4a3f6a; border-radius: 4px; color: #d9d2f0;
+    }
+    .hname .hedit-name:focus { outline: none; border-color: #b9a7f5; }
 
     .cell {
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
@@ -326,6 +349,69 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
         .catch(() => {});
     });
   });
+
+  // ----- Rename a habit inline -----
+  // Two ways in, matching the rest of the suite: a double-click / long-press any time,
+  // or a single tap on the name while the Edit pencil is on. Saves over AJAX, so the
+  // grid never reloads and nothing scrolls.
+  const editing = () => document.body.classList.contains('editing');
+  function startRename(box) {
+    const span = box.querySelector('.hlabel');
+    if (!span || box.querySelector('.hedit-name')) return;
+    const id = box.dataset.id, cur = span.textContent;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'hedit-name'; inp.value = cur; inp.maxLength = 60;
+    span.replaceWith(inp); inp.focus();
+    try { inp.setSelectionRange(cur.length, cur.length); } catch (_) {}
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      const val = inp.value.trim();
+      const ns = document.createElement('span'); ns.className = 'hlabel';
+      ns.textContent = (save && val) ? val : cur;
+      inp.replaceWith(ns);
+      if (save && val && val !== cur) {
+        const body = new URLSearchParams({ csrf: CSRF, action: 'rename_habit', id, name: val });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+      }
+    };
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+    });
+    inp.addEventListener('blur', () => commit(true));
+  }
+  document.addEventListener('dblclick', e => {
+    const box = e.target.closest('.hname'); if (!box) return;
+    if (!editing()) setEdit(true);
+    startRename(box);
+  });
+  document.addEventListener('click', e => {
+    if (!editing()) return;
+    if (e.target.closest('.del, button, form')) return;
+    const box = e.target.closest('.hname'); if (!box) return;
+    startRename(box);
+  });
+  // Touch: a long press opens the name the same way a double-click does.
+  let lpT = null, lpX = 0, lpY = 0, lpBox = null;
+  const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    const box = e.target.closest('.hname'); if (!box) return;
+    if (e.target.closest('.del, button, form')) return;
+    lpBox = box; lpX = e.clientX; lpY = e.clientY;
+    lpT = setTimeout(() => {
+      lpT = null;
+      if (navigator.vibrate) navigator.vibrate(12);
+      if (!editing()) setEdit(true);
+      startRename(lpBox);
+    }, 500);
+  });
+  document.addEventListener('pointermove', e => {
+    if (lpT && (Math.abs(e.clientX - lpX) > 10 || Math.abs(e.clientY - lpY) > 10)) clearLp();
+  });
+  document.addEventListener('pointerup', clearLp);
+  document.addEventListener('pointercancel', clearLp);
 </script>
 <?= chrome_script() ?>
 </body>
