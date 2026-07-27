@@ -63,7 +63,7 @@ function chrome_styles(): string
     /* A section's collapse chevron sits where its "+" used to — subtle, and it steps
        aside in edit mode (where the drag handle takes that slot). Collapsing hides the
        section's rows: for Reminders the whole group but its head, for Notes the list. */
-    /* A ">" that points down when the section is open and right when it's collapsed. */
+    /* A chevron that points down when the section is open and right when it's collapsed. */
     .sec-collapse {
       flex: 0 0 auto; width: 18px; height: 22px; padding: 0; margin: 0 -0.4rem 0 0; background: none;
       border: none; color: #777; cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
@@ -312,7 +312,11 @@ function section_edit_button(): string
  *  the "+" used to; it hides in edit mode, leaving the slot to the drag handle. */
 function section_collapse_button(): string
 {
-    return '<button type="button" class="sec-collapse" title="Collapse section" aria-label="Collapse section">&gt;</button>';
+    // A wide-angle chevron (Claude's UI style) rather than a tight ">" glyph.
+    return '<button type="button" class="sec-collapse" title="Collapse section" aria-label="Collapse section">'
+         . '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"'
+         . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>'
+         . '</button>';
 }
 
 /** Collapse/expand a section by tapping its chevron; the state is remembered per

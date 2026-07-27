@@ -614,7 +614,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .monthnav a:hover { border-color: var(--accent); color: var(--accent); }
     .monthnav a:active { background: #242424; }
-    .monthnav .label { font-size: 1.05rem; color: #ddd; font-weight: 600; }
+    .monthnav .label {
+      font-size: 1.05rem; color: #ddd; font-weight: 600; background: none; border: none;
+      cursor: pointer; font-family: inherit; padding: 0.2rem 0.3rem; border-radius: 6px;
+    }
+    .monthnav .label:hover { color: #fff; background: #1e1e1e; }
     /* Today sits just left of the month name. */
     .monthnav .mlabel { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
     .monthnav .todaybtn {
@@ -622,6 +626,19 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.2rem 0.7rem; font-size: 0.78rem; text-decoration: none; line-height: 1.3;
     }
     .monthnav .todaybtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    /* Month/year jump menu, opened from the label above. Same shape as the calendar picker. */
+    .ym-menu { padding: 0.6rem; }
+    .ym-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .ym-row select {
+      flex: 1; min-width: 0; padding: 0.4rem 0.5rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; color-scheme: dark; font-family: inherit;
+    }
+    .ym-go {
+      width: 100%; background: var(--accent); color: var(--accent-ink); border: none;
+      border-radius: 6px; padding: 0.45rem; font-size: 0.9rem; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+    }
+    .ym-go:hover { background: #52e0ac; }
 
     .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
     .dow { margin-bottom: 6px; }
@@ -940,9 +957,28 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <a href="?ym=<?= $prev ?>" title="Previous month">&#8592;</a>
     <div class="mlabel">
       <a class="todaybtn" href="?ym=<?= date('Y-m') ?>&amp;day=<?= $todayYmd ?>" title="Jump to today">Today</a>
-      <span class="label"><?= e($monthName) ?></span>
+      <button type="button" class="label" id="ymBtn" aria-haspopup="true" aria-expanded="false"
+              title="Jump to month"><?= e($monthName) ?></button>
     </div>
     <a href="?ym=<?= $next ?>" title="Next month">&#8594;</a>
+  </div>
+
+  <?php // Tapping the month/year label opens a quick jump-to menu. ?>
+  <div class="calpick-menu ym-menu" id="ymMenu" hidden>
+    <div class="ym-row">
+      <select id="ymMonthSel" aria-label="Month">
+        <?php foreach (['January','February','March','April','May','June','July','August',
+                        'September','October','November','December'] as $i => $mn): ?>
+          <option value="<?= $i + 1 ?>"<?= ($i + 1) === $month ? ' selected' : '' ?>><?= $mn ?></option>
+        <?php endforeach; ?>
+      </select>
+      <select id="ymYearSel" aria-label="Year">
+        <?php for ($y = $year - 8; $y <= $year + 8; $y++): ?>
+          <option value="<?= $y ?>"<?= $y === $year ? ' selected' : '' ?>><?= $y ?></option>
+        <?php endfor; ?>
+      </select>
+    </div>
+    <button type="button" class="ym-go" id="ymGo">Go</button>
   </div>
 
   <div class="dow">
@@ -1900,6 +1936,31 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         location.href = u.toString();
       });
     });
+  })();
+
+  // Tapping the "July 2026" label opens a small menu to jump straight to any month/year.
+  (function () {
+    const btn = document.getElementById('ymBtn'), menu = document.getElementById('ymMenu');
+    if (!btn || !menu) return;
+    const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+      if (!menu.hidden) {
+        const r = btn.getBoundingClientRect();
+        menu.style.top = (r.bottom + 5) + 'px';
+        menu.style.left = Math.max(8, r.left - 20) + 'px';
+      }
+      btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+    });
+    document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    const go = () => {
+      const m = document.getElementById('ymMonthSel').value.padStart(2, '0');
+      const y = document.getElementById('ymYearSel').value;
+      location.href = '?ym=' + y + '-' + m;
+    };
+    document.getElementById('ymGo').addEventListener('click', go);
   })();
 
   document.getElementById('mCancel').addEventListener('click', closeModal);

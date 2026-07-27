@@ -744,6 +744,14 @@ $sectionInput =
     .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
     .modal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
 
+    /* Folder labels, shown above a run of that folder's sections when "All" mixes more
+       than one folder together — bigger and a shade darker than a section header, so the
+       two read as different levels of the same hierarchy rather than competing. */
+    .folder-label {
+      font-weight: 700; font-size: 1.3rem; color: #b8860b; margin: 1.75rem 0 0 0.25rem;
+    }
+    .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
+
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
@@ -760,8 +768,10 @@ $sectionInput =
        right edge and every × lines up down the app. The indent level is a CSS var. */
     ul.rlist > li { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
     .section-head { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
-    /* The right-hand tail of a section header (indent arrows + delete), pushed to the edge. */
-    .section-head .sec-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; }
+    /* The right-hand tail of a section header (indent arrows + delete), pushed to the edge.
+       Same gap as a row's own trailing gap, so the ‹ › cluster sits the same distance from
+       the × on a section header as it does on a reminder row. */
+    .section-head .sec-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.75rem; }
     .section-head .sec-tail form { margin-left: 0; }
     /* Indent controls: edit mode only, to the right of a row or section. */
     .indent-ctrls { display: none; flex: 0 0 auto; align-items: center; gap: 0.15rem; }
@@ -828,6 +838,9 @@ $sectionInput =
     body.editing .sec-add { display: none; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: var(--accent); }
     li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    /* Preview while dragging an indented section header over a row: this is where it'll
+       land, and everything from here on splits off to become its subsection. */
+    li.rowsplit-target { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
     .section-group.dragging { opacity: 0.9; }
     .section-group.dragging .section-head {
       background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
@@ -909,9 +922,21 @@ $sectionInput =
 
   <?php // The permanent groups always render, so there's always a + to add against. ?>
    <div id="rlist-root">
+    <?php
+      // Folder labels + dividers: only meaningful in "All", and only once more than one
+      // folder is actually represented among the visible sections.
+      $secFolders  = array_unique(array_map(fn($s) => (string) ($s['folder'] ?? FOLDER_DEFAULT), $secRows));
+      $showFolders = $viewFolder === 'All' && count($secFolders) > 1;
+      $prevFolder  = null;
+    ?>
     <?php foreach ($secRows as $s): ?>
       <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
       <?php $rows = $grouped[$s['id']] ?? []; ?>
+      <?php if ($showFolders && $sfolder !== $prevFolder): ?>
+        <?php if ($prevFolder !== null): ?><div class="folder-divider"></div><?php endif; ?>
+        <div class="folder-label"><?= e($sfolder) ?></div>
+      <?php endif; ?>
+      <?php $prevFolder = $sfolder; ?>
       <?php // Sections always render, empty or not — the same as the permanent Calendar
             // and Reminders groups below. Each belongs to one folder; its rename and
             // delete forms carry that folder, so acting on it never touches another. ?>
@@ -1059,6 +1084,10 @@ $sectionInput =
   });
   window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };
   let dragLi = null, dragSection = null;
+  // Where an *indented* section header is hovering when it's being dragged into a row
+  // list (rather than just being reordered among other section headers). Set live during
+  // the drag for the preview highlight; the actual DOM split happens once, on drop.
+  let secDropTarget = null;
 
   const persistOrder = () => {
     const order = [];
@@ -1120,6 +1149,7 @@ $sectionInput =
       if (!dragSection) return;
       e.preventDefault();
       dragSection.classList.add('dragging');
+      secDropTarget = null;
       secHandle.setPointerCapture(e.pointerId);
     } else if (remHandle) {
       dragLi = remHandle.closest('li[data-id]');
@@ -1165,12 +1195,50 @@ $sectionInput =
     } else {
       const overGroup = under.closest('.section-group');
       if (overGroup && overGroup !== dragSection) {
+        // Ordinary section-to-section reorder — always allowed, indented or not.
         const rect  = overGroup.getBoundingClientRect();
         const after = e.clientY > rect.top + rect.height / 2;
         overGroup.parentNode.insertBefore(dragSection, after ? overGroup.nextSibling : overGroup);
+        if (secDropTarget) { secDropTarget.li && secDropTarget.li.classList.remove('rowsplit-target'); secDropTarget = null; }
+      } else {
+        // An indented section can additionally be dropped between two reminders (or at
+        // either end of a list) — it becomes that spot's new subsection header, and
+        // whatever followed the drop point moves under it. Preview only; the actual
+        // split happens on drop, in endDrag().
+        const ind = parseInt(dragSection.style.getPropertyValue('--ind'), 10) || 0;
+        const ownUl = dragSection.querySelector(':scope > ul.rlist');
+        const ul = under.closest('ul.rlist');
+        if (ind > 0 && ul && ul !== ownUl) {
+          const overLi = under.closest('li[data-id]');
+          if (secDropTarget && secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
+          const after = overLi ? (e.clientY > overLi.getBoundingClientRect().top + overLi.getBoundingClientRect().height / 2) : true;
+          if (overLi) overLi.classList.add('rowsplit-target');
+          secDropTarget = { ul, li: overLi, after };
+        } else if (secDropTarget) {
+          if (secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
+          secDropTarget = null;
+        }
       }
     }
   }, { passive: false });
+
+  // Split a target section's row list at the drop point: everything from the drop point
+  // to the end moves under the dragged (indented) section header, which is repositioned
+  // right after the target's own (now-shorter) block.
+  const splitIntoDrop = () => {
+    if (!dragSection || !secDropTarget) return;
+    const { ul, li, after } = secDropTarget;
+    li && li.classList.remove('rowsplit-target');
+    const secUl = dragSection.querySelector(':scope > ul.rlist');
+    if (!secUl) return;
+    const kids = [...ul.querySelectorAll(':scope > li[data-id]')];
+    const idx  = li ? kids.indexOf(li) + (after ? 1 : 0) : kids.length;
+    kids.slice(idx).forEach(k => secUl.appendChild(k));
+    const targetGroup = ul.closest('.section-group');
+    if (targetGroup && targetGroup.parentNode) {
+      targetGroup.parentNode.insertBefore(dragSection, targetGroup.nextSibling);
+    }
+  };
 
   const endDrag = () => {
     const wasPress = !!pressTimer;      // timer still pending => it was a short tap, not a drag
@@ -1179,6 +1247,8 @@ $sectionInput =
     if (dragLi) dragLi.classList.remove('dragging');
     if (dragSection) dragSection.classList.remove('dragging');
     const wasDrag = !!(dragLi || dragSection);
+    splitIntoDrop();
+    secDropTarget = null;
     dragLi = null; dragSection = null;
     if (wasDrag) {
       suppressClick = true; setTimeout(() => { suppressClick = false; }, 350);

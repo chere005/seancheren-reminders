@@ -27,6 +27,8 @@ Local login: users come from `lib/config.php` (gitignored; copy `lib/config.samp
 
 Every app page starts by locating `lib/` at either `__DIR__ . '/../../lib'` (local) or `/home/protected/lib` (server) — copy that preamble verbatim when adding a page.
 
+**The public top-level pages** (Home `/`, `projects/`, `about/`, `contact/`) are the site's marketing front, not part of the app suite: no login, no tab bar, no `chrome.php`. They share their own chrome through `lib/site.php` — `site_nav($active)` renders the pill nav and `site_page($active, $title, $bodyHtml)` wraps a page in the full HTML shell (dark theme echoing Reminders: `#111`/`#eee`/`#34d399`). Add a new static page by calling `site_page()` and adding its slug to the `$links` map in `site_nav()`.
+
 ## Core mechanics
 
 **Storage.** All data goes through `store_read()` / `store_write()` (`lib/store.php`), which encrypt with AES-256-CBC under an `ENC1:` prefix. Reads transparently accept legacy plaintext JSON and re-encrypt on next write. Never `file_get_contents` a data file directly. Key comes from config `data_key` or an auto-generated `data/.datakey`.
