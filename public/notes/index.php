@@ -487,9 +487,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
        than one folder together — bigger and a shade darker than a section header. */
-    .folder-label {
-      font-weight: 700; font-size: 1.3rem; color: #b8860b; margin: 1.75rem 0 0 0.25rem;
-    }
+    .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
+    .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; }
     .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
@@ -682,8 +681,12 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
       <?php $rows = $grouped[$s['id']] ?? []; ?>
       <?php if ($showFolders && $sfolder !== $prevFolder): ?>
-        <?php if ($prevFolder !== null): ?><div class="folder-divider"></div><?php endif; ?>
-        <div class="folder-label"><?= e($sfolder) ?></div>
+        <?php if ($prevFolder !== null): ?></div><div class="folder-divider"></div><?php endif; ?>
+        <div class="folder-block" data-folder="<?= e($sfolder) ?>">
+          <div class="folder-head">
+            <?= folder_collapse_button() ?>
+            <div class="folder-label"><?= e($sfolder) ?></div>
+          </div>
       <?php endif; ?>
       <?php $prevFolder = $sfolder; ?>
       <?php // Sections always render, empty or not — like the permanent Notes group below.
@@ -704,6 +707,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       </div>
       <?php render_note_rows($rows, $view, $csrf, $sname, ''); ?>
     <?php endforeach; ?>
+    <?php if ($showFolders && $prevFolder !== null): ?></div><?php endif; ?>
 
     <!-- Permanent "Notes" group: always last, not deletable. -->
     <div class="section-head">
