@@ -190,18 +190,23 @@ if (data.error) {
 } else if (!items.length) {
   const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
+  // Two sections, Reminders first then Calendar, each grouped by day. The day's date is
+  // a heading on the left with the hairline under it, so the rows themselves only carry
+  // their time on the right.
   const max = config.widgetFamily === "large" ? 8 : (config.widgetFamily === "small" ? 3 : 5);
-  let prevDate = null;
-  for (const it of items.slice(0, max)) {
-    // A hairline divider whenever the day changes, so dates read as groups.
-    if (prevDate !== null && it.date !== prevDate) {
-      const div = w.addStack();
-      div.size = new Size(0, 1);
-      div.backgroundColor = new Color("#2a2a2a");
-      div.addSpacer();
-      w.addSpacer(5);
-    }
-    prevDate = it.date;
+  const reminders = items.filter(it => it.kind === "reminder");
+  const events    = items.filter(it => it.kind !== "reminder");
+  let budget = max;
+
+  const hairline = () => {
+    const div = w.addStack();
+    div.size = new Size(0, 1);
+    div.backgroundColor = new Color("#2a2a2a");
+    div.addSpacer();
+    w.addSpacer(4);
+  };
+
+  const drawRow = (it) => {
     const row = w.addStack();
     row.centerAlignContent();
     if (it.kind === "reminder") {
@@ -224,16 +229,39 @@ if (data.error) {
     label.textColor = it.overdue ? new Color("#ff7755") : new Color("#eeeeee");
     label.lineLimit = 1;
     row.addSpacer();
-    // On the right: the time (if any) sits just left of the date, in the same font.
+    // The date has moved up to its day heading, so only the time sits on the right.
     if (it.time) {
       const t = row.addText(fmtTime(it.time));
       t.font = Font.systemFont(11); t.textColor = META;
-      row.addSpacer(6);
     }
-    const d = row.addText(shortDate(it.date, data.today));
-    d.font = Font.systemFont(11); d.textColor = META;
     w.addSpacer(5);
-  }
+  };
+
+  const section = (title, list) => {
+    if (!list.length || budget <= 0) { return; }
+    const h = w.addText(title.toUpperCase());
+    h.font = Font.boldSystemFont(10);
+    h.textColor = new Color("#8a8a8a");
+    w.addSpacer(5);
+    let prevDate = null;
+    for (const it of list) {
+      if (budget <= 0) { break; }
+      if (it.date !== prevDate) {           // day heading on the left, hairline beneath
+        const d = w.addText(shortDate(it.date, data.today));
+        d.font = Font.mediumSystemFont(10);
+        d.textColor = META;
+        w.addSpacer(3);
+        hairline();
+        prevDate = it.date;
+      }
+      drawRow(it);
+      budget--;
+    }
+    w.addSpacer(6);
+  };
+
+  section("Reminders", reminders);
+  section("Calendar", events);
 }
 
 if (config.runsInWidget) { Script.setWidget(w); } else { await w.presentMedium(); }
