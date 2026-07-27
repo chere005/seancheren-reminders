@@ -43,11 +43,24 @@ function site_page($active, $title, $bodyHtml) {
   }
   .sitenav a:hover { background: #2a2a2a; color: #fff; }
   .sitenav a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
-  h1 { font-size: 1.6rem; margin: 0.5rem 0 1rem; color: #fff; }
-  h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; color: var(--accent); }
-  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: #fff; }
-  p { margin: 0.75rem 0; }
-  a { color: var(--accent); }
+  /* One luminance ramp rather than three unrelated colours: the page title is the
+     brightest thing on the page, section headings carry the accent, and subheadings are
+     a desaturated relative of it — so the hierarchy reads without any of the three
+     competing with the green of a link in body text. */
+  h1 {
+    font-size: 1.7rem; margin: 0.5rem 0 1rem; color: #fff;
+    letter-spacing: -0.015em; font-weight: 700;
+  }
+  h2 {
+    font-size: 1.25rem; margin: 2rem 0 0.5rem; color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: #9fb8ae; font-weight: 600; }
+  p { margin: 0.75rem 0; color: #d8dcda; }
+  /* Underlined, and a touch lighter than the h2 green, so a link inside a section never
+     reads as another heading. */
+  a { color: #5fe0b0; text-underline-offset: 2px; }
+  a:hover { color: #8af0ca; }
   ul { margin: 0.5rem 0; padding-left: 1.25rem; }
   li { margin: 0.2rem 0; }
   .sig { margin-top: 1.5rem; color: #888; }
