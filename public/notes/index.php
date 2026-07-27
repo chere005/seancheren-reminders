@@ -507,7 +507,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
        header's gap is the rows' gap, so the name sits the same distance from the +
        as from the pencil on its other side. */
-    .section-head form.sec-add-form { margin-left: 0; }
+    /* The + rides in a form here, so the pull-in goes on the form, not the button. */
+    .section-head form.sec-add-form { margin-left: -0.45rem; }
     /* The permanent group's plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
