@@ -592,6 +592,19 @@ if ($sharedFolders) {
     $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
 }
 
+/**
+ * The colour of a folder as this viewer sees it, for the dot on a section header.
+ * Viewing my own list it's my colour; viewing a shared one it's the same resolution the
+ * picker uses (my override, then the owner's, then a shared-palette default by position).
+ */
+$folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $theirColors,
+                                             $sharedOverrides, $sharedFolders): string {
+    if (!$isShared) { return $myColors[$f] ?? app_palette('reminders')[0]; }
+    $i = array_search($f, $sharedFolders, true);
+    return folder_shared_color($sharedOverrides, $theirColors, 'reminders',
+                               '@' . $partner . ':' . $f, $f, $i === false ? 0 : (int) $i);
+};
+
 // The "+ Section" control that sits on the folder row.
 $sectionInput =
     '<form method="post" action="" class="newsection" id="newSecForm" hidden'
@@ -755,6 +768,8 @@ $sectionInput =
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    /* The folder's colour, right of the section's name — the same dot the picker wears. */
+    .fdot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
     .section-del {
@@ -950,6 +965,9 @@ $sectionInput =
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
                 '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
+          <?php // Which folder this section belongs to, at a glance — the picker's colour. ?>
+          <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>"
+                title="<?= e($sfolder) ?>" aria-hidden="true"></span>
           <?php render_section_add_button($sname, $sfolder); ?>
           <span class="sec-tail">
             <?= indent_controls() ?>

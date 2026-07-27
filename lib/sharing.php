@@ -141,7 +141,12 @@ function share_modal_html(string $partner): string
 /** The button that opens it — sits beside the Done of whichever window it's in. */
 function share_button_html(): string
 {
-    return '<button type="button" class="sh-open" id="shareBtn">Share</button>';
+    // An icon, sized and shaped like the other two actions in the settings footer.
+    return '<button type="button" class="sh-open setact" id="shareBtn" title="Share" aria-label="Share">'
+         . '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"'
+         . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+         . '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>'
+         . '<path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>';
 }
 
 function share_modal_styles(): string

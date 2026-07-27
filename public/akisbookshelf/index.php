@@ -490,11 +490,14 @@ function books_header(string $titleHtml, bool $withEdit = false): void
         <?php if ($withEdit): ?>
           <button type="button" class="hedit" id="editBtn" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
         <?php endif; ?>
+        <?php // Preferences live in the username's dropdown here too — same menu, no ⋮. ?>
         <div class="usercol">
-          <?= settings_button() ?>
           <div class="usermenu">
             <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
-            <div class="menu" id="userMenu" hidden><a href="?logout">Log out</a></div>
+            <div class="menu" id="userMenu" hidden>
+              <button type="button" id="setBtn">Settings</button>
+              <a href="?logout">Log out</a>
+            </div>
           </div>
         </div>
         <?= settings_modal_html() ?>
@@ -557,8 +560,15 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       background: #1c1c1c; border: 1px solid #333; border-radius: 8px; min-width: 120px;
       box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
     }
-    .usermenu .menu a { display: block; padding: 0.6rem 0.9rem; color: #eee; text-decoration: none; font-size: 0.9rem; }
-    .usermenu .menu a:hover { background: #2a2a2a; }
+    /* Settings and Log out, same as the rest of the suite; the button is dressed to be
+       indistinguishable from the link beside it. */
+    .usermenu .menu a, .usermenu .menu button {
+      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: #eee;
+      text-decoration: none; font-size: 0.9rem; text-align: left; background: none;
+      border: none; border-radius: 0; font-family: inherit; cursor: pointer;
+    }
+    .usermenu .menu a:hover, .usermenu .menu button:hover { background: #2a2a2a; }
+    .usermenu .menu button { border-bottom: 1px solid #333; }
 
     /* Bottom main menu bar (standalone app): Library / Read / Want To Read / Data */
     body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
