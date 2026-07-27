@@ -88,8 +88,10 @@ function chrome_styles(): string
     .section-head.collapsed + .nlist { display: none; }
     /* The "+" sits immediately to the right of the section name — closer than the
        header's own 0.75rem gap, which reads as a gulf at this size. The delete × is
-       still pushed to the far right of the header. */
-    .section-head .sec-add { margin-left: -0.45rem; }
+       still pushed to the far right of the header.
+       Direct child only: in Notes the "+" is wrapped in a form that carries this pull
+       itself, and a descendant selector here would apply it a second time. */
+    .section-head > .sec-add { margin-left: -0.45rem; }
     /* A folder's collapse chevron, in the "All" view when more than one folder shows.
        Same shape/behaviour as a section's, kept a separate class so the two collapse
        states never collide. */

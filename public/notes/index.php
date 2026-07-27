@@ -413,10 +413,13 @@ if (!$editing) {
         else { $ungrouped[] = $n; }
     }
 
-    // Which folders are actually represented. Derived from the *notes* as well as the
-    // sections — a folder can hold nothing but loose notes and still deserves a heading,
-    // which is why grouping by section rows alone showed nothing here.
-    $folderOrder = [];
+    // In "All", show a block per folder — the user's folders in their own order, so an
+    // empty one still gets a heading and a "+" to add into. Anything a note or section
+    // claims that isn't in the list any more is appended, so nothing hides.
+    // Deriving this from content alone was the bug: with every note in General (which is
+    // where notes added from "All" land) there was only ever one folder, so the headings
+    // silently never appeared.
+    $folderOrder = $folders;
     foreach ($secRows as $s) {
         $f = (string) ($s['folder'] ?? FOLDER_DEFAULT);
         if (!in_array($f, $folderOrder, true)) { $folderOrder[] = $f; }
@@ -571,9 +574,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
        header's gap is the rows' gap, so the name sits the same distance from the +
        as from the pencil on its other side. */
-    /* The + rides in a form here, so the pull-in goes on the form, not the button. Less
-       of a pull than Reminders takes — the form wrapper sits tighter to the name. */
-    .section-head form.sec-add-form { margin-left: -0.2rem; }
+    /* The + rides in a form here, so the pull-in goes on the form, not the button —
+       the same -0.45rem Reminders puts on its bare button, so the two apps match. */
+    .section-head form.sec-add-form { margin-left: -0.45rem; }
     /* The permanent group's plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
