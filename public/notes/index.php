@@ -412,6 +412,66 @@ if (!$editing) {
         if ($s !== '' && isset($secByKey[$key])) { $grouped[$secByKey[$key]][] = $n; }
         else { $ungrouped[] = $n; }
     }
+
+    // Which folders are actually represented. Derived from the *notes* as well as the
+    // sections — a folder can hold nothing but loose notes and still deserves a heading,
+    // which is why grouping by section rows alone showed nothing here.
+    $folderOrder = [];
+    foreach ($secRows as $s) {
+        $f = (string) ($s['folder'] ?? FOLDER_DEFAULT);
+        if (!in_array($f, $folderOrder, true)) { $folderOrder[] = $f; }
+    }
+    foreach ($listNotes as $n) {
+        $f = (string) ($n['folder'] ?? FOLDER_DEFAULT);
+        if (!in_array($f, $folderOrder, true)) { $folderOrder[] = $f; }
+    }
+    $showFolders = $viewFolder === 'All' && count($folderOrder) > 1;
+
+    // Sections and loose notes bucketed per folder, so each folder block can hold both.
+    $secByFolder   = [];
+    $looseByFolder = [];
+    foreach ($secRows as $s)    { $secByFolder[(string) ($s['folder'] ?? FOLDER_DEFAULT)][] = $s; }
+    foreach ($ungrouped as $n)  { $looseByFolder[(string) ($n['folder'] ?? FOLDER_DEFAULT)][] = $n; }
+}
+
+/** One of the user's own sections: its header and the notes under it. Pulled out of the
+ *  markup because it's rendered from two places now — the flat list, and once per folder
+ *  when the All view is grouping by folder. */
+function render_note_section(array $s, array $grouped, string $csrf, string $view): void
+{
+    $sname   = (string) $s['name'];
+    $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT);
+    ?>
+    <div class="section-head" data-folder="<?= e($sfolder) ?>">
+      <?= section_collapse_button() ?>
+      <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
+            '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
+      <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+      <form method="post" action="" style="display:inline">
+        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+        <input type="hidden" name="action" value="delete_section">
+        <input type="hidden" name="view" value="<?= e($view) ?>">
+        <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+        <input type="hidden" name="name" value="<?= e($sname) ?>">
+        <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+      </form>
+    </div>
+    <?php
+    render_note_rows($grouped[$s['id']] ?? [], $view, $csrf, $sname, '');
+}
+
+/** The permanent "Notes" group — the catch-all for notes that aren't in a section.
+ *  $folder is where a note added from its "+" lands. */
+function render_note_default_group(array $rows, string $csrf, string $view, string $folder): void
+{
+    ?>
+    <div class="section-head">
+      <?= section_collapse_button() ?>
+      <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
+      <?php render_section_add('', $csrf, $view, $folder); ?>
+    </div>
+    <?php
+    render_note_rows($rows, $view, $csrf);
 }
 
 /** Echo a list of note rows. Always emitted, since an empty one is a drag target. */
@@ -691,18 +751,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
   <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">
-    <?php
-      // Folder labels + dividers: only in "All", and only once more than one folder is
-      // actually represented among the visible sections.
-      $secFolders  = array_unique(array_map(fn($s) => (string) ($s['folder'] ?? FOLDER_DEFAULT), $secRows));
-      $showFolders = $viewFolder === 'All' && count($secFolders) > 1;
-      $prevFolder  = null;
-    ?>
-    <?php foreach ($secRows as $s): ?>
-      <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
-      <?php $rows = $grouped[$s['id']] ?? []; ?>
-      <?php if ($showFolders && $sfolder !== $prevFolder): ?>
-        <?php if ($prevFolder !== null): ?></div><?php endif; ?>
+    <?php if ($showFolders): ?>
+      <?php // "All" across several folders: one collapsible block per folder, each
+            // holding that folder's own sections and then its loose notes. ?>
+      <?php foreach ($folderOrder as $sfolder): ?>
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
             <?= folder_collapse_button() ?>
@@ -712,35 +764,19 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
             <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
             <span class="folder-rule" aria-hidden="true"></span>
           </div>
-      <?php endif; ?>
-      <?php $prevFolder = $sfolder; ?>
-      <?php // Sections always render, empty or not — like the permanent Notes group below.
-            // Each belongs to one folder; its rename and delete carry that folder. ?>
-      <div class="section-head" data-folder="<?= e($sfolder) ?>">
-        <?= section_collapse_button() ?>
-        <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
-              '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-        <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
-        <form method="post" action="" style="display:inline">
-          <input type="hidden" name="csrf" value="<?= $csrf ?>">
-          <input type="hidden" name="action" value="delete_section">
-          <input type="hidden" name="view" value="<?= e($view) ?>">
-          <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-          <input type="hidden" name="name" value="<?= e($sname) ?>">
-          <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-        </form>
-      </div>
-      <?php render_note_rows($rows, $view, $csrf, $sname, ''); ?>
-    <?php endforeach; ?>
-    <?php if ($showFolders && $prevFolder !== null): ?></div><?php endif; ?>
-
-    <!-- Permanent "Notes" group: always last, not deletable. -->
-    <div class="section-head">
-      <?= section_collapse_button() ?>
-      <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
-      <?php render_section_add('', $csrf, $view, $addTarget); ?>
-    </div>
-    <?php render_note_rows($ungrouped, $view, $csrf); ?>
+          <?php foreach ($secByFolder[$sfolder] ?? [] as $s) {
+                  render_note_section($s, $grouped, $csrf, $view);
+                } ?>
+          <?php // This folder's catch-all. A note added from its + lands in this folder. ?>
+          <?php render_note_default_group($looseByFolder[$sfolder] ?? [], $csrf, $view, $sfolder); ?>
+        </div>
+      <?php endforeach; ?>
+    <?php else: ?>
+      <?php // One folder in view: the plain flat list, no folder headings. ?>
+      <?php foreach ($secRows as $s) { render_note_section($s, $grouped, $csrf, $view); } ?>
+      <!-- Permanent "Notes" group: always last, not deletable. -->
+      <?php render_note_default_group($ungrouped, $csrf, $view, $addTarget); ?>
+    <?php endif; ?>
    </div>
 
 <?php else: ?>
