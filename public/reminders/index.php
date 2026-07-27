@@ -674,10 +674,10 @@ $sectionInput =
     /* The + on each section header, and the row it opens. The "+" sits slightly low in
        the flex box, so nudge it up (padding-bottom, with border-box) to centre it. */
     .sec-add {
-      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
-      border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
-      cursor: pointer; font-family: inherit; display: inline-flex;
-      align-items: center; justify-content: center; padding: 0 0 1px;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
+      color: var(--accent); border-radius: 999px; width: 20px; height: 20px;
+      font-size: 0.85rem; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
@@ -762,12 +762,16 @@ $sectionInput =
        two read as different levels of the same hierarchy rather than competing. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
     .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; }
+    /* The dot sits a little further off the name than the chevron does. */
+    .folder-head .fdot { margin-left: 0.4rem; }
     .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
-    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    /* The permanent groups' plain-span title, matching the field version's metrics so
+       both sit on the same centre line as the chevron and the "+". */
+    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
