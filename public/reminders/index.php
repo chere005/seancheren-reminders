@@ -675,9 +675,9 @@ $sectionInput =
        the flex box, so nudge it up (padding-bottom, with border-box) to centre it. */
     .sec-add {
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
-      border-radius: 999px; width: 24px; height: 24px; font-size: 1rem; line-height: 1;
+      border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex;
-      align-items: center; justify-content: center; padding: 0 0 2px;
+      align-items: center; justify-content: center; padding: 0 0 1px;
     }
     .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
@@ -845,7 +845,7 @@ $sectionInput =
     /* On a section header the + and the drag handle share one slot on the left: the +
        out of edit mode, the handle in it. Same width either way, so the name never
        shifts — and the two permanent groups keep the empty slot for the same reason. */
-    .section-head .sec-handle { width: 24px; visibility: visible; display: none; }
+    .section-head .sec-handle { width: 20px; visibility: visible; display: none; }
     /* The header's gap is the rows' gap, so the name sits the same distance from the
        + as it does from the pencil on its other side. */
     body.editing .section-head .sec-handle { display: inline-flex; }

@@ -17,6 +17,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     $text = trim((string) ($_POST['text'] ?? ''));
     $act  = (string) ($_POST['action'] ?? '');
     $flash = '';
+    // Ticking one reminder off from the widget's checkbox. The write happens here, in
+    // the signed-in session with a CSRF token — the widget's token stays read-only.
+    if ($act === 'tick') {
+        $id = (string) ($_POST['id'] ?? '');
+        $f  = user_data_file($cfg['data_dir'], 'reminders');
+        $l  = store_read($f);
+        foreach ($l as &$r) {
+            if (($r['type'] ?? '') === 'section' || ($r['id'] ?? '') !== $id) { continue; }
+            $rep = repeat_get($r);
+            if ($rep !== null && empty($r['done']) && !empty($r['due'])) {
+                // A repeat never finishes: ticking rolls it to the next date instead.
+                $r['due'] = repeat_next($r['due'], $rep, max($r['due'], $today));
+                $flash = 'Moved to ' . date('D, M j', strtotime($r['due']));
+            } else {
+                $r['done'] = true;
+                $flash = 'Done · ' . mb_substr((string) ($r['text'] ?? ''), 0, 60);
+            }
+            break;
+        }
+        unset($r);
+        store_write($f, array_values($l));
+        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?ok=' . rawurlencode($flash));
+        exit;
+    }
     // "Vet 8/3 2pm" -> text "Vet", date 2026-08-03, time 14:00; no date means today.
     [$ptext, $pdate, $ptime] = parse_when_from_text($text);
     $when = $pdate ?? $today;
@@ -41,6 +65,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
 }
 $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
 function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES); }
+
+// ?tick=<id> — the widget's checkbox landed here. Show that one reminder with a single
+// button, so the actual change is still a POST with a token rather than a bare GET.
+$tickId = isset($_GET['tick']) ? (string) $_GET['tick'] : '';
+$tick   = null;
+if ($tickId !== '') {
+    foreach (store_read(user_data_file($cfg['data_dir'], 'reminders')) as $r) {
+        if (($r['type'] ?? '') !== 'section' && ($r['id'] ?? '') === $tickId) { $tick = $r; break; }
+    }
+}
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,10 +108,29 @@ function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES
     .open { display: inline-block; margin-top: 1.25rem; color: #888; text-decoration: none; font-size: 0.9rem; }
     .open:hover { color: #fff; }
     .hint { color: #666; font-size: 0.78rem; margin-top: 0.6rem; }
+    /* The one reminder the widget's checkbox was pointing at. */
+    .tickwhat { font-size: 1.15rem; color: #ddd; margin: 0.9rem 0 1.25rem; word-break: break-word; }
+    a.qb { text-decoration: none; }
   </style>
 </head>
 <body>
 <div class="wrap">
+  <?php if ($tick !== null && empty($tick['done'])): ?>
+    <h1>Mark done?</h1>
+    <p class="tickwhat"><?= e((string) ($tick['text'] ?? '')) ?></p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="tick">
+      <input type="hidden" name="id" value="<?= e($tickId) ?>">
+      <div class="btns">
+        <button type="submit" class="qb rem" title="Mark done"><span>&#10003;</span><span>Done</span></button>
+        <a class="qb evt" href="<?= e(strtok($_SERVER['REQUEST_URI'], '?')) ?>"><span>&#8592;</span><span>Not yet</span></a>
+      </div>
+    </form>
+    <a class="open" href="/calendar/">Open calendar &rsaquo;</a>
+  </div>
+  </body></html>
+  <?php exit; endif; ?>
   <h1>Quick add <span class="day"><?= e(date('D, M j')) ?></span></h1>
   <?php if ($flash !== ''): ?><div class="flash"><?= e($flash) ?></div><?php endif; ?>
   <form method="post" class="bar">
