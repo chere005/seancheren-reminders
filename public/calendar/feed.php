@@ -67,7 +67,10 @@ function feed_scope(string $dir, string $user, ?string $pin = null): array {
     return [null, $hidden];   // stale id — fall back to everything
 }
 
-/** Upcoming reminders (open, overdue rolled to today) + events + dated notes, next 21 days. */
+/** Upcoming reminders (open, overdue rolled to today) + events, next 21 days.
+ *  Notes are deliberately left out — the widget is for what's *due*, and a dated note
+ *  isn't. They're dropped here rather than only in the script, so a widget still running
+ *  an older copy of the script stops showing them too. */
 function build_feed(string $dir, string $user, ?string $pin = null): array {
     $today = date('Y-m-d');
     $until = date('Y-m-d', strtotime('+21 days'));
@@ -90,7 +93,9 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
             }
         }
         foreach ($days as [$d, $wasRolled]) {
-            $items[] = ['date' => $d, 'kind' => 'reminder', 'text' => (string) ($r['text'] ?? ''),
+            // The id rides along so the widget's checkbox can link back to this one row.
+            $items[] = ['date' => $d, 'kind' => 'reminder', 'id' => (string) ($r['id'] ?? ''),
+                        'text' => (string) ($r['text'] ?? ''),
                         'time' => (string) ($r['time'] ?? ''), 'overdue' => $wasRolled];
         }
     }
@@ -109,11 +114,6 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
             $items[] = ['date' => $d, 'kind' => 'event', 'text' => (string) ($e['text'] ?? ''),
                         'time' => (string) ($e['time'] ?? ''), 'overdue' => false];
         }
-    }
-    foreach (loadlist(ufile($dir, $user, 'notes')) as $n) {
-        if (($n['type'] ?? '') === 'section') { continue; }
-        $d = (string) ($n['date'] ?? '');
-        if ($d >= $today && $d <= $until) { $items[] = ['date' => $d, 'kind' => 'note', 'text' => (string) ($n['title'] ?? 'Untitled note'), 'overdue' => false]; }
     }
     usort($items, fn($a, $b) => [$a['date'], $a['kind']] <=> [$b['date'], $b['kind']]);
     return ['today' => $today, 'items' => array_slice($items, 0, 12)];
@@ -182,7 +182,7 @@ dl.font = Font.mediumSystemFont(13);
 dl.textColor = new Color("#8a8a8a");
 w.addSpacer(8);
 
-// Reminders and events only — notes are left off the widget.
+// Reminders and events only — the feed no longer sends notes at all.
 const META = new Color("#777777");                 // the muted time/date colour
 const items = (data.items || []).filter(it => it.kind !== "note");
 if (data.error) {
@@ -204,9 +204,20 @@ if (data.error) {
     prevDate = it.date;
     const row = w.addStack();
     row.centerAlignContent();
-    const dot = row.addText("●");
-    dot.textColor = new Color(COLORS[it.kind] || "#888888");
-    dot.font = Font.systemFont(9);
+    if (it.kind === "reminder") {
+      // A reminder wears an empty tick box rather than a dot — it's a thing to *do*.
+      // Tapping the row opens the tick page for that one reminder, which does the write
+      // in Safari under your own session (the widget's token is read-only by design).
+      if (it.id) { row.url = OPEN + "?tick=" + encodeURIComponent(it.id); }
+      const box = row.addImage(SFSymbol.named("square").image);
+      box.imageSize = new Size(11, 11);
+      box.tintColor = new Color(it.overdue ? "#ff7755" : COLORS.reminder);
+      box.resizable = true;
+    } else {
+      const dot = row.addText("●");
+      dot.textColor = new Color(COLORS[it.kind] || "#888888");
+      dot.font = Font.systemFont(9);
+    }
     row.addSpacer(6);
     const label = row.addText(it.text || "");
     label.font = Font.systemFont(12);
