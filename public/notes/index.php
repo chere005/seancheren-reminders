@@ -502,7 +502,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* Half a rem off the name — between the section +'s spacing and the old wider gap —
        and centred on the heading's own centre line rather than its text baseline. */
     .folder-head .fdot { margin-left: 0.15rem; align-self: center; }
-    .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
+    /* A short rule on the heading's own line, trailing off to the right edge. It rides
+       in the header rather than sitting between folders, so the first folder gets one
+       too — the gap above each heading is what separates one folder from the next. */
+    .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
@@ -699,13 +702,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
       <?php $rows = $grouped[$s['id']] ?? []; ?>
       <?php if ($showFolders && $sfolder !== $prevFolder): ?>
-        <?php if ($prevFolder !== null): ?></div><div class="folder-divider"></div><?php endif; ?>
+        <?php if ($prevFolder !== null): ?></div><?php endif; ?>
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <div class="folder-label"><?= e($sfolder) ?></div>
-            <?php // The folder's own colour, the same dot its entry wears in the picker. ?>
+            <?php // The folder's own colour, the same dot its entry wears in the picker,
+                  // then a short rule trailing off to the right edge on the same line. ?>
             <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
+            <span class="folder-rule" aria-hidden="true"></span>
           </div>
       <?php endif; ?>
       <?php $prevFolder = $sfolder; ?>
