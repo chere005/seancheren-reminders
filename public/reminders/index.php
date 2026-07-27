@@ -859,11 +859,17 @@ $sectionInput =
     body.editing .section-head .sec-handle { display: inline-flex; }
     body.editing .sec-add { display: none; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: var(--accent); }
-    li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
-    /* Preview while dragging an indented section header over a row: this is where it'll
-       land, and everything from here on splits off to become its subsection. */
-    li.rowsplit-target { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
-    .section-group.dragging { opacity: 0.9; }
+    li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); opacity: 0.45; }
+    /* The single line that says where the drop will land. Nothing else moves until the
+       drop, so this is the only feedback — it has to be unmissable but not shove the
+       list around, hence zero height and a border rather than a block. */
+    .drop-line {
+      list-style: none; height: 0; margin: 0; padding: 0; border: none;
+      border-top: 2px solid var(--accent); box-shadow: 0 0 6px var(--accent-soft);
+      pointer-events: none;
+    }
+    ul.rlist > li.drop-line { display: block; }
+    .section-group.dragging { opacity: 0.45; }
     .section-group.dragging .section-head {
       background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
     }
@@ -1115,10 +1121,40 @@ $sectionInput =
   });
   window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };
   let dragLi = null, dragSection = null;
-  // Where an *indented* section header is hovering when it's being dragged into a row
-  // list (rather than just being reordered among other section headers). Set live during
-  // the drag for the preview highlight; the actual DOM split happens once, on drop.
-  let secDropTarget = null;
+
+  // ----- The outline the drag model works in -----
+  // Level 0 is a section. Level 1 is a subsection or a reminder sitting under a section.
+  // One more indent again is a sub-subsection or a sub-reminder. A section's own indent
+  // is its level; a reminder's level is the level of the section it's sitting in, plus
+  // one. Nothing here is a real tree — it's flat rows read as an outline — so "the
+  // block belonging to a section" is worked out by walking forward, not by nesting.
+  const lvlOf   = g => parseInt(g.style.getPropertyValue('--ind'), 10) || 0;
+  const isTop   = g => lvlOf(g) === 0;
+  // A level-0 section carries everything indented under it: its own rows come along
+  // inside it, and the subsections that follow it come along as whole groups.
+  const blockOf = g => {
+    const out = [g];
+    let n = g.nextElementSibling;
+    while (n && n.classList.contains('section-group') && !isTop(n)) { out.push(n); n = n.nextElementSibling; }
+    return out;
+  };
+  // The level-0 section a group belongs to (itself, if it is one).
+  const topOf = g => { while (g && !isTop(g)) { g = g.previousElementSibling; } return g; };
+
+  // A single line showing where the thing being dragged will land. Nothing moves until
+  // the drop — the old behaviour shuffled the real rows around mid-drag, which made it
+  // impossible to tell what you were about to get.
+  let dropLine = null, dragBlock = null;
+  const clearLine = () => { if (dropLine) { dropLine.remove(); dropLine = null; } };
+  // <li> inside a row list, <div> between section blocks — so the marker is always legal
+  // where it's put and inherits that context's width.
+  const makeLine = tag => { const el = document.createElement(tag); el.className = 'drop-line'; return el; };
+  const lineBefore = (ref, after, tag) => {
+    clearLine();
+    dropLine = makeLine(tag);
+    ref.parentNode.insertBefore(dropLine, after ? ref.nextSibling : ref);
+  };
+  const lineInto = (ul) => { clearLine(); dropLine = makeLine('li'); ul.appendChild(dropLine); };
 
   const persistOrder = () => {
     const order = [];
@@ -1179,8 +1215,11 @@ $sectionInput =
       dragSection = secHandle.closest('.section-group');
       if (!dragSection) return;
       e.preventDefault();
-      dragSection.classList.add('dragging');
-      secDropTarget = null;
+      // A level-0 section travels with everything indented under it, so the whole block
+      // dims together and the whole block is what lands at the line.
+      dragBlock = isTop(dragSection) ? blockOf(dragSection) : [dragSection];
+      dragBlock.forEach(m => m.classList.add('dragging'));
+      clearLine();
       secHandle.setPointerCapture(e.pointerId);
     } else if (remHandle) {
       dragLi = remHandle.closest('li[data-id]');
@@ -1213,75 +1252,92 @@ $sectionInput =
     e.preventDefault();
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if (!under) return;
+    const y = e.clientY;
+
+    if (dragSection && isTop(dragSection)) {
+      // ----- Level 0 -----
+      // A whole section, everything under it travelling with it. It can only land
+      // between other level-0 blocks, never inside one, so its subsections and rows
+      // always stay grouped together underneath it.
+      const g = under.closest('.section-group');
+      if (!g) return;
+      const top = topOf(g);
+      if (!top || dragBlock.includes(top)) { return; }   // over itself: leave the line be
+      const blk   = blockOf(top);
+      const first = blk[0], last = blk[blk.length - 1];
+      const mid   = (first.getBoundingClientRect().top + last.getBoundingClientRect().bottom) / 2;
+      const after = y > mid;
+      lineBefore(after ? last : first, after, 'div');
+      return;
+    }
+
+    // ----- Level 1 -----
+    // A reminder, or a subsection. Either can go between any two level-1 things, which
+    // means anywhere in any row list. A hovered row has to be tested before the group
+    // that contains it, or every row would resolve to "its section" and the line could
+    // never land between two rows.
+    const overLi = under.closest('li[data-id]');
+    if (overLi === dragLi) { return; }        // over itself: leave the line where it is
+    if (overLi) {
+      const r = overLi.getBoundingClientRect();
+      lineBefore(overLi, y > r.top + r.height / 2, 'li');
+      return;
+    }
+    const ul = under.closest('ul.rlist');
+    if (ul) { lineInto(ul); return; }         // past the last row, or an empty list
+    // Not over a row list: the gap around a section header. A reminder drops into that
+    // section's list; a subsection lands beside the header as a sibling group.
+    const g = under.closest('.section-group');
+    if (!g) return;
     if (dragLi) {
-      const overLi = under.closest('li[data-id]');
-      if (overLi && overLi !== dragLi) {
-        const rect  = overLi.getBoundingClientRect();
-        const after = e.clientY > rect.top + rect.height / 2;
-        overLi.parentNode.insertBefore(dragLi, after ? overLi.nextSibling : overLi);
-      } else {
-        const ul = under.closest('ul.rlist');
-        if (ul && ul !== dragLi.parentNode) ul.appendChild(dragLi);
-      }
-    } else {
-      // A hovered row always sits inside *some* .section-group (its own section, or one
-      // of the two permanent ones) — so row detection has to win first, or an indented
-      // section could never reach the row-split branch below; it'd always resolve to
-      // "the group containing this row" and take the header-level reorder instead.
-      const ind    = parseInt(dragSection.style.getPropertyValue('--ind'), 10) || 0;
-      const ownUl  = dragSection.querySelector(':scope > ul.rlist');
-      const overUl = ind > 0 ? under.closest('ul.rlist') : null;
-      if (overUl && overUl !== ownUl) {
-        // Row-level: split this list at the hovered row (or append at the end when
-        // hovering blank space past the last row). Works against any list, including
-        // another subsection's own rows, so a subsection can land between two reminders
-        // or two sub-reminders exactly as freely as a plain reminder can.
-        const overLi = under.closest('li[data-id]');
-        if (secDropTarget && secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
-        const after = overLi ? (e.clientY > overLi.getBoundingClientRect().top + overLi.getBoundingClientRect().height / 2) : true;
-        if (overLi) overLi.classList.add('rowsplit-target');
-        secDropTarget = { ul: overUl, li: overLi, after };
-      } else {
-        if (secDropTarget) { secDropTarget.li && secDropTarget.li.classList.remove('rowsplit-target'); secDropTarget = null; }
-        // Header-level: ordinary section-to-section reorder — always allowed, indented
-        // or not, when the pointer isn't over a droppable row list.
-        const overGroup = under.closest('.section-group');
-        if (overGroup && overGroup !== dragSection) {
-          const rect  = overGroup.getBoundingClientRect();
-          const after = e.clientY > rect.top + rect.height / 2;
-          overGroup.parentNode.insertBefore(dragSection, after ? overGroup.nextSibling : overGroup);
-        }
-      }
+      const gul = g.querySelector(':scope > ul.rlist');
+      if (gul) lineInto(gul);
+      return;
+    }
+    if (g !== dragSection) {
+      const r = g.getBoundingClientRect();
+      lineBefore(g, y > r.top + r.height / 2, 'div');
     }
   }, { passive: false });
 
-  // Split a target section's row list at the drop point: everything from the drop point
-  // to the end moves under the dragged (indented) section header, which is repositioned
-  // right after the target's own (now-shorter) block.
-  const splitIntoDrop = () => {
-    if (!dragSection || !secDropTarget) return;
-    const { ul, li, after } = secDropTarget;
-    li && li.classList.remove('rowsplit-target');
-    const secUl = dragSection.querySelector(':scope > ul.rlist');
-    if (!secUl) return;
-    const kids = [...ul.querySelectorAll(':scope > li[data-id]')];
-    const idx  = li ? kids.indexOf(li) + (after ? 1 : 0) : kids.length;
-    kids.slice(idx).forEach(k => secUl.appendChild(k));
-    const targetGroup = ul.closest('.section-group');
-    if (targetGroup && targetGroup.parentNode) {
-      targetGroup.parentNode.insertBefore(dragSection, targetGroup.nextSibling);
+  // Land whatever's being dragged where the line is showing.
+  const applyDrop = () => {
+    if (!dropLine) { clearLine(); return; }
+    const parent = dropLine.parentNode;
+    if (dragLi) {
+      parent.insertBefore(dragLi, dropLine);
+    } else if (dragSection) {
+      if (!isTop(dragSection) && parent.classList.contains('rlist')) {
+        // A subsection dropped in among rows takes the rows below it: everything from
+        // the line down to the end of that list becomes its. The list only ever holds
+        // one section's rows, so "to the end of the list" *is* "up to the next
+        // subsection or section".
+        const secUl = dragSection.querySelector(':scope > ul.rlist');
+        const trailing = [];
+        for (let n = dropLine.nextElementSibling; n; n = n.nextElementSibling) {
+          if (n.matches('li[data-id]')) trailing.push(n);
+        }
+        const targetGroup = parent.closest('.section-group');
+        if (targetGroup) targetGroup.parentNode.insertBefore(dragSection, targetGroup.nextSibling);
+        if (secUl) trailing.forEach(t => secUl.appendChild(t));
+      } else {
+        // Level 0 moves as a block; a subsection dropped between groups moves alone.
+        const moving = isTop(dragSection) ? (dragBlock || [dragSection]) : [dragSection];
+        moving.forEach(m => parent.insertBefore(m, dropLine));
+      }
     }
+    clearLine();
   };
 
   const endDrag = () => {
     const wasPress = !!pressTimer;      // timer still pending => it was a short tap, not a drag
     const tapLi = tapTextLi;
     cancelPress();
-    if (dragLi) dragLi.classList.remove('dragging');
-    if (dragSection) dragSection.classList.remove('dragging');
     const wasDrag = !!(dragLi || dragSection);
-    splitIntoDrop();
-    secDropTarget = null;
+    applyDrop();
+    if (dragLi) dragLi.classList.remove('dragging');
+    if (dragSection) { dragSection.classList.remove('dragging'); (dragBlock || []).forEach(m => m.classList.remove('dragging')); }
+    dragBlock = null;
     dragLi = null; dragSection = null;
     if (wasDrag) {
       suppressClick = true; setTimeout(() => { suppressClick = false; }, 350);
