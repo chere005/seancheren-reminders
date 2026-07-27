@@ -79,6 +79,17 @@ function chrome_styles(): string
     /* The "+" sits immediately to the right of the section name; the delete × is pushed
        to the far right of the header. */
     .section-head .sec-add { margin-left: 0; }
+    /* A folder's collapse chevron, in the "All" view when more than one folder shows.
+       Same shape/behaviour as a section's, kept a separate class so the two collapse
+       states never collide. */
+    .folder-collapse {
+      flex: 0 0 auto; width: 18px; height: 22px; padding: 0; background: none; border: none;
+      color: #b8860b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);
+    }
+    .folder-collapse:hover { color: #d4a017; }
+    .folder-block.collapsed .folder-collapse { transform: rotate(0deg); }
+    .folder-block.collapsed > *:not(.folder-head) { display: none; }
     CSS
     . settings_modal_styles()
     . confirm_delete_styles()
@@ -317,6 +328,44 @@ function section_collapse_button(): string
          . '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"'
          . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>'
          . '</button>';
+}
+
+/** The chevron that collapses a whole folder's worth of sections in the "All" view —
+ *  same shape as a section's, a different class so the two collapse states (and their
+ *  localStorage keys) never collide. */
+function folder_collapse_button(): string
+{
+    return '<button type="button" class="folder-collapse" title="Collapse folder" aria-label="Collapse folder">'
+         . '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"'
+         . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>'
+         . '</button>';
+}
+
+/** Collapse/expand a folder block by tapping its chevron; remembered per page in
+ *  localStorage, keyed by folder name. Pairs with a `.folder-block[data-folder]`
+ *  wrapper around that folder's sections (Reminders and Notes both build one). */
+function folder_collapse_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var SK = 'foldercollapsed:' + location.pathname;
+  function load() { try { return new Set(JSON.parse(localStorage.getItem(SK) || '[]')); } catch (_) { return new Set(); } }
+  function save(s) { localStorage.setItem(SK, JSON.stringify([].slice.call(s))); }
+  var state = load();
+  document.querySelectorAll('.folder-block').forEach(function (blk) {
+    if (state.has(blk.dataset.folder || '')) { blk.classList.add('collapsed'); }
+  });
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.folder-collapse');
+    if (!btn) { return; }
+    e.preventDefault(); e.stopPropagation();
+    var blk = btn.closest('.folder-block'); if (!blk) { return; }
+    var k = blk.dataset.folder || '', on = blk.classList.toggle('collapsed');
+    if (on) { state.add(k); } else { state.delete(k); }
+    save(state);
+  });
+})();</script>
+JS;
 }
 
 /** Collapse/expand a section by tapping its chevron; the state is remembered per
@@ -597,5 +646,6 @@ function chrome_script(): string
          . swipe_delete_script()
          . section_rename_script()
          . section_collapse_script()
+         . folder_collapse_script()
          . keep_edit_script();
 }

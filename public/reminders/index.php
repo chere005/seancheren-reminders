@@ -747,9 +747,8 @@ $sectionInput =
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
        than one folder together — bigger and a shade darker than a section header, so the
        two read as different levels of the same hierarchy rather than competing. */
-    .folder-label {
-      font-weight: 700; font-size: 1.3rem; color: #b8860b; margin: 1.75rem 0 0 0.25rem;
-    }
+    .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
+    .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; }
     .folder-divider { border-top: 1px solid #2a2a2a; margin: 1.5rem 0 0; }
 
     /* Section headers (bold), grouping reminders */
@@ -933,8 +932,12 @@ $sectionInput =
       <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
       <?php $rows = $grouped[$s['id']] ?? []; ?>
       <?php if ($showFolders && $sfolder !== $prevFolder): ?>
-        <?php if ($prevFolder !== null): ?><div class="folder-divider"></div><?php endif; ?>
-        <div class="folder-label"><?= e($sfolder) ?></div>
+        <?php if ($prevFolder !== null): ?></div><div class="folder-divider"></div><?php endif; ?>
+        <div class="folder-block" data-folder="<?= e($sfolder) ?>">
+          <div class="folder-head">
+            <?= folder_collapse_button() ?>
+            <div class="folder-label"><?= e($sfolder) ?></div>
+          </div>
       <?php endif; ?>
       <?php $prevFolder = $sfolder; ?>
       <?php // Sections always render, empty or not — the same as the permanent Calendar
@@ -964,6 +967,7 @@ $sectionInput =
         <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
       </div>
     <?php endforeach; ?>
+    <?php if ($showFolders && $prevFolder !== null): ?></div><?php endif; ?>
 
     <!-- Permanent "Calendar" group: undated items ride along on the Calendar under today.
          It only makes sense in the default folder (and All), not in every folder. -->
@@ -1193,30 +1197,32 @@ $sectionInput =
         if (ul && ul !== dragLi.parentNode) ul.appendChild(dragLi);
       }
     } else {
-      const overGroup = under.closest('.section-group');
-      if (overGroup && overGroup !== dragSection) {
-        // Ordinary section-to-section reorder — always allowed, indented or not.
-        const rect  = overGroup.getBoundingClientRect();
-        const after = e.clientY > rect.top + rect.height / 2;
-        overGroup.parentNode.insertBefore(dragSection, after ? overGroup.nextSibling : overGroup);
-        if (secDropTarget) { secDropTarget.li && secDropTarget.li.classList.remove('rowsplit-target'); secDropTarget = null; }
+      // A hovered row always sits inside *some* .section-group (its own section, or one
+      // of the two permanent ones) — so row detection has to win first, or an indented
+      // section could never reach the row-split branch below; it'd always resolve to
+      // "the group containing this row" and take the header-level reorder instead.
+      const ind    = parseInt(dragSection.style.getPropertyValue('--ind'), 10) || 0;
+      const ownUl  = dragSection.querySelector(':scope > ul.rlist');
+      const overUl = ind > 0 ? under.closest('ul.rlist') : null;
+      if (overUl && overUl !== ownUl) {
+        // Row-level: split this list at the hovered row (or append at the end when
+        // hovering blank space past the last row). Works against any list, including
+        // another subsection's own rows, so a subsection can land between two reminders
+        // or two sub-reminders exactly as freely as a plain reminder can.
+        const overLi = under.closest('li[data-id]');
+        if (secDropTarget && secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
+        const after = overLi ? (e.clientY > overLi.getBoundingClientRect().top + overLi.getBoundingClientRect().height / 2) : true;
+        if (overLi) overLi.classList.add('rowsplit-target');
+        secDropTarget = { ul: overUl, li: overLi, after };
       } else {
-        // An indented section can additionally be dropped between two reminders (or at
-        // either end of a list) — it becomes that spot's new subsection header, and
-        // whatever followed the drop point moves under it. Preview only; the actual
-        // split happens on drop, in endDrag().
-        const ind = parseInt(dragSection.style.getPropertyValue('--ind'), 10) || 0;
-        const ownUl = dragSection.querySelector(':scope > ul.rlist');
-        const ul = under.closest('ul.rlist');
-        if (ind > 0 && ul && ul !== ownUl) {
-          const overLi = under.closest('li[data-id]');
-          if (secDropTarget && secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
-          const after = overLi ? (e.clientY > overLi.getBoundingClientRect().top + overLi.getBoundingClientRect().height / 2) : true;
-          if (overLi) overLi.classList.add('rowsplit-target');
-          secDropTarget = { ul, li: overLi, after };
-        } else if (secDropTarget) {
-          if (secDropTarget.li) secDropTarget.li.classList.remove('rowsplit-target');
-          secDropTarget = null;
+        if (secDropTarget) { secDropTarget.li && secDropTarget.li.classList.remove('rowsplit-target'); secDropTarget = null; }
+        // Header-level: ordinary section-to-section reorder — always allowed, indented
+        // or not, when the pointer isn't over a droppable row list.
+        const overGroup = under.closest('.section-group');
+        if (overGroup && overGroup !== dragSection) {
+          const rect  = overGroup.getBoundingClientRect();
+          const after = e.clientY > rect.top + rect.height / 2;
+          overGroup.parentNode.insertBefore(dragSection, after ? overGroup.nextSibling : overGroup);
         }
       }
     }
