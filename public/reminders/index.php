@@ -768,8 +768,8 @@ $sectionInput =
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
     .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
-    /* The folder's colour, right of the section's name — the same dot the picker wears. */
-    .fdot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+    /* The folder's colour, right of the folder's name — the same dot the picker wears. */
+    .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
     .section-del {
@@ -952,6 +952,8 @@ $sectionInput =
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <div class="folder-label"><?= e($sfolder) ?></div>
+            <?php // The folder's own colour, the same dot its entry wears in the picker. ?>
+            <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
           </div>
       <?php endif; ?>
       <?php $prevFolder = $sfolder; ?>
@@ -965,9 +967,6 @@ $sectionInput =
           <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
                 '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-          <?php // Which folder this section belongs to, at a glance — the picker's colour. ?>
-          <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>"
-                title="<?= e($sfolder) ?>" aria-hidden="true"></span>
           <?php render_section_add_button($sname, $sfolder); ?>
           <span class="sec-tail">
             <?= indent_controls() ?>
