@@ -19,3 +19,6 @@ ios/**/xcuserdata/
 ios/**/*.xcuserdatad
 ios/build/
 ios/DerivedData/
+
+# Claude Code's per-machine permission grants (the skills themselves are committed)
+.claude/settings.local.json

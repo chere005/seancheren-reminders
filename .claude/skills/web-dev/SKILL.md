@@ -71,7 +71,10 @@ craft that sits under those rules.
 
 ## Before you finish
 
-- Lint: `find public lib -name '*.php' -exec php -l {} \;`
+- Lint: `find public lib -name '*.php' -exec php -l {} \;` — and add `tools` to that
+  list when you've touched anything in it. `deploy.sh` only lints what it deploys
+  (`public` and `lib`), so a broken script in `tools/` sails past the deploy and only
+  shows up when someone runs it, which for the seeders is on the live server.
 - Re-read the diff for the six rules above — especially any new `echo` of a
   variable and any new query.
 - Drive the page to confirm it works (see CLAUDE.md "Working here": start a

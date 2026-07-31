@@ -40,13 +40,16 @@ member/site user). Consequences you must plan around:
 
 - **Files written by PHP are owned by `web`.** A data directory PHP created can
   be `drwx------ web` — so a script you run over SSH (as the login user) hits
-  **Permission denied** on every write to it. This repo already learned this:
-  see the `deploy-perms-and-seed.md` memory and CLAUDE.md's seeding note.
+  **Permission denied** on every write to it. This repo already learned this the
+  hard way; the procedure is written up in CLAUDE.md, under `tools/seed-example.php`.
 - **To run a script *as `web`*, run it over HTTP**, not SSH: drop a small guarded
-  wrapper in `/home/public`, `curl` it once over HTTPS, then delete it. That's
-  the seed-the-demo-account procedure in CLAUDE.md — the failure is *silent*
-  (the script prints success even after the writes were denied), so verify by
-  the real effect, never by the script's own "done" message.
+  wrapper in `/home/public`, `curl` it once over HTTPS, then delete it. That's how
+  both demo-account seeders (`tools/seed-example.php` and `tools/seed-buddy.php`)
+  have to be run on the live site — the failure is *silent* (the script prints
+  success even after the writes were denied), so verify by the real effect (log in
+  as the account it was supposed to create), never by the script's own "done"
+  message. Neither `tools/` nor `data/` is deployed, so the scripts have to be
+  copied up for the run and deleted afterwards.
 - A `0600`/`0700` file created by one user **403s / can't be read by the other**.
   If a deploy or a page suddenly can't read a file, suspect ownership first.
 - The panel offers "fix permissions" / ownership tools; scheduled tasks can be
