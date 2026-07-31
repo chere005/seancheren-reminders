@@ -1,6 +1,7 @@
-# Secure session cookie flags
-php_flag session.cookie_httponly on
-php_value session.cookie_samesite Strict
+# Session cookie flags (httponly, samesite, secure, year-long lifetime) are set in
+# PHP by session_boot() in lib/auth.php — NOT here. NearlyFreeSpeech's Apache rejects
+# php_flag/php_value in .htaccess with a hard 500 ("directive is not supported; use
+# /home/conf/php.ini"), which took the whole suite down. Keep PHP ini out of .htaccess.
 
 # Don't expose server info
 ServerSignature Off
