@@ -356,6 +356,7 @@ foreach ($habitItems as $h) {
     .secfoot button.newsecbtn {
       height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; line-height: 1;
     }
     .secfoot button.newsecbtn:hover { border-color: #888; color: #fff; }
 <?= tabbar_styles() ?>

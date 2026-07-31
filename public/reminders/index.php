@@ -822,8 +822,10 @@ $sectionInput =
     .foldernav #mdShareBtn.copied { border-color: var(--accent); color: var(--accent); }
     body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
-    /* The + on each section header, and the row it opens. The "+" sits slightly low in
-       the flex box, so nudge it up (padding-bottom, with border-box) to centre it. */
+    /* The + on each section header, and the row it opens. Both draw their plus with
+       plus_icon_svg(), so they centre by construction and need no padding nudge. */
+    /* Same grey outlined pill as "+ Section" on the row above (#newSecBtn/.showall) —
+       it's the same act, just against one section — only kept at its small icon size. */
     .sec-add {
       flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
       color: var(--accent); border-radius: 999px; width: 20px; height: 20px;
@@ -842,7 +844,7 @@ $sectionInput =
     .secadd-row .plus {
       flex: 0 0 auto; width: 38px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
-      display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0 0 2px;
+      display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0;
     }
     .secadd-row .plus:hover { background: #52e0ac; }
     /* A time picked out of the typed text, e.g. "2pm". */
@@ -924,12 +926,12 @@ $sectionInput =
     .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
     /* The "+" that adds a section to this folder — edit mode only, right of its name. */
     .fsec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
-      color: var(--accent); border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
+      color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; display: none;
       align-items: center; justify-content: center; padding: 0;
     }
-    .fsec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .fsec-add:hover { border-color: #888; color: #fff; }
     body.editing .fsec-add { display: inline-flex; }
     .fsec-form.newsection { margin: 0; }
 
