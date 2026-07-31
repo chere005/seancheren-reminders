@@ -978,9 +978,15 @@ $sectionInput =
        than one folder together — bigger and a shade darker than a section header, so the
        two read as different levels of the same hierarchy rather than competing. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
-    /* The folder name is the top heading; near-white and larger so it's clearly distinct
-       from the gold section titles under it (the folder's own colour is on the dot). */
-    .folder-label { font-weight: 700; font-size: 1.35rem; color: #f2f2f2; line-height: 1.2; }
+    /* The folder name is the top heading. Near-white read as "just bigger text" against
+       the gold section titles under it, so it's a darker orange — deeper than the section
+       gold, next to the goldenrod chevron beside it — outlined in a hairline of white so
+       it still carries at a glance. paint-order puts the stroke behind the glyph, or the
+       0.5px would eat into the letterforms rather than sit around them. */
+    .folder-label {
+      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: #d97706;
+      -webkit-text-stroke: 0.5px #fff; paint-order: stroke fill;
+    }
     /* Half a rem off the name — between the section +'s spacing and the old wider gap —
        and centred on the heading's own centre line rather than its text baseline. */
     .folder-head .fdot { margin-left: 0.15rem; align-self: center; }
