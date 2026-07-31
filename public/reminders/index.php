@@ -966,9 +966,10 @@ $sectionInput =
         // always a "+" to add against even in an empty folder. ?>
    <div id="rlist-root">
     <?php
-      // Folder headings only earn their place when more than one folder is on screen —
-      // in a single-folder view the picker already says which one you're in.
-      $showFolders = count($viewFolders) > 1;
+      // Show the folder name as a heading over its sections, even when a single folder
+      // is selected — the picker names the current folder, but the heading anchors the
+      // list to it too, and keeps the layout identical whether you're on one or "All".
+      $showFolders = true;
     ?>
     <?php foreach ($viewFolders as $sfolder): ?>
       <?php if ($showFolders): ?>

@@ -795,10 +795,19 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         </div>
       <?php endforeach; ?>
     <?php else: ?>
-      <?php // One folder in view: the plain flat list, no folder headings. ?>
-      <?php foreach ($secRows as $s) { render_note_section($s, $grouped, $csrf, $view); } ?>
-      <!-- Permanent "Notes" group: always last, not deletable. -->
-      <?php render_note_default_group($ungrouped, $csrf, $view, $addTarget); ?>
+      <?php // One folder in view: still head it with the folder's name, so the layout
+            // matches the "All" view and the list stays anchored to the folder you're in. ?>
+      <div class="folder-block" data-folder="<?= e($viewFolder) ?>">
+        <div class="folder-head">
+          <?= folder_collapse_button() ?>
+          <div class="folder-label"><?= e($viewFolder) ?></div>
+          <span class="fdot" style="background:<?= e($folderDotColor($viewFolder)) ?>" aria-hidden="true"></span>
+          <span class="folder-rule" aria-hidden="true"></span>
+        </div>
+        <?php foreach ($secRows as $s) { render_note_section($s, $grouped, $csrf, $view); } ?>
+        <!-- Permanent "Notes" group: always last, not deletable. -->
+        <?php render_note_default_group($ungrouped, $csrf, $view, $addTarget); ?>
+      </div>
     <?php endif; ?>
    </div>
 
