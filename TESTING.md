@@ -1,0 +1,233 @@
+# Testing
+
+```sh
+php tools/test.php              # everything (about 15 seconds)
+php tools/test.php reminders    # one area, by name
+php tools/test.php --list       # the area names and their case counts
+php tools/test.php --keep       # keep the scratch data dir and the server log
+```
+
+Exit code is 0 when everything passed, 1 when anything didn't. `--keep` prints the
+scratch directory it used; `server.log` in there has anything PHP wrote to stderr.
+
+## The bargain
+
+**Change a feature, change its test in the same commit. Add a feature, add a test with
+it. Fix a bug, add the case that would have caught it before you fix it.**
+
+That last one is not ceremony. Every bug listed under `regress` in `tools/test.php` had
+already shipped once. The point of the area is that none of them can ship twice.
+
+This file is the other half of the bargain. It is the map of what the suite covers and
+what it can't, so:
+
+- **Adding an area or a case?** Add it to *What is covered* below, under its area name.
+  The area names in `tools/test.php` and the headings here are meant to line up.
+- **Adding something only a finger can check** — a gesture, an animation, anything you
+  judge by eye? Add it to *What only eyes can check*. A thing that is in neither list is
+  a thing nobody is looking at.
+- **Removing a feature?** Remove its cases and its line here in the same commit, or the
+  next person spends an afternoon working out whether the test or the app is wrong.
+
+## How the harness works
+
+There is no framework, for the same reason there isn't one anywhere else in this repo.
+`tools/test.php`:
+
+1. makes a scratch directory under the system temp dir and points `SUITE_DATA_DIR` at it;
+2. seeds it with the **real** seeders (`tools/seed-example.php`, `tools/seed-buddy.php`),
+   which is itself a test of them;
+3. boots `php -S` against `public/` with that environment;
+4. drives the real pages over real HTTP — sessions, cookies, redirects, CSRF, AJAX
+   headers, the lot — and asserts on what came back and on what landed in storage;
+5. runs the unit-level checks in-process against `lib/`;
+6. tears the server down and deletes the scratch directory.
+
+`SUITE_DATA_DIR` is read in exactly one place, `app_config()` in `lib/auth.php`, and
+nothing else in the suite sets it. **A test run cannot touch `data/`.** It also never
+reads `lib/config.php` for credentials: it signs in as the two accounts it just seeded.
+
+Two kinds of assertion, and the labels say which:
+
+- **Behaviour** — a request is made and the result is checked. Most cases.
+- **Wiring** — the page has to still *contain* the handler, rule or attribute that makes
+  a behaviour possible. Used where the behaviour itself needs a finger. A wiring case
+  can't tell you the gesture feels right; it can tell you someone deleted the line that
+  makes it work, which is how most of these broke in the first place.
+
+## What is covered
+
+### `seed`
+Both seeders build a complete account. Buddy is paired with example both ways — shares
+out its folders and calendar, and example shares back and carries the same dinners from
+its side. Re-seeding is idempotent: it can't double up example's events. The seeders
+write nothing outside the scratch directory.
+
+### `auth`
+Signed-out visitors get the login page and never a leak of app markup. A wrong password
+is refused; a right one redirects to `/calendar/` from whichever app asked. The login
+page is sized to `100svh` and draws no scrollbar. Logout ends the session. A POST with a
+missing or wrong CSRF token is a 400 and writes nothing. One session covers every app.
+
+### `storage`
+Files are `ENC1:`-prefixed and the plaintext is not readable in them. Legacy plaintext
+JSON still reads. `user_data_file()` keeps one person's data out of another's.
+
+### `reminders`
+Adding, with and without a date and time typed into the line. Ticking a plain reminder
+marks it done; ticking a repeat rolls it to the next occurrence instead and never marks
+it done. Inline text edit. Delete needs the confirmed second press. Sections add, rename
+and delete. The subtask `+` creates a child under its parent — same folder, same section,
+`indent` 1, empty, focused on return — and does **not** indent the row it was pressed on.
+A subtask lifts back out. A section can never be indented. `clear_done` removes only the
+ticked rows. The rendered list is undated-first.
+
+### `folders`
+Add and delete, with a deleted folder's items falling back rather than being destroyed.
+The permanent folders can't be deleted. A colour off the palette is refused. The picker's
+three gestures: the box toggles one, a row tap makes it the only one showing, `All` shows
+everything and then hides everything. The default folder. The heading wears its colour as
+a wash and no longer carries a dot.
+
+### `notes`
+Adding opens the editor. A body is sanitised on the way in — `<script>`, event handlers
+and tags off the allowlist are stripped, allowed tags survive. `rt_sanitize()` keeps only
+`rt-*` classes. An old plain-text note is escaped rather than rendered. Folders behave
+like the reminders ones.
+
+### `calendar`
+The day payload is keyed by date. Within a day: events first in time order, then
+reminders, then notes; a day's reminders are undated-first, then oldest, then by time. An
+undated Calendar-folder reminder rides on today and is **not** flagged overdue. Adding,
+editing and deleting an item from the day panel, with delete needing the second press.
+Calendars add, recolour, default and delete. A calendar row tap leaves only it showing and
+`All` puts them back. Ticking a repeat from the calendar rolls it.
+
+### `habits`
+Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
+section colour must come from the palette, and the response says what actually stuck.
+Both views render.
+
+### `add`
+A reminder lands in the chosen folder and section, an event in the chosen calendar, a
+note in the chosen note folder. A destination that doesn't exist falls back instead of
+being taken on trust. The line is parsed for a date and time.
+
+### `sharing`
+`SHARE_PAIRS` is right and a stranger has no partner. A partner's shared folder shows and
+an unshared one doesn't. Writing into a shared folder writes to *their* file, not mine.
+Structural edits to their folder are a 403 that changes nothing. `share_set` both ways.
+
+### `widget`
+The feed refuses a bad token and answers a good one with JSON. **The feed is read-only** —
+a POST behind the token changes nothing. The reminders API has no anonymous read.
+`quick.php` adds for today.
+
+### `lib`
+The parser is slash-only and US-order, and `2/3 cup` parsing as a date is asserted as the
+known limitation it is rather than left to surprise someone. Month and year repeats clamp
+the day (Jan 31 → Feb 28, Feb 29 → Feb 28) instead of sliding. `repeat_next()`.
+`folder_tint()` is 8-digit hex and refuses anything else. `plus_icon_svg()` is never a
+text plus. Every palette has six colours and validates its own; habits borrows the
+reminders tier. `reminders_folder_migrate()` is idempotent. Output is escaped.
+
+### `pages`
+Every page renders for two seeded users with no fatal, warning or notice. The public
+pages need no login. **An empty brand-new account is a working empty suite, not a crash** —
+the case that catches "works for me, my account has data".
+
+### `regress`
+One case per bug that reached a phone. Picker row taps stop the click reaching the PWA
+link interceptor. A partner's folder view still shows the checkmarks. The edit gesture
+opens a section name (and renaming works in Notes as well as Reminders, with the rows
+following the rename). Editing reads the date out of the text; a rename with no date in
+it leaves the date alone; a date picked by hand wins and leaves the text verbatim. Habits
+reorder, and a reorder that never mentions a habit keeps it. The Calendar remembers the
+day and the tab bar is what forgets it. The tab bar `+` uses a symmetric margin.
+
+## What only eyes can check
+
+Everything below is real and none of it is automated. **Every bug reported in the session
+that created this file was in this column** — a click-eater, a link interceptor, a
+two-step gesture, a negative margin. A green run says the data model and the request
+handling are sound. It does not say the app feels right on a phone.
+
+Check these on the **installed home-screen app**, not in desktop Safari — several of the
+failures only exist in standalone mode.
+
+**Every deploy**
+
+- [ ] Every `+` and icon button is visually centred (the standing rule in CLAUDE.md).
+      Check any button the diff touched, on the screen it lives on.
+- [ ] The top bar is on the same line in every app, with the same gap under its rule.
+- [ ] Nothing is clipped by the notch or the home indicator (`env(safe-area-inset-*)`).
+- [ ] Tapping a link doesn't kick you out to Safari with browser chrome.
+
+**Gestures** — one pass per app
+
+- [ ] Long-press (touch) and double-click (desktop) enter edit mode: on a reminder row,
+      a note row, a section head, a folder head, a calendar row.
+- [ ] A section head's gesture opens its **name** for typing, in Reminders and Notes.
+- [ ] A reminder's gesture opens its **text** inline.
+- [ ] Tapping empty space leaves edit mode; Escape leaves edit mode.
+- [ ] The back button is a black × while editing, and it leaves edit mode.
+- [ ] Swipe a row left: the delete appears and deletes on one tap.
+- [ ] Two-press delete fills red on the first press and only deletes on the second.
+- [ ] Drag: a reminder between sections; a whole section as a block; a note; a habit;
+      a habit section; a folder in the manager; a calendar in the manager.
+- [ ] Nothing moves until the drop, and the drop line says where it will land.
+- [ ] Collapse a section and a folder; both survive a reload.
+
+**Calendar**
+
+- [ ] A day is selected by a tap and never by a swipe across the grid.
+- [ ] Swipe up on the grid for week mode; it sticks across a reload.
+- [ ] A firm sideways swipe pages by the same step the arrows do.
+- [ ] Tap a note, come back — you land on the day you were on.
+- [ ] Tap the Calendar tab — you land on today.
+- [ ] Close the app, reopen it — you land on today.
+- [ ] The dots on a day read as "how much is on" and the reminder dot takes the worst
+      state of the day.
+
+**Keyboard and input**
+
+- [ ] iOS does not zoom when a field takes focus (every input is `font-size: 16px`).
+- [ ] The keyboard doesn't cover the field you're typing in.
+- [ ] Autosave in the note editor says Editing… then Saved.
+
+**Widget and quick add**
+
+- [ ] The Scriptable widget still renders after a change to `feed.php`.
+- [ ] Its tick box opens `quick.php?tick=` and the Done button marks or rolls.
+- [ ] A widget built from an older script still works.
+
+**Things the harness deliberately doesn't do**
+
+- No browser: no JavaScript is executed, so anything JS-only is wiring at best.
+- No screenshots and no layout assertions — nothing here measures a pixel.
+- Habit history is random per seed, so nothing asserts on its counts.
+- Aki's Bookshelf is not covered at all; it gates on one username and is its own app.
+- The chat app is only checked for rendering.
+- Nothing tests the live server, TLS, the deploy, or the seeding-over-HTTP procedure.
+- The iOS/watch app in `ios/` is a separate codebase with no tests; build it in Xcode.
+
+## Adding a test
+
+Areas are declared with `area('name')` and cases with `t('label', function () { … });`.
+Assertions are `ok`, `eq`, `has`, `hasnt` — each throws a message the runner prints.
+
+```php
+area('reminders');
+
+t('a thing does what it should', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add',
+        'view' => 'All', 'text' => 'x', 'folder' => 'Reminders', 'section' => ''], $jar);
+    ok(rowBy('example', 'x') !== null, 'it was written');
+});
+```
+
+Helpers: `login()`, `csrf()`, `req()`, `stored()`, `rows()`, `rowBy()`, `datadir()`,
+`showAll()`. Cases in an area run in order and share the seeded account, so a case that
+switches folders off should put them back — `showAll($jar)` — or the next one is reading
+a list something else hid. That is the one sharp edge in here.
