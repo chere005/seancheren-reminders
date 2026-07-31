@@ -42,7 +42,8 @@ function tabbar_styles(): string
       flex: 0 0 auto; width: 44px; height: 44px; align-self: center; margin: -6px 0.4rem 0; padding: 0;
       border-radius: 50%; background: var(--accent, #34d399); color: var(--accent-ink, #06251b);
     }
-    .segmented a.addtab .ico { font-size: 1.7rem; font-weight: 700; }
+    .segmented a.addtab .ico { display: inline-flex; align-items: center; justify-content: center; }
+    .segmented a.addtab .ico svg { display: block; }
     .segmented a.addtab:hover { background: #52e0ac; color: var(--accent-ink, #06251b); }
     .segmented a.addtab.active::before { display: none; }   /* no pill behind the + */
     .segmented a.addtab.active { background: #0f9b73; color: #eafff6; }
@@ -62,10 +63,16 @@ function render_tabbar(string $active): void
     echo '<nav class="tabbar"><div class="segmented">';
     foreach ($tabs as $key => $t) {
         $cls = ($key === $active ? ' active' : '') . (!empty($t['add']) ? ' addtab' : '');
+        // The "+" tab draws its plus as an SVG so it's dead-centre in the round button
+        // regardless of font metrics; the other tabs keep their emoji glyph.
+        $ico = !empty($t['add'])
+            ? '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" '
+              . 'stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
+            : $t['ico'];
         // Icon only; the label stays as the accessible name.
         echo '<a href="' . $t['href'] . '"' . ($cls !== '' ? ' class="' . trim($cls) . '"' : '')
            . ' title="' . $t['label'] . '" aria-label="' . $t['label'] . '">'
-           . '<span class="ico">' . $t['ico'] . '</span></a>';
+           . '<span class="ico">' . $ico . '</span></a>';
     }
     echo '</div></nav>';
     // iOS home-screen (standalone) apps otherwise open internal links in Safari
