@@ -556,7 +556,10 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         if (!row) { return; }
         var box = row.querySelector('.fvis');
         if (!box || !CSRF) { return; }                      // no boxes here: plain navigation
-        e.preventDefault();
+        // stopPropagation as well as preventDefault: in a home-screen PWA tabbar.php has a
+        // click listener on document that navigates same-origin links itself, and it would
+        // otherwise leave the page before this POST had gone anywhere.
+        e.preventDefault(); e.stopPropagation();
         var href = row.getAttribute('href'), keys = allKeys();
         var go = function () { location.href = href; };
         before();

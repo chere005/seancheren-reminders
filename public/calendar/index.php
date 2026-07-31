@@ -2096,7 +2096,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       a.addEventListener('click', e => {
         if (e.target.closest('.cvis')) { return; }
         if (a.classList.contains('calpick-manage')) { close(); return; }   // opens the manager, not a nav
-        e.preventDefault();
+        // stopPropagation too — tabbar.php navigates same-origin links from a document
+        // listener in standalone mode, which would beat the POST below to it.
+        e.preventDefault(); e.stopPropagation();
         const u = new URL(a.href, location.href);
         if (selected) u.searchParams.set('day', selected);
         u.searchParams.set('ym', '<?= e($ym) ?>');
