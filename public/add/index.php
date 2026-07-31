@@ -99,7 +99,11 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
     .qb.rem { color: var(--k-reminder); border-color: #2a4a3d; }
     .qb.evt { color: var(--k-event); border-color: #24506a; }
     .qb.note { color: var(--k-note); border-color: #5a4a24; }
-    .dtrow { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+    .dtbtn { margin-top: 0.9rem; padding: 0.5rem 0.9rem; background: none; border: 1px solid #333;
+      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
+    .dtbtn:hover { border-color: #888; color: #fff; }
+    .dtrow[hidden] { display: none; }
+    .dtrow { display: flex; gap: 0.75rem; margin-top: 0.9rem; }
     .dtrow label { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: #999; }
     .dtrow input { padding: 0.6rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
       color: #eee; font-size: 16px; font-family: inherit; }
@@ -119,15 +123,17 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
   <form method="post" class="bar">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="text" name="text" placeholder="e.g. Dentist 8/3 2pm…" autocomplete="off" autofocus required>
-    <?php // Optional explicit date/time; either wins over whatever the text parses to. ?>
-    <div class="dtrow">
-      <label>Date <input type="date" name="date"></label>
-      <label>Time <input type="time" name="time"></label>
-    </div>
     <div class="btns">
       <button type="submit" name="action" value="add_reminder" class="qb rem" title="Add reminder"><span>&#10003;</span><span>Reminder</span></button>
       <button type="submit" name="action" value="add_event" class="qb evt" title="Add event"><span>&#128197;</span><span>Event</span></button>
       <button type="submit" name="action" value="add_note" class="qb note" title="Add note"><span>&#128221;</span><span>Note</span></button>
+    </div>
+    <?php // Optional explicit date/time, hidden until asked for; either wins over what the
+          // text parses to. An event with no date at all is still filed today. ?>
+    <button type="button" class="dtbtn" id="dtToggle">+ Date/Time</button>
+    <div class="dtrow" id="dtRow" hidden>
+      <label>Date <input type="date" name="date"></label>
+      <label>Time <input type="time" name="time"></label>
     </div>
   </form>
   <div class="syntax">
@@ -138,8 +144,12 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
       <li><b>8/3/26</b> or <b>8/3/2026</b> — a full date</li>
       <li>e.g. <b>Vet 8/3 2pm</b> → “Vet”, Aug 3, 2:00pm</li>
     </ul>
-    <p class="shead">Reminders and notes can be undated; an event with no date is filed today.</p>
   </div>
+  <script>(function(){
+    var b=document.getElementById('dtToggle'), r=document.getElementById('dtRow');
+    if(b&&r){ b.addEventListener('click',function(){ r.hidden=!r.hidden; b.hidden=true;
+      var d=r.querySelector('input[type=date]'); if(d) d.focus(); }); }
+  })();</script>
 </div>
 <?php render_tabbar('add'); ?>
 </body>
