@@ -168,14 +168,14 @@ function reminders_markdown(array $secRows, array $grouped, array $looseByFolder
     return trim($md);
 }
 
-/** The edit-mode ‹ › pair that outdents / indents an item into a subsection. The row's
- *  id and the CSRF/view come from the DOM, so this is the same markup for rows and heads. */
-function indent_controls(): string
+/** The edit-mode "+" that makes a reminder a subtask of the one above it (or lifts it
+ *  back). Reminders only, one level deep — there are no sub-subtasks and sections don't
+ *  indent. It lights up when the row is already a subtask. */
+function subtask_toggle(int $ind): string
 {
-    return '<span class="indent-ctrls">'
-         . '<button type="button" class="indent-btn" data-dir="out" title="Outdent" aria-label="Outdent">&lsaquo;</button>'
-         . '<button type="button" class="indent-btn" data-dir="in" title="Indent (subsection)" aria-label="Indent">&rsaquo;</button>'
-         . '</span>';
+    $on = $ind > 0 ? ' on' : '';
+    return '<button type="button" class="subtask-btn' . $on . '" title="Make subtask"'
+         . ' aria-label="Make subtask">+</button>';
 }
 
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
@@ -192,7 +192,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
         }
         ?>
         <li class="swipe-row <?= $done ? 'done' : '' ?>"
-            style="--ind:<?= (int) ($r['indent'] ?? 0) ?>"
+            style="--ind:<?= min(1, (int) ($r['indent'] ?? 0)) ?>"
             data-id="<?= e($r['id']) ?>"
             data-pos="<?= $pos++ ?>"
             data-done="<?= $done ? '1' : '0' ?>"
@@ -214,7 +214,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $when ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
-          <?= indent_controls() ?>
+          <?= subtask_toggle(min(1, (int) ($r['indent'] ?? 0))) ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
@@ -447,13 +447,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
-    // Indent a reminder or section into a subsection (visual only): store its level 0–4.
+    // Make a reminder a subtask of the one above it (visual only): 0 = task, 1 = subtask.
+    // One level only, reminders only — a section is always level 0.
     if ($_POST['action'] === 'set_indent') {
         $id   = (string) ($_POST['id'] ?? '');
-        $ind  = max(0, min(4, (int) ($_POST['indent'] ?? 0)));
+        $ind  = max(0, min(1, (int) ($_POST['indent'] ?? 0)));
         $list = load_reminders($dataFile);
         foreach ($list as &$it) {
-            if (($it['id'] ?? '') === $id) { $it['indent'] = $ind; break; }
+            if (($it['id'] ?? '') === $id) { $it['indent'] = is_section($it) ? 0 : $ind; break; }
         }
         unset($it);
         save_reminders($dataFile, $list);
@@ -821,23 +822,23 @@ $sectionInput =
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
-    /* Subsections: padding-left indents the content, so the delete × stays pinned to the
-       right edge and every × lines up down the app. The indent level is a CSS var. */
+    /* A subtask (indent 1) is padded in one level, so the delete × stays pinned to the
+       right edge and every × lines up down the app. Sections never indent. */
     ul.rlist > li { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
-    .section-head { padding-left: calc(0.25rem + var(--ind, 0) * 1.5rem); }
-    /* The right-hand tail of a section header (indent arrows + delete), pushed to the edge.
-       Same gap as a row's own trailing gap, so the ‹ › cluster sits the same distance from
-       the × on a section header as it does on a reminder row. */
+    .section-head { padding-left: 0.25rem; }
+    /* The right-hand tail of a section header (just the delete now), pushed to the edge. */
     .section-head .sec-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.75rem; }
     .section-head .sec-tail form { margin-left: 0; }
-    /* Indent controls: edit mode only, to the right of a row or section. */
-    .indent-ctrls { display: none; flex: 0 0 auto; align-items: center; gap: 0.15rem; }
-    body.editing .indent-ctrls { display: inline-flex; }
-    .indent-btn {
-      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
-      padding: 0.3rem 0.4rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+    /* The "+ subtask" toggle: edit mode only, just left of a row's delete ×. It lights up
+       in the accent when the row is already a subtask, so it reads as on/off. */
+    .subtask-btn {
+      display: none; flex: 0 0 auto; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid #444;
+      color: #999; border-radius: 6px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
-    .indent-btn:hover { border-color: #888; color: #ccc; }
+    body.editing .subtask-btn { display: inline-flex; }
+    .subtask-btn:hover { border-color: #888; color: #ccc; }
+    .subtask-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
     ul { list-style: none; }
     li {
@@ -1031,7 +1032,7 @@ $sectionInput =
         <?php if ($folderOf($s) !== $sfolder) { continue; } ?>
         <?php $sname = (string) $s['name']; ?>
         <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>"
-             data-id="<?= e($s['id']) ?>" style="--ind:<?= (int) ($s['indent'] ?? 0) ?>">
+             data-id="<?= e($s['id']) ?>" style="--ind:0">
           <div class="section-head">
             <?= section_collapse_button() ?>
             <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
@@ -1039,7 +1040,6 @@ $sectionInput =
                   '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
             <?php render_section_add_button($sname, $sfolder); ?>
             <span class="sec-tail">
-              <?= indent_controls() ?>
               <form method="post" action="" style="display:inline">
                 <input type="hidden" name="csrf" value="<?= $csrf ?>">
                 <input type="hidden" name="action" value="delete_section">
@@ -1292,7 +1292,7 @@ $sectionInput =
       remHandle.setPointerCapture(e.pointerId);
     } else {
       // Hold anywhere on a reminder to drag it; a short tap on its text edits it.
-      if (e.target.closest('.check, .del, form, input')) return;
+      if (e.target.closest('.check, .del, .subtask-btn, form, input')) return;
       const li = e.target.closest('li[data-id]'); if (!li) return;
       tapTextLi = e.target.closest('.text') ? li : null;
       pressTimer = setTimeout(() => { pressTimer = null; beginItem(li); }, 250);
@@ -1471,14 +1471,15 @@ $sectionInput =
     setEdit(false);
   });
 
-  // ----- Indent / outdent a reminder or section into a subsection (edit mode) -----
+  // ----- Make a reminder a subtask of the one above it, or lift it back (edit mode) -----
+  // One level only: the + flips the row between task (0) and subtask (1).
   document.addEventListener('click', (e) => {
-    const b = e.target.closest('.indent-btn'); if (!b) return;
+    const b = e.target.closest('.subtask-btn'); if (!b) return;
     e.preventDefault(); e.stopPropagation();
-    const host = b.closest('[data-id]'); if (!host) return;
-    let ind = parseInt(host.style.getPropertyValue('--ind'), 10); if (isNaN(ind)) ind = 0;
-    ind = Math.max(0, Math.min(4, ind + (b.dataset.dir === 'in' ? 1 : -1)));
+    const host = b.closest('li[data-id]'); if (!host) return;
+    const ind = (parseInt(host.style.getPropertyValue('--ind'), 10) || 0) > 0 ? 0 : 1;
     host.style.setProperty('--ind', ind);
+    b.classList.toggle('on', ind > 0);
     const body = new URLSearchParams({ csrf: CSRF, action: 'set_indent', view: VIEW, id: host.dataset.id, indent: ind });
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
   });
