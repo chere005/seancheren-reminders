@@ -70,11 +70,19 @@ function render_tabbar(string $active): void
               . 'stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
             : $t['ico'];
         // Icon only; the label stays as the accessible name.
-        echo '<a href="' . $t['href'] . '"' . ($cls !== '' ? ' class="' . trim($cls) . '"' : '')
+        echo '<a href="' . $t['href'] . '" data-tab="' . $key . '"'
+           . ($cls !== '' ? ' class="' . trim($cls) . '"' : '')
            . ' title="' . $t['label'] . '" aria-label="' . $t['label'] . '">'
            . '<span class="ico">' . $ico . '</span></a>';
     }
     echo '</div></nav>';
+    // The Calendar tab means "today". The Calendar remembers the day you were looking at
+    // so that coming back from a note or a reminder lands you where you left it, and this
+    // button is the way to ask for today again — along with closing the app, since the
+    // memory lives in sessionStorage and goes with the session.
+    echo '<script>document.addEventListener("click",function(e){'
+       . 'var a=e.target.closest&&e.target.closest(\'a[data-tab="calendar"]\');'
+       . 'if(a){try{sessionStorage.removeItem("calDay");}catch(_){}}},true);</script>';
     // iOS home-screen (standalone) apps otherwise open internal links in Safari
     // with the browser chrome; intercept same-origin links so they stay in the app.
     echo '<script>if(window.navigator.standalone){document.addEventListener("click",function(e){'
