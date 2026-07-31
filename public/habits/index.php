@@ -256,8 +256,15 @@ foreach ($habitItems as $h) {
       text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
     }
-    /* Today's whole column is tinted so it's obvious at a glance. */
-    .colhead.today { color: var(--accent); font-weight: 700; background: var(--accent-soft); }
+    /* Today's column has to be findable at a glance on a phone, where five columns of
+       small squares look much alike. The 6px grid gap means a background tint can't
+       actually join the column up — it draws as one faint patch behind the head and
+       nothing under it — so today is marked twice instead: a filled pill on the head,
+       and an accent ring on every cell below it (see .cell.today). */
+    .colhead.today {
+      color: var(--accent-ink); font-weight: 700; background: var(--accent);
+      border-radius: 8px; padding: 0.3rem 0 0.35rem;
+    }
     .colhead.ahead { color: #666; }        /* tomorrow, ticked off early */
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     .corner { }
@@ -304,10 +311,13 @@ foreach ($habitItems as $h) {
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
       border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
     }
-    .cell.today { border-color: var(--accent); background: var(--accent-soft); }
+    /* 2px rather than 1px, and box-sizing keeps the square exactly the same size, so
+       today's column doesn't shift the grid by a pixel as the date rolls over. */
+    .cell.today { border: 2px solid var(--accent); background: var(--accent-soft); }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
     .cell.done { background: var(--accent); border-color: var(--accent); }
-    .cell.done.today { border-color: #eee; }
+    /* A ticked cell is already accent-filled, so today's ring has to be the light one. */
+    .cell.done.today { border-color: #eafff6; }
     .cell:active { transform: scale(0.94); }
 
     .empty { color: #666; text-align: center; padding: 2rem 0; }
@@ -336,7 +346,9 @@ foreach ($habitItems as $h) {
       aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
       justify-content: center; gap: 0.2rem; border-radius: 8px; border: 1px solid transparent;
     }
-    .mgrid .mcell.today { border-color: var(--accent); background: var(--accent-soft); }
+    /* Same as the week grid: a 2px accent ring, which reads at this size where a 1px
+       one on a transparent border disappeared against the pies. */
+    .mgrid .mcell.today { border: 2px solid var(--accent); background: var(--accent-soft); }
     .mgrid .mcell.blank { visibility: hidden; }
     .mgrid .mcell .pie {
       width: 60%; max-width: 34px; aspect-ratio: 1 / 1; border-radius: 50%;
@@ -344,7 +356,12 @@ foreach ($habitItems as $h) {
     }
     .mgrid .mcell.ahead .pie { opacity: 0.4; }
     .mgrid .mcell .dnum { font-size: 0.65rem; color: #777; line-height: 1; }
-    .mgrid .mcell.today .dnum { color: var(--accent); font-weight: 700; }
+    /* Today's number is a filled chip, the one thing on the month that isn't a circle
+       or a bare numeral, so the eye lands on it without hunting for the ring. */
+    .mgrid .mcell.today .dnum {
+      color: var(--accent-ink); font-weight: 700; background: var(--accent);
+      border-radius: 999px; padding: 0.1rem 0.4rem;
+    }
     .mlegend { margin-top: 0.9rem; font-size: 0.78rem; color: #666; text-align: center; }
 
     /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
