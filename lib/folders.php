@@ -602,10 +602,6 @@ function folder_nav_styles(): string
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
     }
     .folderpick-menu[hidden] { display: none; }
-    .folderpick-group {
-      color: #777; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.05em; padding: 0.45rem 0.6rem 0.2rem;
-    }
     .folderpick-opt {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem;
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;

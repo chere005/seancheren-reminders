@@ -1853,18 +1853,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   });
 
 
-  // A checkbox row: ticked/unticked calls back with the new state.
-  function checkRow(label, checked, onChange) {
-    const li = document.createElement('li');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.className = 'cmember'; cb.checked = checked;
-    cb.addEventListener('change', () => onChange(cb.checked));
-    const name = document.createElement('span');
-    name.className = 'cname'; name.textContent = label;
-    li.append(cb, name);
-    li.addEventListener('click', e => { if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); } });
-    return li;
-  }
   function subHead(text) {
     const li = document.createElement('li');
     li.className = 'calempty'; li.style.background = 'none'; li.style.border = 'none';
