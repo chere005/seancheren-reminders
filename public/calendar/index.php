@@ -488,7 +488,7 @@ foreach ($onlyFolder === null ? load_reminder_list(user_data_file($cfg['data_dir
         // A riding item isn't late — it just lives on today — so don't mark it overdue.
         $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                         'done' => $done, 'rolled' => (!$rides && $wasRolled),
-                        'due' => $r['due'] ?? null, 'rep' => $rep,
+                        'due' => $r['due'] ?? null, 'time' => $r['time'] ?? null, 'rep' => $rep,
                         'color' => $remFolderColor[$r['folder'] ?? ''] ?? app_palette('reminders')[0]];
     }
 }
@@ -525,7 +525,7 @@ if ($partner) {
         foreach ($srides ? [[$todayYmd, false]] : $remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
             $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                             'done' => $done, 'rolled' => (!$srides && $wasRolled), 'due' => $r['due'] ?? null,
-                            'rep' => $rep, 'owner' => $partner,
+                            'time' => $r['time'] ?? null, 'rep' => $rep, 'owner' => $partner,
                             'color' => $remFolderTheirs[$f] ?? app_palette('reminders', true)[0]];
         }
     }
@@ -557,7 +557,7 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
 ksort($byDay);
 // Within a day, keep the legend's order — events, then reminders, then notes — so the
 // dots and the day panel read the same way. A stable sort (PHP 8+) leaves events in
-// time order and reminders in the order they were gathered.
+// time order.
 $kindRank = ['event' => 0, 'reminder' => 1, 'note' => 2];
 // Same-time events fall in the calendar order set in Manage calendars (cal_order, which
 // interleaves mine and the partner's); reminders keep their gathered order (stable sort).
@@ -570,6 +570,17 @@ foreach ($byDay as $d => $list) {
             $t = ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99'));
             if ($t !== 0) { return $t; }
             return ($calRank[$a['cal'] ?? ''] ?? 999) <=> ($calRank[$b['cal'] ?? ''] ?? 999);
+        }
+        if (($a['kind'] ?? '') === 'reminder') {
+            // Undated first, then oldest date first — the Reminders app's own order. It
+            // matters most on today, which collects every overdue reminder as well as the
+            // undated riders and the ones actually due today; gathered order put them in
+            // whatever sequence the file happened to hold.
+            $d = ((($a['due'] ?? '') ?: '') === '') <=> ((($b['due'] ?? '') ?: '') === '');
+            if ($d !== 0) { return -$d; }
+            $d = (($a['due'] ?? '') ?: '') <=> (($b['due'] ?? '') ?: '');
+            if ($d !== 0) { return $d; }
+            return ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99'));
         }
         return 0;
     });
