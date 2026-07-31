@@ -11,7 +11,9 @@
       "Bash(grep *)",
       "Bash(command -v node)",
       "Bash(command -v python3)",
-      "Bash(python3 -c \"import playwright; print\\('playwright ok'\\)\")"
+      "Bash(python3 -c \"import playwright; print\\('playwright ok'\\)\")",
+      "WebFetch(domain:faq.nearlyfreespeech.net)",
+      "WebSearch"
     ]
   }
 }
