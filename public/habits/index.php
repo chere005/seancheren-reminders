@@ -349,7 +349,7 @@ foreach ($habitItems as $h) {
 
     /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
        other apps use. Edit mode only, like every other structural control here. */
-    .secfoot { margin: 1.1rem 0 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .secfoot { margin: 1.1rem 0 0; display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap; }
     .secfoot .newsection { margin: 0; }
     body:not(.editing) .secfoot { display: none; }
     /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */

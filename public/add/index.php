@@ -37,11 +37,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     $flash = '';
     if ($text !== '' && $act === 'add_reminder') {
         // A reminder has no default date — undated is fine (it just isn't on the calendar).
+        // The "Goes in" dropdown carries "folder\x1Fgroup"; both halves are re-validated.
+        $rFolders = folders_load($cfg['data_dir'])['reminders'];
+        [$rFolder, $rSection] = strpos((string) ($_POST['section'] ?? ''), "\x1F") !== false
+            ? explode("\x1F", (string) $_POST['section'], 2) : [folder_fallback('reminders'), ''];
+        if (!in_array($rFolder, $rFolders, true)) { $rFolder = folder_fallback('reminders'); }
         $f = user_data_file($cfg['data_dir'], 'reminders');
-        $l = store_read($f);
+        $l = reminders_folder_migrate(store_read($f));
+        $secOk = false;
+        foreach ($l as $it) { if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $rFolder
+            && (string) ($it['name'] ?? '') === $rSection) { $secOk = true; break; } }
+        if (!$secOk) { $rSection = ''; }
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                 'due' => $date ?? '', 'time' => $time, 'done' => false,
-                'folder' => folder_fallback('reminders'), 'section' => '', 'created' => time()];
+                'folder' => $rFolder, 'section' => $rSection, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Reminder added' . ($date ? ' · ' . date('D, M j', strtotime($date)) : '');
     } elseif ($text !== '' && $act === 'add_event') {
@@ -66,6 +75,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     exit;
 }
 $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
+
+// "Goes in" options for a reminder: every folder, each with its groups, value "folder\x1Fgroup".
+$remFolders = folders_load($cfg['data_dir'])['reminders'];
+$remDef     = folder_default_get($cfg['data_dir'], 'reminders');
+$myRem      = reminders_folder_migrate(store_read(user_data_file($cfg['data_dir'], 'reminders')));
+$remGroups  = [];
+foreach ($remFolders as $mf) {
+    $remGroups[$mf] = [[$mf . "\x1F", 'Reminders']];   // the folder's catch-all
+    foreach ($myRem as $it) {
+        if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $mf) {
+            $nm = (string) ($it['name'] ?? '');
+            if ($nm !== '') { $remGroups[$mf][] = [$mf . "\x1F" . $nm, $nm]; }
+        }
+    }
+}
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,9 +107,12 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
     :root { --accent: #34d399; --accent-ink: #06251b; }
     body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; }
     <?= tabbar_styles() ?>
-    .wrap { width: 100%; max-width: 460px; margin: 0 auto; padding: 3rem 1rem 1rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    h1 .day { font-size: 0.85rem; color: #888; font-weight: 400; margin-left: 0.4rem; }
+    <?= chrome_styles() ?>
+    .wrap { width: 100%; max-width: 460px; margin: 0 auto; padding: 1.5rem 1rem 1rem; }
+    .addhead { font-size: 0.85rem; color: #888; margin: 0.5rem 0 0; }
+    .gorow { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: #999; margin-top: 0.9rem; }
+    .gorow select { padding: 0.6rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+      color: #eee; font-size: 16px; font-family: inherit; }
     .flash { background: #14251f; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px;
       padding: 0.55rem 0.8rem; font-size: 0.9rem; margin: 0.75rem 0; }
     .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: #1a1a1a; border: 1px solid #333;
@@ -118,11 +145,30 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
 </head>
 <body>
 <div class="wrap">
-  <h1>Add <span class="day"><?= e(date('D, M j')) ?></span></h1>
+  <header>
+    <div class="hleft">
+      <?= back_button() ?>
+      <div class="titlebar"><h1>Add</h1></div>
+    </div>
+    <?= render_user_menu(false, '', '', false, '') ?>
+  </header>
+  <p class="addhead"><?= e(date('l, M j')) ?></p>
   <?php if ($flash !== ''): ?><div class="flash"><?= e($flash) ?></div><?php endif; ?>
   <form method="post" class="bar">
     <input type="hidden" name="csrf" value="<?= $csrf ?>">
     <input type="text" name="text" placeholder="e.g. Dentist 8/3 2pm…" autocomplete="off" autofocus required>
+    <?php // Which folder/group a reminder goes in (ignored for events and notes). ?>
+    <label class="gorow">Reminder goes in
+      <select name="section">
+        <?php foreach ($remGroups as $mf => $opts): ?>
+          <optgroup label="<?= e($mf) ?>">
+            <?php foreach ($opts as [$val, $label]): ?>
+              <option value="<?= e($val) ?>"<?= $mf === $remDef && substr($val, -1) === "\x1F" ? ' selected' : '' ?>><?= e($label) ?></option>
+            <?php endforeach; ?>
+          </optgroup>
+        <?php endforeach; ?>
+      </select>
+    </label>
     <div class="btns">
       <button type="submit" name="action" value="add_reminder" class="qb rem" title="Add reminder"><span>&#10003;</span><span>Reminder</span></button>
       <button type="submit" name="action" value="add_event" class="qb evt" title="Add event"><span>&#128197;</span><span>Event</span></button>
@@ -152,5 +198,6 @@ $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
   })();</script>
 </div>
 <?php render_tabbar('add'); ?>
+<?= chrome_script() ?>
 </body>
 </html>
