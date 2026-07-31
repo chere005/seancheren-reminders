@@ -311,3 +311,19 @@ function sections_migrate(array $list, string $defaultFolder = SECTION_DEFAULT_F
     }
     return $out;
 }
+
+/**
+ * The suite's "+", drawn as an SVG rather than typed as a character.
+ *
+ * A text "+" is positioned by the font's own metrics — it hangs off the baseline with
+ * the leading above it — so inside a fixed-height button it rides a pixel or two high
+ * or low no matter what `line-height` or padding nudge you put on it. The tab bar's
+ * add button already draws its plus this way; every other "+" button in the suite uses
+ * this, so they are all dead-centre by construction instead of by hand-tuned padding.
+ */
+function plus_icon_svg(int $size = 14, int $weight = 2): string
+{
+    return '<svg viewBox="0 0 24 24" width="' . $size . '" height="' . $size . '" fill="none"'
+         . ' stroke="currentColor" stroke-width="' . $weight . '" stroke-linecap="round"'
+         . ' aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
+}

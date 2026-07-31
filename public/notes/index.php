@@ -83,7 +83,7 @@ function render_section_add(string $name, string $csrf, string $view, string $fo
       <input type="hidden" name="folder" value="<?= e($folder) ?>">
       <input type="hidden" name="section" value="<?= e($name) ?>">
       <button type="submit" class="sec-add" title="New note in <?= $label ?>"
-              aria-label="New note in <?= $label ?>">+</button>
+              aria-label="New note in <?= $label ?>"><?= plus_icon_svg(12) ?></button>
     </form>
     <?php
 }
@@ -434,7 +434,8 @@ $sectionInput =
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
   . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
-  . '<button type="submit" class="plus" title="Add section">+</button>'
+  . '<button type="submit" class="plus" title="Add section" aria-label="Add section">'
+  . plus_icon_svg(16, 3) . '</button>'
   . '</form>';
 
 if (!$editing) {
@@ -710,15 +711,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .section-title { font-weight: 600; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
-    .sec-add {
     /* Same grey outlined pill as "+ Section" on the list bar (.listedit) — the same act,
        just against one section — only kept at its small icon size. */
-      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
+    .sec-add {
+      flex: 0 0 auto; background: none; border: 1px solid #333; color: #ccc;
       border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex; align-self: center;
       align-items: center; justify-content: center; padding: 0;
     }
-    .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .sec-add:hover { border-color: #888; color: #fff; }
     .section-del {
       background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
       padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
@@ -840,7 +841,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0 0 2px; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }

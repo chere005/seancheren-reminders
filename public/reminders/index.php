@@ -118,7 +118,7 @@ function render_section_add_button(string $name, string $folder): void
     $label = e($name === '' ? DEFAULT_SECTION : $name);
     ?>
     <button type="button" class="sec-add" data-target="<?= section_add_id($folder, $name) ?>"
-            title="Add to <?= $label ?>" aria-label="Add to <?= $label ?>">+</button>
+            title="Add to <?= $label ?>" aria-label="Add to <?= $label ?>"><?= plus_icon_svg(12) ?></button>
     <?php
 }
 
@@ -139,7 +139,7 @@ function render_section_add_row(string $name, string $csrf, string $view, string
       <input type="hidden" name="folder" value="<?= e($folder) ?>">
       <input type="hidden" name="section" value="<?= e($name) ?>">
       <input type="text" name="text" placeholder="Add to <?= $label ?>&hellip;" maxlength="500" autocomplete="off">
-      <button type="submit" class="plus" title="Add">+</button>
+      <button type="submit" class="plus" title="Add" aria-label="Add"><?= plus_icon_svg(16, 3) ?></button>
     </form>
     <?php
 }
@@ -764,7 +764,8 @@ $sectionInput =
   . '<input type="hidden" name="action" value="add_section">'
   . '<input type="hidden" name="view" value="' . e($view) . '">'
   . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
-  . '<button type="submit" class="plus" title="Add section">+</button>'
+  . '<button type="submit" class="plus" title="Add section" aria-label="Add section">'
+  . plus_icon_svg(16, 3) . '</button>'
   . '</form>';
 ?><!DOCTYPE html>
 <html lang="en">
@@ -827,12 +828,12 @@ $sectionInput =
     /* Same grey outlined pill as "+ Section" on the row above (#newSecBtn/.showall) —
        it's the same act, just against one section — only kept at its small icon size. */
     .sec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
-      color: var(--accent); border-radius: 999px; width: 20px; height: 20px;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
+      color: #ccc; border-radius: 999px; width: 20px; height: 20px;
       font-size: 0.85rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .sec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .sec-add:hover { border-color: #888; color: #fff; }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
     .secadd-row[hidden] { display: none; }   /* make [hidden] win over flex */
     .secadd-row input[type=text] {
@@ -1071,7 +1072,7 @@ $sectionInput =
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* Both wear the height of the button they appear in place of. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0 0 2px; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
@@ -1160,7 +1161,8 @@ $sectionInput =
                   // inline section-name field (below), so a folder with no sections of its
                   // own — like the permanent Reminders/Calendar — can get its first. ?>
             <?php if (!$isShared): ?>
-              <button type="button" class="fsec-add" data-folder="<?= e($sfolder) ?>" title="Add section">+</button>
+              <button type="button" class="fsec-add" data-folder="<?= e($sfolder) ?>" title="Add section"
+                      aria-label="Add section"><?= plus_icon_svg(13) ?></button>
               <form method="post" action="" class="fsec-form newsection" hidden
                     onsubmit="return this.name.value.trim()!==''">
                 <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -1168,7 +1170,7 @@ $sectionInput =
                 <input type="hidden" name="view" value="<?= e($view) ?>">
                 <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
                 <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
-                <button type="submit" class="plus" title="Add section">+</button>
+                <button type="submit" class="plus" title="Add section" aria-label="Add section"><?= plus_icon_svg(16, 3) ?></button>
               </form>
             <?php endif; ?>
             <?php // A short rule trailing off to the right edge on the same line. ?>
