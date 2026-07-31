@@ -394,6 +394,10 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         m.hidden = !m.hidden;
         b.setAttribute('aria-expanded', m.hidden ? 'false' : 'true');
       });
+      // Toggling a checkbox reloads (to re-filter), so reopen the menu afterwards — ticking
+      // folders shouldn't fold the dropdown away between each one.
+      try { if (sessionStorage.getItem('folderPickOpen') === '1') { sessionStorage.removeItem('folderPickOpen');
+        m.hidden = false; b.setAttribute('aria-expanded', 'true'); } } catch (_) {}
       document.addEventListener('click', function (e) {
         if (!m.hidden && !m.contains(e.target)) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
       });
@@ -420,6 +424,7 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         try {
           localStorage.removeItem('collapsed:' + location.pathname);
           localStorage.removeItem('foldercollapsed:' + location.pathname);
+          sessionStorage.setItem('folderPickOpen', '1');   // reopen the menu after the reload
         } catch (_) {}
         var body = new URLSearchParams(isAll
           ? { csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '' }
