@@ -38,7 +38,10 @@ function chrome_styles(): string
     .backbtn.exitedit:hover { border-color: #888; color: #fff; }
     /* The manage-folders (folder icon) or Edit (pencil) button beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
-    .titlebtn svg { display: block; }
+    /* An icon button's glyph is a block: an inline <svg> sits on the text baseline and
+       carries the line box's descender gap under it, which pushes it off centre even
+       inside a flex box that is otherwise centring it correctly. */
+    .titlebtn svg, .sec-add svg, .fsec-add svg, .plus svg, .backbtn svg { display: block; }
     .titlebtn:hover { border-color: var(--accent); color: var(--accent); }
     body.editing .titlebtn.edit-toggle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .usermenu { position: relative; flex: 0 0 auto; }

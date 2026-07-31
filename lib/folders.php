@@ -513,7 +513,7 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="add_folder">
           <input type="text" name="name" placeholder="New folder" maxlength="40" autocomplete="off">
-          <button type="submit" class="plus" title="Add folder">+</button>
+          <button type="submit" class="plus" title="Add folder" aria-label="Add folder"><?= plus_icon_svg(18, 3) ?></button>
         </form>
         <?php // One interleaved list: my own folders and the partner's shared ones together,
               // in the order I've dragged them into. A shared row wears a badge (its data is
@@ -701,6 +701,7 @@ function folder_nav_styles(): string
     .foldermodal .addrow .plus {
       flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .foldermodal .addrow .plus:hover { background: #52e0ac; }
     .foldermodal .fshared-h {

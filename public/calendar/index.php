@@ -938,6 +938,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .addrow .plus {
       flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .addrow .plus:hover { background: #52e0ac; }
     .callist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
@@ -1334,7 +1335,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <h2>Calendars</h2>
     <div class="addrow">
       <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
-      <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
+      <button type="button" class="plus" id="calAdd" title="Add calendar" aria-label="Add calendar"><?= plus_icon_svg(18, 3) ?></button>
     </div>
     <ul class="callist" id="calRows"></ul>
     <div class="defrow">
