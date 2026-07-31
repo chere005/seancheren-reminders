@@ -1072,9 +1072,18 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   // Long-press a note or section on touch, or double-click on the desktop.
   const editingNow = () => document.body.classList.contains('editing');
   const gBlocked = (t) => t.closest('.ndel, .sec-add, .section-del, .sec-collapse, button, input, textarea, select');
+  // Opening a section's name is the point of the gesture on a section head, so do it
+  // here rather than making the user find the field afterwards.
+  const focusSectionName = (head) => {
+    const f = head && head.querySelector('.sectitle');
+    if (!f) { return; }
+    setTimeout(() => { f.focus(); try { f.select(); } catch (_) {} }, 0);
+  };
   const gestureEdit = (target) => {
+    const head = target.closest('.section-head');
     if (!target.closest('li[data-id], .section-head, .folder-head')) return;
     setEdit(true);
+    if (head) { focusSectionName(head); }
   };
   let gSuppress = false;
   document.addEventListener('click', (e) => { if (gSuppress) { e.preventDefault(); e.stopPropagation(); gSuppress = false; } }, true);
