@@ -192,10 +192,17 @@ w.addSpacer(8);
 // Reminders and events only — the feed no longer sends notes at all.
 const META = new Color("#777777");                 // the muted time/date colour
 const items = (data.items || []).filter(it => it.kind !== "note");
+const pad2 = n => String(n).padStart(2, "0");
+const now2 = new Date();
+const todayStr = now2.getFullYear() + "-" + pad2(now2.getMonth() + 1) + "-" + pad2(now2.getDate());
+const hasToday = items.some(it => it.date === todayStr);
 if (data.error) {
   const t = w.addText("Couldn't load."); t.textColor = new Color("#ff6666"); t.font = Font.systemFont(12);
 } else if (!items.length) {
   const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
+} else if (!hasToday) {
+  // Overdue reminders roll onto today, so nothing dated today means the day is clear.
+  const t = w.addText("No more items today."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
   // The day is the section, not the kind: one heading per date, reminders before events
   // under it. The heading gets a light rule directly beneath it (so the date reads as a
