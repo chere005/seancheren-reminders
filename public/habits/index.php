@@ -351,11 +351,12 @@ foreach ($habitItems as $h) {
        other apps use. Edit mode only, like every other structural control here. */
     .secfoot { margin: 1.1rem 0 0; display: flex; }
     body:not(.editing) .secfoot { display: none; }
+    /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */
     .secfoot button.newsecbtn {
-      height: 32px; padding: 0 0.9rem; background: none; border: 1px dashed #4a3f6a;
-      color: #b9a7f5; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
+      height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
+      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
     }
-    .secfoot button.newsecbtn:hover { border-style: solid; }
+    .secfoot button.newsecbtn:hover { border-color: #888; color: #fff; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>

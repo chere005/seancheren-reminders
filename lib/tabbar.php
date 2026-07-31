@@ -26,16 +26,20 @@ function tabbar_styles(): string
       font-size: 0.82rem; font-weight: 600; border-radius: 8px;
       transition: background 0.12s, color 0.12s;
     }
-    .segmented a .ico { font-size: 1.35rem; line-height: 1; }
+    .segmented a { position: relative; }
+    .segmented a .ico { font-size: 1.35rem; line-height: 1; position: relative; z-index: 1; }
     .segmented a:hover { color: #ccc; }
-    .segmented a.active {
-      background: #2a2a2a; color: var(--accent);
+    /* The selected tab's highlight is inset a little from the tab's edges, so it reads as
+       a pill sitting inside the tab rather than filling it corner to corner. */
+    .segmented a.active { color: var(--accent); }
+    .segmented a.active::before {
+      content: ''; position: absolute; inset: 3px 7px; background: #2a2a2a; border-radius: 8px; z-index: 0;
     }
     .segmented a.active:hover { color: var(--accent); }
-    /* The middle "+" tab: a green add button that opens the quick-add app. */
+    /* The middle "+" tab: a round green add button that opens the quick-add app. */
     .segmented a.addtab {
-      flex: 0 0 auto; margin: -3px 0.35rem; padding: 0 0.9rem;
-      background: var(--accent, #34d399); color: var(--accent-ink, #06251b);
+      flex: 0 0 auto; width: 44px; height: 44px; align-self: center; margin: -6px 0.4rem 0; padding: 0;
+      border-radius: 50%; background: var(--accent, #34d399); color: var(--accent-ink, #06251b);
     }
     .segmented a.addtab .ico { font-size: 1.7rem; font-weight: 700; }
     .segmented a.addtab:hover { background: #52e0ac; color: var(--accent-ink, #06251b); }
