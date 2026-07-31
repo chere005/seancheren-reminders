@@ -178,11 +178,43 @@ function token_user(string $dir, string $token): ?string
     return null;
 }
 
+/**
+ * Start the session so it lasts until the user actually logs out. PHP's default is a
+ * cookie that dies with the browser and a server-side GC after ~24 minutes idle — on an
+ * iOS home-screen app that reads as "it logged me out again". Both halves have to move
+ * together: a year-long cookie is useless if the server has already collected the file.
+ * Called before any session_start() in the suite, so every page agrees on the lifetime.
+ */
+function session_boot(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) { return; }
+    $year = 365 * 24 * 60 * 60;
+    @ini_set('session.gc_maxlifetime', (string) $year);
+    @ini_set('session.cookie_lifetime', (string) $year);
+    session_set_cookie_params([
+        'lifetime' => $year,
+        'path'     => '/',
+        'secure'   => !empty($_SERVER['HTTPS']),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+    // The cookie is only sent once, at login; re-send it on every visit so the year is
+    // always a year from *now* rather than from whenever the account was signed into.
+    if (!empty($_SESSION['auth']) && !headers_sent()) {
+        setcookie(session_name(), session_id(), [
+            'expires'  => time() + $year,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+}
+
 function require_login(string $area = 'App'): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    session_boot();
 
     // Logout
     if (isset($_GET['logout'])) {
