@@ -23,6 +23,29 @@ $csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
 function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES); }
 
+/**
+ * My own calendars, as [id, name]. The Calendar app owns the real loader (and the
+ * migration that goes with it); this only needs to list them and check an id, so it
+ * reads the file directly and drops anything that isn't a calendar row — the leftover
+ * "calendar set" rows that load_calendars() also discards on its next write.
+ */
+function add_calendars(array $cfg): array
+{
+    $out = [];
+    foreach (store_read(user_data_file($cfg['data_dir'], 'calendars')) as $c) {
+        if (($c['type'] ?? '') === 'set' || empty($c['id'])) { continue; }
+        $out[] = ['id' => (string) $c['id'], 'name' => (string) ($c['name'] ?? 'Calendar')];
+    }
+    return $out;
+}
+
+/** Where an event lands when none is chosen: the Calendar's own default, else the first. */
+function add_default_cal(array $cfg, array $ids): string
+{
+    $d = (string) (store_read(user_data_file($cfg['data_dir'], 'calprefs'))['default_cal'] ?? '');
+    return in_array($d, $ids, true) ? $d : (string) ($ids[0] ?? '');
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
     $text = trim((string) ($_POST['text'] ?? ''));
@@ -54,19 +77,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
         store_write($f, array_values($l));
         $flash = 'Reminder added' . ($date ? ' · ' . date('D, M j', strtotime($date)) : '');
     } elseif ($text !== '' && $act === 'add_event') {
-        // An event lives on the calendar, so it does default to today when no date is given.
+        // An event lives on the calendar, so it does default to today when no date is
+        // given — and it belongs to a calendar, picked here or the default one.
+        $eCal = (string) ($_POST['cal'] ?? '');
+        $ids  = array_column(add_calendars($cfg), 'id');
+        if (!in_array($eCal, $ids, true)) { $eCal = add_default_cal($cfg, $ids); }
         $f = user_data_file($cfg['data_dir'], 'events');
         $l = store_read($f);
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
-                'date' => $date ?? $today, 'time' => $time, 'created' => time()];
+                'date' => $date ?? $today, 'time' => $time, 'cal' => $eCal, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Event added' . ($time ? ' · ' . date('g:ia', strtotime($time)) : '');
     } elseif ($text !== '' && $act === 'add_note') {
-        // Notes have no default date either.
+        // Notes have no default date either. Folder and section come from their own
+        // dropdowns and are re-validated the same way a reminder's are.
+        $nFolders = folders_load($cfg['data_dir'])['notes'];
+        $nFolder  = (string) ($_POST['nfolder'] ?? '');
+        if (!in_array($nFolder, $nFolders, true)) { $nFolder = FOLDER_DEFAULT; }
+        $nSection = (string) ($_POST['nsection'] ?? '');
         $f = user_data_file($cfg['data_dir'], 'notes');
         $l = store_read($f);
+        $secOk = false;
+        foreach ($l as $it) { if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $nFolder
+            && (string) ($it['name'] ?? '') === $nSection) { $secOk = true; break; } }
+        if (!$secOk) { $nSection = ''; }
         $l[] = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($ptext, 0, 200),
-                'body' => '', 'folder' => FOLDER_DEFAULT, 'section' => '',
+                'body' => '', 'folder' => $nFolder, 'section' => $nSection,
                 'date' => $date ?? '', 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Note added';
@@ -92,6 +128,26 @@ foreach ($remFolders as $mf) {
         }
     }
 }
+
+// The same thing for notes, which have their own folders and their own catch-all name.
+$noteFolders = folders_load($cfg['data_dir'])['notes'];
+$noteDef     = folder_default_get($cfg['data_dir'], 'notes');
+if (!in_array($noteDef, $noteFolders, true)) { $noteDef = $noteFolders[0] ?? FOLDER_DEFAULT; }
+$myNotes     = store_read(user_data_file($cfg['data_dir'], 'notes'));
+$noteSecs    = [];
+foreach ($noteFolders as $nf) {
+    $noteSecs[$nf] = [['', 'Notes']];
+    foreach ($myNotes as $it) {
+        if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $nf) {
+            $nm = (string) ($it['name'] ?? '');
+            if ($nm !== '') { $noteSecs[$nf][] = [$nm, $nm]; }
+        }
+    }
+}
+
+// And the calendars an event can land in.
+$calList = add_calendars($cfg);
+$calDef  = add_default_cal($cfg, array_column($calList, 'id'));
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -178,8 +234,10 @@ foreach ($remFolders as $mf) {
       <button type="button" class="qb note" data-act="add_note"><span>&#128221;</span><span>Note</span></button>
     </div>
 
-    <?php // Folder / section — only meaningful for a reminder, so it hides for event/note.
-          // Styled and revealed like the + Date/Time panel below it. ?>
+    <?php // Where it lands. Each type has its own answer — a reminder has a folder and a
+          // section, an event has a calendar, a note has its own folders and sections —
+          // so there are three panels behind one pill, and the type picks which. Styled
+          // and revealed like the + Date/Time panel below. ?>
     <button type="button" class="revbtn" id="fsToggle">+ Folder/Section</button>
     <div class="revrow" id="fsRow" hidden>
       <label>Folder
@@ -191,6 +249,27 @@ foreach ($remFolders as $mf) {
       </label>
       <label>Section
         <select name="section" id="fSection"></select>
+      </label>
+    </div>
+    <div class="revrow" id="calRow" hidden>
+      <label>Calendar
+        <select name="cal" id="fCal">
+          <?php foreach ($calList as $c): ?>
+            <option value="<?= e($c['id']) ?>"<?= $c['id'] === $calDef ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </div>
+    <div class="revrow" id="nfsRow" hidden>
+      <label>Folder
+        <select name="nfolder" id="nFolder">
+          <?php foreach ($noteFolders as $nf): ?>
+            <option value="<?= e($nf) ?>"<?= $nf === $noteDef ? ' selected' : '' ?>><?= e($nf) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>Section
+        <select name="nsection" id="nSection"></select>
       </label>
     </div>
 
@@ -216,36 +295,63 @@ foreach ($remFolders as $mf) {
   </div>
 
   <script>(function(){
-    // Reveal panels (folder/section, date/time), each a pill that swaps for its row.
-    [['fsToggle','fsRow'],['dtToggle','dtRow']].forEach(function(p){
-      var b=document.getElementById(p[0]), r=document.getElementById(p[1]);
+    // + Date/Time is its own pill and row; the destination pill below is shared by three.
+    (function(){
+      var b=document.getElementById('dtToggle'), r=document.getElementById('dtRow');
       if(b&&r){ b.addEventListener('click',function(){ r.hidden=false; b.hidden=true;
         var el=r.querySelector('select,input'); if(el) el.focus(); }); }
+    })();
+
+    var REM_SECS  = <?= json_encode($remSecs) ?>;
+    var NOTE_SECS = <?= json_encode($noteSecs) ?>;
+    // Per type: the row it reveals, and what the pill that reveals it says.
+    var DEST = {
+      add_reminder: { row: 'fsRow',  label: '+ Folder/Section' },
+      add_event:    { row: 'calRow', label: '+ Calendar' },
+      add_note:     { row: 'nfsRow', label: '+ Folder/Section' }
+    };
+    var act=document.getElementById('actField'), sel=document.getElementById('typeSel');
+    var fsToggle=document.getElementById('fsToggle');
+    var open=false;   // whether the destination panel is showing, kept across type changes
+
+    function paint(){
+      var d=DEST[act.value]||DEST.add_reminder;
+      ['fsRow','calRow','nfsRow'].forEach(function(id){
+        var r=document.getElementById(id); if(r) r.hidden=(id!==d.row)||!open;
+      });
+      fsToggle.textContent=d.label;
+      fsToggle.hidden=open;
+    }
+    fsToggle.addEventListener('click',function(){
+      open=true; paint();
+      var d=DEST[act.value]||DEST.add_reminder, r=document.getElementById(d.row);
+      var el=r&&r.querySelector('select'); if(el) el.focus();
     });
 
-    // Type selector: highlight the picked one and set the hidden action. Folder/section
-    // only applies to reminders, so its toggle+row hide for events and notes.
-    var SECS = <?= json_encode($remSecs) ?>;
-    var act=document.getElementById('actField'), sel=document.getElementById('typeSel');
-    var fsToggle=document.getElementById('fsToggle'), fsRow=document.getElementById('fsRow');
+    // Type selector: highlight the picked one, set the hidden action, and swap which
+    // destination panel the pill controls. A calendar has no sections, so the shape of
+    // the panel changes with the type rather than three pills stacking up.
     function setType(a){
       act.value=a;
       [].forEach.call(sel.querySelectorAll('.qb'),function(q){ q.classList.toggle('sel',q.dataset.act===a); });
-      var isRem=(a==='add_reminder');
-      // Show the folder/section control only for reminders; keep whichever state it's in.
-      if(!isRem){ fsRow.hidden=true; fsToggle.hidden=true; }
-      else if(fsRow.hidden){ fsToggle.hidden=false; }
+      paint();
     }
     sel.addEventListener('click',function(e){ var q=e.target.closest('.qb'); if(q) setType(q.dataset.act); });
 
-    // Section dropdown follows the chosen folder.
-    var fFolder=document.getElementById('fFolder'), fSection=document.getElementById('fSection');
-    function fillSecs(){
-      var opts=SECS[fFolder.value]||[['','Reminders']];
-      fSection.innerHTML='';
-      opts.forEach(function(o){ var op=document.createElement('option'); op.value=o[0]; op.textContent=o[1]; fSection.appendChild(op); });
+    // Each Section dropdown follows its own Folder dropdown.
+    function wireSecs(folderId, sectionId, map, fallback){
+      var f=document.getElementById(folderId), s=document.getElementById(sectionId);
+      if(!f||!s) return;
+      var fill=function(){
+        var opts=map[f.value]||[['',fallback]];
+        s.innerHTML='';
+        opts.forEach(function(o){ var op=document.createElement('option'); op.value=o[0]; op.textContent=o[1]; s.appendChild(op); });
+      };
+      f.addEventListener('change',fill); fill();
     }
-    if(fFolder){ fFolder.addEventListener('change',fillSecs); fillSecs(); }
+    wireSecs('fFolder','fSection',REM_SECS,'Reminders');
+    wireSecs('nFolder','nSection',NOTE_SECS,'Notes');
+    paint();
   })();</script>
 </div>
 <?php render_tabbar('add'); ?>
