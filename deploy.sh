@@ -66,4 +66,9 @@ if [[ -z "$DRY" ]]; then
 fi
 
 echo "==> Done. Live data in /home/protected/data/ was not touched."
-[[ -n "$DRY" ]] && echo "    (that was a dry run — re-run without --dry-run to apply)"
+# Note: this must not be the script's last command as a bare `&& ` list — on a
+# real deploy $DRY is empty, the test is false, and its exit 1 would become the
+# script's exit code, breaking `./deploy.sh && git push`. An `if` returns 0.
+if [[ -n "$DRY" ]]; then
+  echo "    (that was a dry run — re-run without --dry-run to apply)"
+fi
