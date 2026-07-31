@@ -297,10 +297,15 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
             <?php $own = $boxes && strncmp($val, '@', 1) !== 0; ?>
             <a class="folderpick-opt<?= $active === $val ? ' on' : '' ?>" href="?folder=<?= urlencode($val) ?>">
               <?php if ($boxes): ?>
+                <?php // A drawn box rather than a real <input>: the row is a link, so the
+                      // click has to be cancelled, and cancelling a checkbox's click also
+                      // undoes the tick the browser already applied. A span has no such
+                      // activation behaviour to fight. ?>
                 <?php if ($own): ?>
-                  <input type="checkbox" class="fvis" data-folder="<?= $e($val) ?>"
-                         <?= in_array($val, $hidden, true) ? '' : 'checked' ?>
-                         title="Show in All" aria-label="Show <?= $e($label) ?> in All">
+                  <span class="fvis<?= in_array($val, $hidden, true) ? '' : ' on' ?>" role="checkbox"
+                        tabindex="0" aria-checked="<?= in_array($val, $hidden, true) ? 'false' : 'true' ?>"
+                        data-folder="<?= $e($val) ?>"
+                        title="Show in All" aria-label="Show <?= $e($label) ?> in All"></span>
                 <?php else: ?>
                   <span class="fvis-pad" aria-hidden="true"></span>
                 <?php endif; ?>
@@ -340,9 +345,11 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         var cb = e.target.closest('.fvis');
         if (!cb) { return; }
         e.preventDefault(); e.stopPropagation();
-        cb.checked = !cb.checked;
+        var on = !cb.classList.contains('on');
+        cb.classList.toggle('on', on);
+        cb.setAttribute('aria-checked', on ? 'true' : 'false');
         var body = new URLSearchParams({ csrf: CSRF, action: 'folder_vis',
-                                         name: cb.dataset.folder, show: cb.checked ? '1' : '' });
+                                         name: cb.dataset.folder, show: on ? '1' : '' });
         fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
           .then(function () { location.reload(); })
           .catch(function () { location.reload(); });
@@ -504,12 +511,17 @@ function folder_nav_styles(): string
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt:hover { background: #262626; color: #fff; }
-    /* The show-in-All box. Sized and coloured by hand so it doesn't look like a stray
-       form control in a menu, with a blank of the same width keeping the rows that
-       don't have one (All, the partner's folders) lined up with the ones that do. */
+    /* The show-in-All box, drawn rather than a form control so it doesn't look like a
+       stray input in a menu — and a blank of the same width keeps the rows without one
+       (All, the partner's folders) lined up with the rows that have one. */
     .folderpick-opt .fvis {
-      flex: 0 0 auto; width: 14px; height: 14px; margin: 0; accent-color: var(--accent);
-      cursor: pointer;
+      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px;
+      cursor: pointer; position: relative; box-sizing: border-box;
+    }
+    .folderpick-opt .fvis.on { background: var(--accent); border-color: var(--accent); }
+    .folderpick-opt .fvis.on::after {
+      content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+      border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
     }
     .folderpick-opt .fvis-pad { flex: 0 0 auto; width: 14px; }
     .folderpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
