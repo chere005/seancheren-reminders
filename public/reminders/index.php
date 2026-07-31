@@ -757,7 +757,7 @@ $sectionInput =
     .foldernav { padding-left: 0; }   /* line Completed up with the sections' + */
     .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
-      background: none; color: #888; border: 1px solid #333; border-radius: 999px;
+      background: none; color: #ccc; border: 1px solid #333; border-radius: 999px;
       padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
       white-space: nowrap;
     }
