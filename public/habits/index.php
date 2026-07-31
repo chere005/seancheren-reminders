@@ -108,8 +108,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             unset($it);
             save_habits($dataFile, $habits);
         }
+        // Answer with the colour that was actually stored, not the one that was asked
+        // for: a colour off the palette is refused above, and the swatch has to go back
+        // to what's really there rather than sit showing a change that didn't happen.
+        $now = ''; $i = 0;
+        foreach ($habits as $it) {
+            if (!is_section($it)) { continue; }
+            if (($it['id'] ?? '') === $id) { $now = habit_section_color($it, $i); break; }
+            $i++;
+        }
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true]);
+        echo json_encode(['ok' => true, 'color' => $now]);
         exit;
     }
 
@@ -682,11 +691,15 @@ foreach ($habitItems as $h) {
     e.preventDefault();
     const det = sw.closest('details'), body = new URLSearchParams(new FormData(sw.form));
     body.set('color', sw.value);
-    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
-      .catch(() => {});
     const sum = det && det.querySelector('summary');
-    if (sum) { sum.style.background = sw.value; }
+    if (sum) { sum.style.background = sw.value; }      // optimistic, then corrected below
     if (det) { det.open = false; }
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+      .then(r => r.json())
+      // Redraw from what the server actually stored, so a refused colour snaps back
+      // instead of leaving the dot showing a change that never happened.
+      .then(s => { if (sum && s && s.color) { sum.style.background = s.color; } })
+      .catch(() => {});
   });
   // Tapping anywhere else closes an open palette, so one can't sit over the grid.
   document.addEventListener('click', e => {
