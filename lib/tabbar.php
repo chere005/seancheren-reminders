@@ -38,8 +38,13 @@ function tabbar_styles(): string
     .segmented a.active:hover { color: var(--accent); }
     /* The middle "+" tab: a round green add button that opens the quick-add app. When it's
        the current tab it just deepens in colour — no pill highlight behind it. */
+    /* The circle is deliberately taller than the row it sits in, so it has to pull the
+       row's height back in with a negative margin or the whole bar grows to fit it. That
+       margin has to be the *same* top and bottom: it was -6px 0.4rem 0, which pulled only
+       the top in and left the circle sitting high, popping out above the bar and flush
+       with it below. Equal margins mean equal overflow, so it reads as centred. */
     .segmented a.addtab {
-      flex: 0 0 auto; width: 44px; height: 44px; align-self: center; margin: -6px 0.4rem 0; padding: 0;
+      flex: 0 0 auto; width: 44px; height: 44px; align-self: center; margin: -6px 0.4rem; padding: 0;
       border-radius: 50%; background: var(--accent, #34d399); color: var(--accent-ink, #06251b);
     }
     .segmented a.addtab .ico { display: inline-flex; align-items: center; justify-content: center; }
