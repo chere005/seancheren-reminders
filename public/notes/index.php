@@ -707,7 +707,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .section-head form.sec-add-form { margin-left: -0.45rem; }
     /* The permanent group's plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
-    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
+    .section-title { font-weight: 600; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     .sec-add {

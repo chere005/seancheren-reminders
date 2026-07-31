@@ -498,7 +498,7 @@ function section_rename_styles(): string
     .sectitle {
       background: none; border: none; border-top: 1px solid transparent;
       border-bottom: 1px solid transparent; padding: 0; line-height: 1.2;
-      color: #f0b429; font-family: inherit; font-weight: 700; font-size: 1.15rem;
+      color: #f0b429; font-family: inherit; font-weight: 600; font-size: 1.15rem;
       min-width: 0; max-width: 100%;
     }
     /* Only a field once you're editing — otherwise it's just the section's name. */
