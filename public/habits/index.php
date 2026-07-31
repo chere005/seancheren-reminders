@@ -133,12 +133,38 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 // --- Render ---
 $habits = load_habits($dataFile);
 $today  = date('Y-m-d');
-$days   = [];
+
+/**
+ * Two views, picked from the bar at the top and remembered per user in prefs-<user>.json
+ * (the same little settings file the theme lives in), so the app reopens on the one you
+ * last used rather than always on the week.
+ *
+ *   week  — the tick grid: habits down the side, days across the top.
+ *   month — one calendar cell per day, each a pie of how much of that day got ticked.
+ */
+$prefsFile = theme_file();
+if (isset($_GET['v']) && in_array($_GET['v'], ['week', 'month'], true)) {
+    $pr = store_read($prefsFile);
+    if (($pr['habits_view'] ?? '') !== $_GET['v']) { $pr['habits_view'] = $_GET['v']; store_write($prefsFile, $pr); }
+    $hView = (string) $_GET['v'];
+} else {
+    $hView = (string) (store_read($prefsFile)['habits_view'] ?? 'week');
+    if (!in_array($hView, ['week', 'month'], true)) { $hView = 'week'; }
+}
+
+// ?w= steps the week grid whole weeks at a time (0 = the one ending tomorrow). Swiping
+// sideways and the ‹ › arrows both go through this, so they can't disagree.
+$weekOff = (int) ($_GET['w'] ?? 0);
+if ($weekOff < -520 || $weekOff > 520) { $weekOff = 0; }
+
+$days = [];
 // Seven days back through tomorrow (eight columns), so today sits second from the
 // right and you can tick something off a day early. A narrow screen only has room for
 // five, so the three oldest are rendered anyway and hidden by CSS — the grid is one
 // layout with a column count that changes, not two renders.
-for ($i = 6; $i >= -1; $i--) { $days[] = date('Y-m-d', strtotime("-$i days")); }
+for ($i = 6; $i >= -1; $i--) {
+    $days[] = date('Y-m-d', strtotime(($weekOff * 7 - $i) . ' days'));
+}
 $extraDays = count($days) - 5;   // the columns only a wide screen shows
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
@@ -148,6 +174,27 @@ $habitItems = array_values(array_filter($habits, fn($h) => !is_section($h)));
 $sectionIds = array_map(fn($s) => $s['id'], $sections);
 $ungrouped  = array_values(array_filter($habitItems, fn($h) => !in_array($h['section'] ?? '', $sectionIds, true)));
 $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) => ($h['section'] ?? '') === $sid));
+
+// --- Month view: one cell per day, filled in proportion to that day's ticks ---
+// ?m=YYYY-MM picks the month; the fraction is (habits ticked that day) / (habits), so a
+// full circle is a day where everything got done and an empty one is a day where nothing
+// did. Future days are drawn as outlines — there's nothing to have done yet.
+$mym = (string) ($_GET['m'] ?? '');
+if (!preg_match('/^\d{4}-\d{2}$/', $mym)) { $mym = date('Y-m'); }
+[$mYear, $mMon] = array_map('intval', explode('-', $mym));
+$mFirstTs   = mktime(0, 0, 0, $mMon, 1, $mYear);
+$mDays      = (int) date('t', $mFirstTs);
+$mLead      = (int) date('w', $mFirstTs);
+$mName      = date('F Y', $mFirstTs);
+$mPrev      = date('Y-m', mktime(0, 0, 0, $mMon - 1, 1, $mYear));
+$mNext      = date('Y-m', mktime(0, 0, 0, $mMon + 1, 1, $mYear));
+$habitTotal = count($habitItems);
+$monthDone  = [];   // 'YYYY-MM-DD' => how many habits were ticked that day
+foreach ($habitItems as $h) {
+    foreach ((array) ($h['done'] ?? []) as $d => $on) {
+        if ($on && strncmp((string) $d, $mym, 7) === 0) { $monthDone[(string) $d] = ($monthDone[(string) $d] ?? 0) + 1; }
+    }
+}
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -253,6 +300,51 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     .cell:active { transform: scale(0.94); }
 
     .empty { color: #666; text-align: center; padding: 2rem 0; }
+
+    /* The view bar: Week / Month on the left, the range and its arrows on the right.
+       One row, the same 32px as everything else on the top bar. */
+    .viewbar { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
+    .segpick { display: inline-flex; background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 999px; padding: 3px; }
+    .segpick a {
+      padding: 0.3rem 0.85rem; border-radius: 999px; text-decoration: none; color: #888;
+      font-size: 0.82rem; font-weight: 600;
+    }
+    .segpick a.on { background: #2a2a2a; color: var(--accent); }
+    .viewbar .range { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .viewbar .range .lbl { font-size: 0.85rem; color: #aaa; min-width: 7.5rem; text-align: center; }
+    .viewbar .range a {
+      width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid #333; border-radius: 999px; color: #ccc; text-decoration: none; font-size: 1rem;
+    }
+    .viewbar .range a:hover { border-color: #888; color: #fff; }
+
+    /* Month view: a pie per day. The filled slice is how much of that day got ticked. */
+    .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; touch-action: pan-y; }
+    .mgrid .dow { text-align: center; font-size: 0.7rem; color: #666; padding-bottom: 0.2rem; }
+    .mgrid .mcell {
+      aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 0.2rem; border-radius: 8px; border: 1px solid transparent;
+    }
+    .mgrid .mcell.today { border-color: var(--accent); background: var(--accent-soft); }
+    .mgrid .mcell.blank { visibility: hidden; }
+    .mgrid .mcell .pie {
+      width: 60%; max-width: 34px; aspect-ratio: 1 / 1; border-radius: 50%;
+      border: 1px solid #2c2540; background: #1b1726;
+    }
+    .mgrid .mcell.ahead .pie { opacity: 0.4; }
+    .mgrid .mcell .dnum { font-size: 0.65rem; color: #777; line-height: 1; }
+    .mgrid .mcell.today .dnum { color: var(--accent); font-weight: 700; }
+    .mlegend { margin-top: 0.9rem; font-size: 0.78rem; color: #666; text-align: center; }
+
+    /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
+       other apps use. Edit mode only, like every other structural control here. */
+    .secfoot { margin: 1.1rem 0 0; display: flex; }
+    body:not(.editing) .secfoot { display: none; }
+    .secfoot button.newsecbtn {
+      height: 32px; padding: 0 0.9rem; background: none; border: 1px dashed #4a3f6a;
+      color: #b9a7f5; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
+    }
+    .secfoot button.newsecbtn:hover { border-style: solid; }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
@@ -290,16 +382,57 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
     </form>
   </div>
 
-  <form method="post" action="" class="newsection" onsubmit="return this.name.value.trim()!==''">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-    <input type="hidden" name="action" value="add_section">
-    <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
-  </form>
+  <?php // Week or month, and the arrows that step whichever one is showing. ?>
+  <div class="viewbar">
+    <div class="segpick">
+      <a href="?v=week"<?= $hView === 'week' ? ' class="on"' : '' ?>>Week</a>
+      <a href="?v=month"<?= $hView === 'month' ? ' class="on"' : '' ?>>Month</a>
+    </div>
+    <div class="range">
+      <?php if ($hView === 'week'): ?>
+        <a href="?w=<?= $weekOff - 1 ?>" id="wPrev" aria-label="Previous week">&lsaquo;</a>
+        <span class="lbl"><?= $weekOff === 0 ? 'This week'
+              : date('M j', strtotime($days[0])) . ' – ' . date('M j', strtotime(end($days))) ?></span>
+        <a href="?w=<?= $weekOff + 1 ?>" id="wNext" aria-label="Next week">&rsaquo;</a>
+      <?php else: ?>
+        <a href="?m=<?= $mPrev ?>" id="mPrev" aria-label="Previous month">&lsaquo;</a>
+        <span class="lbl"><?= e($mName) ?></span>
+        <a href="?m=<?= $mNext ?>" id="mNext" aria-label="Next month">&rsaquo;</a>
+      <?php endif; ?>
+    </div>
+  </div>
 
-  <?php if (!$habitItems && !$sections): ?>
+  <?php if ($hView === 'month'): ?>
+    <div class="mgrid" id="mGrid">
+      <?php foreach (['S', 'M', 'T', 'W', 'T', 'F', 'S'] as $dw): ?>
+        <div class="dow"><?= $dw ?></div>
+      <?php endforeach; ?>
+      <?php for ($i = 0; $i < $mLead; $i++): ?><div class="mcell blank"></div><?php endfor; ?>
+      <?php for ($d = 1; $d <= $mDays; $d++):
+              $ymd  = sprintf('%04d-%02d-%02d', $mYear, $mMon, $d);
+              $done = $monthDone[$ymd] ?? 0;
+              $frac = $habitTotal > 0 ? min(1, $done / $habitTotal) : 0;
+              $pct  = round($frac * 100, 1);
+              // A whole circle when everything's ticked, otherwise a wedge of the accent
+              // over the empty colour — the same conic-gradient trick the calendar's
+              // multi-colour dots use.
+              $bg   = $frac <= 0 ? '#1b1726'
+                    : ($frac >= 1 ? 'var(--accent)'
+                    : 'conic-gradient(var(--accent) 0 ' . $pct . '%, #1b1726 ' . $pct . '% 100%)');
+              $cls  = $ymd === $today ? ' today' : ($ymd > $today ? ' ahead' : '');
+      ?>
+        <div class="mcell<?= $cls ?>" title="<?= $done ?> of <?= $habitTotal ?> on <?= $ymd ?>">
+          <span class="pie" style="background:<?= $bg ?>"></span>
+          <span class="dnum"><?= $d ?></span>
+        </div>
+      <?php endfor; ?>
+    </div>
+    <p class="mlegend">Each day is filled in proportion to how many of your
+      <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?> were ticked.</p>
+  <?php elseif (!$habitItems && !$sections): ?>
     <p class="empty">No habits yet. Tap Edit to add one, then tap a day to mark it done.</p>
   <?php else: ?>
-    <div class="grid">
+    <div class="grid" id="wGrid">
       <div class="corner"></div>
       <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
         <div class="colhead <?= $i < $extraDays ? 'wide-only' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
@@ -322,6 +455,19 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
         </div>
         <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
       <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+
+  <?php // + Section sits under the habits, where you'd add one. ?>
+  <?php if ($hView !== 'month'): ?>
+    <div class="secfoot">
+      <button type="button" class="newsecbtn" id="newSecBtn">+ Section</button>
+      <form method="post" action="" class="newsection" id="newSecForm" hidden
+            onsubmit="return this.name.value.trim()!==''">
+        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+        <input type="hidden" name="action" value="add_section">
+        <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
+      </form>
     </div>
   <?php endif; ?>
 </div>
@@ -412,6 +558,46 @@ $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) =
   });
   document.addEventListener('pointerup', clearLp);
   document.addEventListener('pointercancel', clearLp);
+
+  // ----- "+ Section" swaps itself for the name field, as in Reminders and Notes -----
+  const newSecBtn = document.getElementById('newSecBtn');
+  const newSecForm = document.getElementById('newSecForm');
+  if (newSecBtn && newSecForm) {
+    const field = newSecForm.querySelector('input[name=name]');
+    newSecBtn.addEventListener('click', () => {
+      newSecBtn.hidden = true; newSecForm.hidden = false; field.focus();
+    });
+    field.addEventListener('blur', () => {          // left empty: put the button back
+      if (field.value.trim() === '') { newSecForm.hidden = true; newSecBtn.hidden = false; }
+    });
+    field.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { field.value = ''; field.blur(); }
+    });
+  }
+
+  // ----- Swipe sideways to page -----
+  // Left goes forward, right goes back, exactly like the arrows in the bar above (and
+  // like the Calendar). A swipe has to be clearly sideways, so scrolling the page still
+  // scrolls it, and the habit cells' own taps are untouched.
+  (function () {
+    const box = document.getElementById('wGrid') || document.getElementById('mGrid');
+    if (!box) { return; }
+    const prev = document.getElementById('wPrev') || document.getElementById('mPrev');
+    const next = document.getElementById('wNext') || document.getElementById('mNext');
+    if (!prev || !next) { return; }
+    let sx = null, sy = 0;
+    box.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) { sx = null; return; }
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    }, { passive: true });
+    box.addEventListener('touchend', e => {
+      if (sx === null) { return; }
+      const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy)) { return; }
+      location.href = (dx < 0 ? next : prev).getAttribute('href');
+    }, { passive: true });
+  })();
 </script>
 <?= chrome_script() ?>
 </body>
