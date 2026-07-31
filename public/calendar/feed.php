@@ -192,17 +192,8 @@ w.addSpacer(8);
 // Reminders and events only — the feed no longer sends notes at all.
 const META = new Color("#777777");                 // the muted time/date colour
 const items = (data.items || []).filter(it => it.kind !== "note");
-const pad2 = n => String(n).padStart(2, "0");
-const now2 = new Date();
-const todayStr = now2.getFullYear() + "-" + pad2(now2.getMonth() + 1) + "-" + pad2(now2.getDate());
-const hasToday = items.some(it => it.date === todayStr);
 if (data.error) {
   const t = w.addText("Couldn't load."); t.textColor = new Color("#ff6666"); t.font = Font.systemFont(12);
-} else if (!items.length) {
-  const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
-} else if (!hasToday) {
-  // Overdue reminders roll onto today, so nothing dated today means the day is clear.
-  const t = w.addText("No more items today."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
   // The day is the section, not the kind: one heading per date, reminders before events
   // under it. The heading gets a light rule directly beneath it (so the date reads as a
@@ -217,6 +208,9 @@ if (data.error) {
     else { byDay.push({ date: it.date, list: [it] }); }
   }
   for (const d of byDay) { d.list.sort((a, b) => (RANK[a.kind] ?? 9) - (RANK[b.kind] ?? 9)); }
+  // Today is always its own section, even when it's empty — an overdue reminder rolls onto
+  // today, so an empty today genuinely means "nothing left", shown as a row under the date.
+  if (!byDay.length || byDay[0].date !== data.today) { byDay.unshift({ date: data.today, list: [] }); }
   let budget = max;
 
   // A full-width rule. `weight` 1 is the hairline under a date, 2 the divider between days.
@@ -274,6 +268,12 @@ if (data.error) {
     w.addSpacer(3);
     rule(1, isToday ? "#2f5f4d" : "#242424");   // the date's own light underline
     w.addSpacer(6);
+    if (!day.list.length) {
+      // Only an empty *today* is unshifted in, so this reads as "nothing left today".
+      const t = w.addText("No more items today."); t.textColor = META; t.font = Font.systemFont(12);
+      w.addSpacer(5);
+      continue;
+    }
     for (const it of day.list) {
       if (budget <= 0) { break; }
       drawRow(it);
