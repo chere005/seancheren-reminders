@@ -35,6 +35,14 @@ function _self_path(): string
 }
 
 /**
+ * Where you land once you're signed in — always the Calendar, whichever page asked
+ * you to log in. Signing in from a bookmark to some other app used to drop you there,
+ * which meant the answer to "what's on today" depended on which icon you'd tapped.
+ * One session covers the whole suite, so the tab bar is a tap away from here anyway.
+ */
+const LOGIN_LANDING = '/calendar/';
+
+/**
  * Accounts people made themselves, keyed by username: ['email' => …, 'password' => …].
  * config.php seeds the household accounts and is hand-kept on the server; anything
  * signed up for through the login page lands here instead, in the encrypted data dir.
@@ -237,7 +245,7 @@ function require_login(string $area = 'App'): void
             session_regenerate_id(true);
             $_SESSION['auth'] = true;
             $_SESSION['user'] = $u;
-            header('Location: ' . _self_path());
+            header('Location: ' . LOGIN_LANDING);
             exit;
         }
         $error = 'Invalid username or password.';
@@ -392,7 +400,7 @@ function signup_handle(array $cfg): array
     session_regenerate_id(true);
     $_SESSION['auth'] = true;
     $_SESSION['user'] = $user;
-    header('Location: ' . _self_path());
+    header('Location: ' . LOGIN_LANDING);
     exit;
 }
 
@@ -417,10 +425,20 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
       font-family: system-ui, sans-serif; background: #111; color: #eee;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      /* svh is the viewport with the browser chrome *showing*, so the card is sized to
+         the smallest the window ever gets and collapsing chrome can't make the page
+         taller than the screen. 100vh stays as the fallback for older browsers. */
+      min-height: 100vh; min-height: 100svh;
+      display: flex; align-items: center; justify-content: center; padding: 1rem;
+      /* Nothing here scrolls — one centred card, and both windows are fixed overlays —
+         so the scrollbar was the only moving part on the page. Scrolling still works
+         if a very short screen ever needs it; the bar just isn't drawn. */
+      overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
     }
+    body::-webkit-scrollbar { width: 0; height: 0; }
     .login-box {
       background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
       padding: 2rem; width: 100%; max-width: 320px;
