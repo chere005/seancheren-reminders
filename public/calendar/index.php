@@ -1077,6 +1077,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           <button type="button" class="calpick-opt calpick-manage" id="calMgr">
             <span class="cpick-gear" aria-hidden="true"><?= folder_icon_svg() ?></span><span>Manage calendars</span>
           </button>
+          <button type="button" class="calpick-opt calpick-manage" id="remMgr">
+            <span class="cpick-gear" aria-hidden="true"><?= folder_icon_svg() ?></span><span>Manage reminders</span>
+          </button>
         </div>
       </div>
     <?php $titleControls = ob_get_clean(); ?>
@@ -1328,29 +1331,31 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 <!-- Manage calendars (opened from "Manage calendars" in the picker dropdown) -->
 <div class="modal-backdrop" id="calModal">
   <div class="modal calmodal">
-    <div class="cm-section" data-cm="cals">
-      <h2 class="cm-head">Calendars<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
-      <div class="cm-body">
-        <div class="addrow">
-          <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
-          <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
-        </div>
-        <ul class="callist" id="calRows"></ul>
-        <div class="defrow">
-          <label for="calDefault">New events go to</label>
-          <select id="calDefault"></select>
-        </div>
-      </div>
+    <h2>Calendars</h2>
+    <div class="addrow">
+      <input type="text" id="calName" placeholder="New calendar" maxlength="40" autocomplete="off">
+      <button type="button" class="plus" id="calAdd" title="Add calendar">+</button>
     </div>
-    <div class="cm-section" data-cm="folders">
-      <h2 class="cm-head">Reminder folders<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
-      <div class="cm-body">
-        <p class="chint">Which folders' reminders show up on the calendar.</p>
-        <ul class="callist" id="folderRows"></ul>
-      </div>
+    <ul class="callist" id="calRows"></ul>
+    <div class="defrow">
+      <label for="calDefault">New events go to</label>
+      <select id="calDefault"></select>
     </div>
     <div class="buttons" style="margin-top:1.1rem">
       <button type="button" class="ok" id="calDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage reminders (opened from "Manage reminders" in the picker dropdown): which
+     reminder folders, and how much of each, show on the calendar. -->
+<div class="modal-backdrop" id="remModal">
+  <div class="modal calmodal">
+    <h2>Reminder folders</h2>
+    <p class="chint">Which folders' reminders show up on the calendar.</p>
+    <ul class="callist" id="folderRows"></ul>
+    <div class="buttons" style="margin-top:1.1rem">
+      <button type="button" class="ok" id="remDone">Done</button>
     </div>
   </div>
 </div>
@@ -1994,23 +1999,27 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   document.getElementById('calName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCal(); } });
 
   document.getElementById('calMgr').addEventListener('click', () => {
-    renderCals(); renderDefault(); renderFolders();
+    renderCals(); renderDefault();
     calModal.classList.add('open');
   });
-  // Collapse/expand the manager's sections (Calendars, Sets, Reminder folders); remembered.
-  document.querySelectorAll('#calModal .cm-head').forEach(h => {
-    const sec = h.closest('.cm-section'), key = 'cmcollapse:' + sec.dataset.cm;
-    if (localStorage.getItem(key) === '1') sec.classList.add('collapsed');
-    h.addEventListener('click', () => {
-      localStorage.setItem(key, sec.classList.toggle('collapsed') ? '1' : '0');
-    });
+  // Manage reminders is its own window now: just the reminder-folders All/Dated/None list.
+  const remModal = document.getElementById('remModal');
+  document.getElementById('remMgr').addEventListener('click', () => {
+    renderFolders();
+    remModal.classList.add('open');
   });
   const closeCalModal = () => {
     calModal.classList.remove('open');
     if (calDirty) location.reload();   // colours, names and the picker all live in the page
   };
+  const closeRemModal = () => {
+    remModal.classList.remove('open');
+    if (calDirty) location.reload();
+  };
   document.getElementById('calDone').addEventListener('click', closeCalModal);
   calModal.addEventListener('click', e => { if (e.target === calModal) closeCalModal(); });
+  document.getElementById('remDone').addEventListener('click', closeRemModal);
+  remModal.addEventListener('click', e => { if (e.target === remModal) closeRemModal(); });
 
   // Picking the visible calendar / set. Hand-built popover rather than a <select>,
   // so each entry can carry its calendar's colour dot.
@@ -2098,11 +2107,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
   const shareModalEl = document.getElementById('shareModal');
   const anyModalOpen = () => modal.classList.contains('open')
-    || calModal.classList.contains('open')
+    || calModal.classList.contains('open') || remModal.classList.contains('open')
     || (shareModalEl && shareModalEl.classList.contains('open'));
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (shareModalEl && shareModalEl.classList.contains('open')) { shareModalEl.classList.remove('open'); return; }
+    if (remModal.classList.contains('open')) { closeRemModal(); return; }
     if (calModal.classList.contains('open')) { closeCalModal(); return; }
     if (modal.classList.contains('open')) { closeModal(); return; }
     if (document.body.classList.contains('editing')) { document.body.classList.remove('editing'); return; }
