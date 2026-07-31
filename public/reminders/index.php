@@ -559,15 +559,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $id   = (string) ($_POST['id'] ?? '');
         $text = trim((string) ($_POST['text'] ?? ''));
         $list = load_reminders($dataFile);
+        // Retyping a row reads the same way as typing a new one: "Vet 8/3 2pm" moves it
+        // to Aug 3 at 2pm and leaves "Vet" behind. There is no date field on an inline
+        // edit, so there is nothing to override it — but a line with no date in it must
+        // leave the date alone rather than clear it, or renaming a dated reminder would
+        // quietly undate it.
+        [$ptext, $pdate, $ptime] = parse_when_from_text($text);
+        $due = null; $time = null;
         if ($text !== '') {
             foreach ($list as &$r) {
-                if (!is_section($r) && ($r['id'] ?? '') === $id) { $r['text'] = mb_substr($text, 0, 500); break; }
+                if (is_section($r) || ($r['id'] ?? '') !== $id) { continue; }
+                $r['text'] = mb_substr($ptext !== '' ? $ptext : $text, 0, 500);
+                if ($pdate !== null) { $r['due']  = $pdate; }
+                if ($ptime !== null) { $r['time'] = $ptime; }
+                $due = $r['due'] ?? null; $time = $r['time'] ?? null;
+                break;
             }
             unset($r);
             save_reminders($dataFile, $list);
         }
+        // Answer with what was actually stored, so the row can redraw its date chip
+        // instead of the client guessing that nothing moved.
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true]);
+        echo json_encode(['ok' => true, 'text' => $ptext !== '' ? $ptext : $text,
+                          'due' => $due, 'time' => $time]);
         exit;
     }
 
@@ -1525,7 +1540,18 @@ $sectionInput =
       inp.replaceWith(ns);
       if (save && val && val !== cur) {
         const body = new URLSearchParams({ csrf: CSRF, action: 'edit_text', view: VIEW, id, text: val });
-        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+          .then(r => r.json())
+          .then(s => {
+            if (!s || !s.ok) { return; }
+            // The server reads a date out of what was typed, so the text it stored may be
+            // shorter than what was sent — show that, not the raw line.
+            if (s.text) { ns.textContent = s.text; }
+            // And if the row has moved to a different date it belongs somewhere else in
+            // the list, with a different chip; let the page redraw rather than lie.
+            if ((s.due || '') !== (li.dataset.due || '')) { location.reload(); }
+          })
+          .catch(() => location.reload());
       }
     };
     inp.addEventListener('keydown', e => {

@@ -264,9 +264,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $evCal   = (string) ($_POST['cal'] ?? '');
     $evCalOk = in_array($evCal, $calIds, true) ? $evCal : '';
 
-    // "Dinner 8/3 7pm" -> text "Dinner", date 2026-08-03, time 19:00. An explicit
-    // date or time from the window always wins over what was typed.
-    [$ptext, $pdate, $ptime] = parse_when_from_text($text);
+    // "Dinner 8/3 7pm" -> text "Dinner", date 2026-08-03, time 19:00. An explicit date
+    // or time from the window always wins over what was typed — and when one is given,
+    // the text is kept *exactly* as typed rather than having the date words cut out of
+    // it. Stripping them there threw away something the picker hadn't asked about: pick
+    // Aug 10 on "Dinner 8/3 with Sam" and you used to be left with "Dinner with Sam".
+    [$parsed, $pdate, $ptime] = parse_when_from_text($text);
+    $byHand  = $dateOk || $timeOk;
+    $ptext   = $byHand ? $text : $parsed;
     $effDate = $dateOk ? $date : $pdate;
 
     // "Every 2 weeks" from the window's repeat row; null when it happens once.
