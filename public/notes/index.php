@@ -30,6 +30,9 @@ $folderColors = folder_colors($cfg['data_dir'], 'notes');
 // Folders the other person shared with me, shown in the picker as "@aki:Recipes".
 $partner       = share_partner();
 $sharedFolders = shared_note_folders($cfg['data_dir'], $partner);
+// Which of the partner's shared note folders I've switched off in my own "All" (keyed by
+// "@partner:Folder"). Their data is read-only to me — this is only my view preference.
+$sharedHidden  = $partner ? folders_shared_hidden($cfg['data_dir'], 'notes') : [];
 
 /**
  * Which folder is being viewed? 'All', one of mine, or '@<partner>:<folder>' for a
@@ -126,8 +129,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
     if ($_POST['action'] === 'folder_vis') {
-        folder_hidden_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''),
-                          empty($_POST['show']));
+        $vname = (string) ($_POST['name'] ?? '');
+        if (strncmp($vname, '@', 1) === 0) {
+            folder_shared_hidden_set($cfg['data_dir'], 'notes', $vname, empty($_POST['show']));
+        } else {
+            folder_hidden_set($cfg['data_dir'], 'notes', $vname, empty($_POST['show']));
+        }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'notes')]);
         exit;
@@ -511,6 +518,55 @@ function render_note_default_group(array $rows, string $csrf, string $view, stri
     render_note_rows($rows, $view, $csrf);
 }
 
+/** Read-only list of the partner's notes (in "All"): title and date only, no link or
+ *  delete, since their data is never mine to edit. */
+function render_note_rows_ro(array $rows): void
+{
+    echo '<ul class="nlist ro">';
+    foreach ($rows as $n) {
+        $date = (string) ($n['date'] ?? '');
+        echo '<li class="ro-note"><span class="ntitle">' . e($n['title'] ?? 'Untitled note') . '</span>';
+        if ($date !== '') { echo '<span class="ndate">' . e($date) . '</span>'; }
+        echo '</li>';
+    }
+    echo '</ul>';
+}
+
+/** One of the partner's shared note folders, read-only in my "All": a badged head, their
+ *  sections and the loose catch-all, all non-interactive. */
+function render_shared_note_folder_ro(string $dir, string $partner, string $folder, string $key, string $color): void
+{
+    $all   = store_read(user_data_file($dir, 'notes', $partner));
+    $secs  = array_values(array_filter($all, fn($it) => is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $folder));
+    $notes = array_values(array_filter($all, fn($it) => !is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $folder));
+    $names = array_map(fn($s) => (string) $s['name'], $secs);
+    $bySec = [];
+    $loose = [];
+    foreach ($notes as $n) {
+        $s = (string) ($n['section'] ?? '');
+        if ($s !== '' && in_array($s, $names, true)) { $bySec[$s][] = $n; } else { $loose[] = $n; }
+    }
+    ?>
+    <div class="folder-block shared-block" data-folder="<?= e($key) ?>">
+      <div class="folder-head">
+        <?= folder_collapse_button() ?>
+        <div class="folder-label"><?= e($folder) ?></div>
+        <span class="fdot" style="background:<?= e($color) ?>" aria-hidden="true"></span>
+        <span class="fshared-badge" title="Shared by <?= e($partner) ?>"><?= e($partner) ?></span>
+        <span class="folder-rule" aria-hidden="true"></span>
+      </div>
+      <?php foreach ($secs as $s): $sn = (string) $s['name']; if (empty($bySec[$sn])) { continue; } ?>
+        <div class="section-head"><span class="section-title"><?= e($sn) ?></span></div>
+        <?php render_note_rows_ro($bySec[$sn]); ?>
+      <?php endforeach; ?>
+      <?php if ($loose): ?>
+        <div class="section-head"><span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span></div>
+        <?php render_note_rows_ro($loose); ?>
+      <?php endif; ?>
+    </div>
+    <?php
+}
+
 /** Echo a list of note rows. Always emitted, since an empty one is a drag target. */
 function render_note_rows(array $rows, string $view, string $csrf, string $section = '', string $cls = ''): void
 {
@@ -669,6 +725,17 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       border-radius: 999px; white-space: nowrap;
     }
     .noteitem .nchev { color: #555; font-size: 1.1rem; }
+    /* A partner's shared note folder shown read-only in my "All": no link, no delete. */
+    .folder-head .fshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.15rem;
+    }
+    ul.nlist.ro li.ro-note { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.25rem; }
+    .ro-note .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
+    .ro-note .ndate {
+      font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
+      border-radius: 999px; white-space: nowrap;
+    }
     .empty { color: #666; text-align: center; padding: 2rem 0; }
 
     /* Editor view */
@@ -766,7 +833,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       if (!$editing) {
           ob_start();
           render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
-                             $hidFolders, $isShared ? '' : $csrf);
+                             array_merge($hidFolders, $sharedHidden), $isShared ? '' : $csrf);
           $titleControls = ob_get_clean();
       }
     ?>
@@ -825,6 +892,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <?php render_note_default_group($ungrouped, $csrf, $view, $addTarget); ?>
       </div>
     <?php endif; ?>
+    <?php // In "All", the partner's shared note folders I haven't switched off show here,
+          // read-only and badged — their data is never mine to edit. ?>
+    <?php if (!$isShared && $viewFolder === 'All' && $partner):
+            foreach ($sharedFolders as $i => $sf):
+                $skey = '@' . $partner . ':' . $sf;
+                if (in_array($skey, $sharedHidden, true)) { continue; }
+                $scol = folder_shared_color($sharedOverrides, $theirColors, 'notes', $skey, $sf, $i);
+                render_shared_note_folder_ro($cfg['data_dir'], $partner, $sf, $skey, $scol);
+            endforeach;
+          endif; ?>
    </div>
 
 <?php else: ?>
