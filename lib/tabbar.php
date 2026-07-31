@@ -32,22 +32,31 @@ function tabbar_styles(): string
       background: #2a2a2a; color: var(--accent);
     }
     .segmented a.active:hover { color: var(--accent); }
+    /* The middle "+" tab: a green add button that opens the quick-add app. */
+    .segmented a.addtab {
+      flex: 0 0 auto; margin: -3px 0.35rem; padding: 0 0.9rem;
+      background: var(--accent, #34d399); color: var(--accent-ink, #06251b);
+    }
+    .segmented a.addtab .ico { font-size: 1.7rem; font-weight: 700; }
+    .segmented a.addtab:hover { background: #52e0ac; color: var(--accent-ink, #06251b); }
     CSS;
 }
 
 function render_tabbar(string $active): void
 {
+    // A green "+" sits in the middle, between Calendar and Notes, opening the quick-add app.
     $tabs = [
-        'reminders' => ['href' => '/reminders/', 'ico' => '&#9745;', 'label' => 'Reminders'],
+        'reminders' => ['href' => '/reminders/', 'ico' => '&#9745;',   'label' => 'Reminders'],
         'calendar'  => ['href' => '/calendar/',  'ico' => '&#128197;', 'label' => 'Calendar'],
+        'add'       => ['href' => '/add/',        'ico' => '+',          'label' => 'Add', 'add' => true],
         'notes'     => ['href' => '/notes/',     'ico' => '&#128221;', 'label' => 'Notes'],
         'habits'    => ['href' => '/habits/',    'ico' => '&#128293;', 'label' => 'Habits'],
     ];
     echo '<nav class="tabbar"><div class="segmented">';
     foreach ($tabs as $key => $t) {
-        $cls = $key === $active ? ' class="active"' : '';
+        $cls = ($key === $active ? ' active' : '') . (!empty($t['add']) ? ' addtab' : '');
         // Icon only; the label stays as the accessible name.
-        echo '<a href="' . $t['href'] . '"' . $cls
+        echo '<a href="' . $t['href'] . '"' . ($cls !== '' ? ' class="' . trim($cls) . '"' : '')
            . ' title="' . $t['label'] . '" aria-label="' . $t['label'] . '">'
            . '<span class="ico">' . $t['ico'] . '</span></a>';
     }
