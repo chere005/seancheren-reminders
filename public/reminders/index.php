@@ -1699,6 +1699,11 @@ $sectionInput =
     if (!li && !head) return;
     if (!editing()) setEdit(true);
     if (li) startInlineEdit(li);
+    // A section head's gesture opens its name, the way a row's opens its text. Without
+    // this you had to tap the name again afterwards, and that second tap falls inside the
+    // window where the long-press's own click is still being swallowed.
+    const f = head && head.querySelector('.sectitle');
+    if (f) { setTimeout(() => { f.focus(); try { f.select(); } catch (_) {} }, 0); }
   };
   document.addEventListener('dblclick', (e) => {
     if (editing()) return;
