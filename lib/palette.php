@@ -25,7 +25,12 @@ const PALETTES = [
     ],
 ];
 
-/** The six colours an app offers — the partner ("shared") variant when $shared is true. */
+/**
+ * The six colours an app offers — the partner ("shared") variant when $shared is true.
+ * An app with no tier of its own falls back to the reminders one: Habits asks for
+ * app_palette('habits', true) and gets the lighter reminders set, which sits closer to
+ * that app's soft violet than the saturated folder colours do.
+ */
 function app_palette(string $app, bool $shared = false): array
 {
     $set = PALETTES[$app] ?? PALETTES['reminders'];

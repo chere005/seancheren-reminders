@@ -7,6 +7,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
 require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
+require_once $__libDir . '/palette.php';   // the section colour dots
 require_login('Habits');
 
 $cfg      = app_config();
@@ -17,6 +18,22 @@ function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES
 function load_habits(string $f): array { return store_read($f); }
 function save_habits(string $f, array $h): void { store_write($f, array_values($h)); }
 function is_section(array $it): bool { return ($it['type'] ?? '') === 'section'; }
+
+/**
+ * A habits section's colour, defaulting by position so a new section is distinct as
+ * soon as it exists. Habits has no palette tier of its own — it borrows the lighter
+ * "shared" set (app_palette(…, true)), which sits closer to this app's soft violet
+ * than the saturated folder colours do. Stored on the section row itself, keyed by id
+ * like everything else here, rather than in a side file.
+ */
+function habits_palette(): array { return app_palette('habits', true); }
+
+function habit_section_color(array $s, int $i): string
+{
+    $pal = habits_palette();
+    $c   = (string) ($s['color'] ?? '');
+    return in_array($c, $pal, true) ? $c : $pal[$i % count($pal)];
+}
 
 // Render one habit's name bubble + 7 day cells into the grid.
 function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0): void { ?>
@@ -71,6 +88,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 if (!is_section($h) && ($h['id'] ?? '') === $id) { $h['name'] = mb_substr($name, 0, 40); break; }
             }
             unset($h);
+            save_habits($dataFile, $habits);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // Recolour a section (AJAX, from the swatch on its header). Posts in the background
+    // and recolours in place, the way the folder manager's swatch does, so the page
+    // never reloads out from under an edit-mode tap.
+    if ($_POST['action'] === 'set_section_color') {
+        $id  = (string) ($_POST['id'] ?? '');
+        $col = (string) ($_POST['color'] ?? '');
+        if (in_array($col, habits_palette(), true)) {
+            foreach ($habits as &$it) {
+                if (is_section($it) && ($it['id'] ?? '') === $id) { $it['color'] = $col; break; }
+            }
+            unset($it);
             save_habits($dataFile, $habits);
         }
         header('Content-Type: application/json');
@@ -276,6 +311,31 @@ foreach ($habitItems as $h) {
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The section's colour dot, left of its name — the same swatch-opens-a-palette
+       control the folder manager uses, shrunk to the size of the folder heading's dot.
+       It's the same element in and out of edit mode, so turning editing on shifts
+       nothing; out of edit mode it simply doesn't answer taps. */
+    .hsection .hcolor { flex: 0 0 auto; position: relative; }
+    .hsection .hcolor summary {
+      position: relative; width: 11px; height: 11px; border-radius: 50%;
+      border: 1px solid #3d3559; cursor: pointer; list-style: none;
+    }
+    .hsection .hcolor summary::-webkit-details-marker { display: none; }
+    body:not(.editing) .hsection .hcolor { pointer-events: none; }
+    body:not(.editing) .hsection .hcolor summary { cursor: default; }
+    /* An 11px dot is far too small to hit with a thumb, so in edit mode it gets an
+       invisible 27px tap target around it rather than growing and moving the name. */
+    body.editing .hsection .hcolor summary::after { content: ''; position: absolute; inset: -8px; }
+    .hsection .hswatches {
+      position: absolute; z-index: 5; top: calc(100% + 8px); left: -6px;
+      background: #1c1c1c; border: 1px solid #444; border-radius: 10px; padding: 0.5rem;
+      display: grid; grid-template-columns: repeat(6, 22px); gap: 0.4rem;   /* all six on one row */
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+    }
+    .hsection .hswatches button {
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid #444;
+      cursor: pointer; padding: 0;
+    }
     .hsection .del { display: none; margin-left: auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
     body.editing .hsection .del { display: inline-block; }
     .hsection .del:hover { border-color: #f66; color: #f66; }
@@ -457,8 +517,23 @@ foreach ($habitItems as $h) {
 
       <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
 
-      <?php foreach ($sections as $s): ?>
+      <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
         <div class="hsection">
+          <?php // The section's colour. Out of edit mode it's just a dot; in edit mode the
+                // dot opens the palette under it, exactly as a folder's swatch does. It's
+                // the same element either way, so entering edit mode shifts nothing. ?>
+          <details class="hcolor">
+            <summary style="background:<?= e($scol) ?>" title="Colour"></summary>
+            <form class="hswatches" method="post" action="">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <input type="hidden" name="action" value="set_section_color">
+              <input type="hidden" name="id" value="<?= e($s['id']) ?>">
+              <?php foreach (habits_palette() as $col): ?>
+                <button type="submit" name="color" value="<?= e($col) ?>"
+                        style="background:<?= e($col) ?>" title="<?= e($col) ?>"></button>
+              <?php endforeach; ?>
+            </form>
+          </details>
           <?= section_title_html($s['name'], $csrf, '', false, 'rename_section',
                 '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
           <form method="post" action="" style="display:inline">
@@ -598,6 +673,27 @@ foreach ($habitItems as $h) {
   };
   wireAdd('newHabitBtn', 'newHabitForm');
   wireAdd('newSecBtn', 'newSecForm');
+
+  // ----- A section's colour swatch: post in the background, recolour in place -----
+  // Same shape as the folder manager's, so the grid never reloads mid-edit.
+  document.addEventListener('click', e => {
+    const sw = e.target.closest('.hswatches button[name=color]');
+    if (!sw) { return; }
+    e.preventDefault();
+    const det = sw.closest('details'), body = new URLSearchParams(new FormData(sw.form));
+    body.set('color', sw.value);
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+      .catch(() => {});
+    const sum = det && det.querySelector('summary');
+    if (sum) { sum.style.background = sw.value; }
+    if (det) { det.open = false; }
+  });
+  // Tapping anywhere else closes an open palette, so one can't sit over the grid.
+  document.addEventListener('click', e => {
+    document.querySelectorAll('.hcolor[open]').forEach(d => {
+      if (!d.contains(e.target)) { d.open = false; }
+    });
+  });
 
   // ----- Swipe sideways to page -----
   // Left goes forward, right goes back, exactly like the arrows in the bar above (and
