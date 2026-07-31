@@ -595,6 +595,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     'section' => $section,
                     'created' => time(),
                 ]);
+                // Reopen this section's add row after the redirect, so you can keep adding.
+                $stay = '&addto=' . section_add_id($folder, $section);
             }
             break;
 
@@ -1239,6 +1241,15 @@ $sectionInput =
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') document.querySelectorAll('.secadd-row').forEach(r => { r.hidden = true; });
   });
+  // After adding a reminder we land back with ?addto=<row id>: reopen that section's field
+  // and focus it, so you can add another without reaching for the "+" again.
+  (function () {
+    const q = new URLSearchParams(location.search), id = q.get('addto');
+    if (!id) return;
+    const row = document.getElementById(id);
+    if (row) { row.hidden = false; const i = row.querySelector('input[type=text]'); if (i) { i.focus(); } }
+    const u = new URL(location.href); u.searchParams.delete('addto'); history.replaceState(null, '', u);
+  })();
 
   // ----- Edit mode: reveal the X delete buttons + drag handles -----
   // There's no Edit button any more; the pencil on each section header is the way in.
