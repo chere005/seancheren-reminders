@@ -72,11 +72,11 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
     [$visibleCals, $hidFolders] = feed_scope($dir, $user, $pin);
     $defCal = null;
 
-    foreach (loadlist(ufile($dir, $user, 'reminders')) as $r) {
+    foreach (reminders_folder_migrate(loadlist(ufile($dir, $user, 'reminders'))) as $r) {
         if (($r['type'] ?? '') === 'section' || !empty($r['done'])) { continue; }
-        if (in_array($r['folder'] ?? 'General', $hidFolders, true)) { continue; }   // folder switched off
-        // Undated items in the permanent "Calendar" section ride along under today.
-        $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
+        if (in_array($r['folder'] ?? '', $hidFolders, true)) { continue; }   // folder switched off
+        // Undated items in the permanent "Calendar" *folder* ride along under today.
+        $rides = empty($r['due']) && ($r['folder'] ?? '') === FOLDER_CALENDAR;
         if (empty($r['due']) && !$rides) { continue; }
         $eff = $rides ? $today : (($r['due'] < $today) ? $today : $r['due']);
         // Its own (possibly rolled) date, then any repeats inside the window.

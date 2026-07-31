@@ -414,12 +414,15 @@ function section_collapse_script(): string
   var SK = 'collapsed:' + location.pathname;
   function load() { try { return new Set(JSON.parse(localStorage.getItem(SK) || '[]')); } catch (_) { return new Set(); } }
   function save(s) { localStorage.setItem(SK, JSON.stringify([].slice.call(s))); }
+  // Folder and section name with a separator between them. Without one, every folder's
+  // unnamed catch-all keyed as just the folder name and "Wor"+"k" collided with
+  // "Work"+"" — collapsing one section quietly collapsed another somewhere else.
   function keyFor(head) {
     var g = head.closest('.section-group');
     var f = (g && g.dataset.folder) || head.dataset.folder || '';
     var n = g ? (g.dataset.section || '') : null;
     if (n === null) { var ul = head.nextElementSibling; n = (ul && ul.dataset && ul.dataset.section) || ''; }
-    return f + '' + n;
+    return f + '\u001f' + n;
   }
   function targetOf(head) { return head.closest('.section-group') || head; }
   var state = load();

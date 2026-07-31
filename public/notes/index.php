@@ -23,6 +23,8 @@ if (empty($_SESSION['csrf'])) {
 
 $me           = current_user() ?? '';
 $myFolders    = folders_load($cfg['data_dir'])['notes'];
+// Folders switched off in the picker: still openable, just left out of "All".
+$hidFolders   = folders_hidden($cfg['data_dir'], 'notes');
 $folderColors = folder_colors($cfg['data_dir'], 'notes');
 
 // Folders the other person shared with me, shown in the picker as "@aki:Recipes".
@@ -120,6 +122,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         // fm=1 reopens the folder manager so adding one doesn't close it.
         $stay = !empty($_POST['edit']) ? '&edit=1' : '';
         header('Location: ' . _self_path() . '?folder=' . urlencode($name !== '' ? $name : 'All') . $stay . '&fm=1');
+        exit;
+    }
+    // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
+    if ($_POST['action'] === 'folder_vis') {
+        folder_hidden_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''),
+                          empty($_POST['show']));
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'notes')]);
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {
@@ -398,6 +408,9 @@ if (!$editing) {
     $listNotes = $noteRows;
     if ($viewFolder !== 'All') {
         $listNotes = array_values(array_filter($listNotes, fn($n) => ($n['folder'] ?? FOLDER_DEFAULT) === $viewFolder));
+    } elseif (!$isShared && $hidFolders) {
+        $listNotes = array_values(array_filter($listNotes,
+            fn($n) => !in_array($n['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)));
     }
     // Stored order is drag order, as in Reminders and the bookshelf's notes.
 
@@ -419,7 +432,10 @@ if (!$editing) {
     // Deriving this from content alone was the bug: with every note in General (which is
     // where notes added from "All" land) there was only ever one folder, so the headings
     // silently never appeared.
-    $folderOrder = $folders;
+    // Folders switched off in the picker drop out of "All" (a partner's list is theirs,
+    // so nothing is hidden while viewing one of their folders).
+    $folderOrder = array_values(array_filter($folders,
+        fn($f) => $isShared || !in_array($f, $hidFolders, true)));
     foreach ($secRows as $s) {
         $f = (string) ($s['folder'] ?? FOLDER_DEFAULT);
         if (!in_array($f, $folderOrder, true)) { $folderOrder[] = $f; }
@@ -468,7 +484,9 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
 function render_note_default_group(array $rows, string $csrf, string $view, string $folder): void
 {
     ?>
-    <div class="section-head">
+    <?php // data-folder keys this header's collapse state, so each folder's catch-all
+          // folds on its own rather than all of them together. ?>
+    <div class="section-head" data-folder="<?= e($folder) ?>">
       <?= section_collapse_button() ?>
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
       <?php render_section_add('', $csrf, $view, $folder); ?>
@@ -731,7 +749,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       $titleControls = '';
       if (!$editing) {
           ob_start();
-          render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders');
+          render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
+                             $hidFolders, $isShared ? '' : $csrf);
           $titleControls = ob_get_clean();
       }
     ?>

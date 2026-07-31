@@ -5,6 +5,7 @@ foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
+require_once $__libDir . '/folders.php';   // folder_fallback() for where a quick add lands
 require_login('Quick add');
 
 $cfg   = app_config();
@@ -49,7 +50,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
         $l = store_read($f);
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                 'due' => $when, 'time' => $ptime, 'done' => false,
-                'folder' => 'General', 'section' => '', 'created' => time()];
+                'folder' => folder_fallback('reminders'), 'section' => '', 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Reminder added';
     } elseif ($text !== '' && $act === 'add_event') {

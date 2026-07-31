@@ -1,13 +1,36 @@
 <?php
 /**
  * Per-user folders for reminders and notes.
- * Stored in data/folders-<user>.json as { "reminders": [...], "notes": [...] }.
- * "General" always exists and is the default folder.
+ * Stored in data/folders-<user>.json as { "reminders": [...], "notes": [...] }, beside
+ * `default`, `last`, `hidden` and `colors` — all keyed by type.
+ * Reminders always has "Reminders" and "Calendar"; Notes always has "General".
  */
 
 require_once __DIR__ . '/palette.php';
 
 const FOLDER_DEFAULT = 'General';
+
+/**
+ * Folders that always exist and can't be deleted, always first in the list.
+ * Reminders has two — "Reminders" (the catch-all) and "Calendar" (undated items there
+ * ride along on today); see lib/util.php. Notes keeps the one "General".
+ * "General" is still accepted in a reminders list on the way in and migrated away.
+ */
+function folders_fixed(string $type): array
+{
+    return $type === 'reminders' ? [FOLDER_REMINDERS, FOLDER_CALENDAR] : [FOLDER_DEFAULT];
+}
+
+/** The folder a type falls back to when nothing else is named. */
+function folder_fallback(string $type): string
+{
+    return folders_fixed($type)[0];
+}
+
+function folder_is_fixed(string $type, string $name): bool
+{
+    return in_array($name, folders_fixed($type), true);
+}
 
 // A folder's colours come from the per-app palette (app_palette('reminders'|'notes')),
 // so reminder and note folders sit at their own shades. See lib/palette.php.
@@ -17,14 +40,43 @@ function folders_load(string $dir, ?string $user = null): array
     $file = user_data_file($dir, 'folders', $user);
     $data = store_read($file);
     foreach (['reminders', 'notes'] as $type) {
-        if (empty($data[$type]) || !is_array($data[$type])) {
-            $data[$type] = [FOLDER_DEFAULT];
+        $fixed = folders_fixed($type);
+        $have  = (is_array($data[$type] ?? null)) ? $data[$type] : [];
+        // A reminders list from before the permanent folders existed carries "General";
+        // its items are re-pointed at "Reminders" by reminders_folder_migrate(), so the
+        // name itself just goes.
+        if ($type === 'reminders') {
+            $have = array_filter($have, fn($f) => $f !== FOLDER_DEFAULT);
         }
-        // Ensure General is present and first.
-        $data[$type] = array_values(array_unique(array_merge([FOLDER_DEFAULT],
-            array_filter($data[$type], fn($f) => $f !== FOLDER_DEFAULT))));
+        $data[$type] = array_values(array_unique(array_merge($fixed,
+            array_filter($have, fn($f) => !in_array($f, $fixed, true)))));
     }
     return $data;
+}
+
+/**
+ * Which folders are switched off in the picker. Hiding is per type and per user, kept
+ * beside the list; "All" then means "every folder I haven't hidden". Re-validated on
+ * read, so a hidden folder that's since been deleted quietly stops counting.
+ */
+function folders_hidden(string $dir, string $type, ?string $user = null): array
+{
+    $data = folders_load($dir, $user);
+    $hid  = is_array($data['hidden'][$type] ?? null) ? $data['hidden'][$type] : [];
+    return array_values(array_intersect($hid, $data[$type] ?? []));
+}
+
+/** Show or hide one folder in the picker. A fixed folder can be hidden like any other. */
+function folder_hidden_set(string $dir, string $type, string $name, bool $hidden): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data = folders_load($dir);
+    if (!in_array($name, $data[$type], true)) { return; }
+    $cur = is_array($data['hidden'][$type] ?? null) ? $data['hidden'][$type] : [];
+    $cur = array_values(array_filter($cur, fn($f) => $f !== $name));
+    if ($hidden) { $cur[] = $name; }
+    $data['hidden'][$type] = $cur;
+    folders_save($dir, $data);
 }
 
 /**
@@ -151,7 +203,7 @@ function folder_default_get(string $dir, string $type, ?string $user = null): st
 {
     $data = folders_load($dir, $user);
     $name = (string) ($data['default'][$type] ?? '');
-    return in_array($name, $data[$type] ?? [], true) ? $name : FOLDER_DEFAULT;
+    return in_array($name, $data[$type] ?? [], true) ? $name : folder_fallback($type);
 }
 
 function folder_default_set(string $dir, string $type, string $name): void
@@ -192,11 +244,14 @@ function folder_last_set(string $dir, string $type, string $view): void
 
 function folders_delete(string $dir, string $type, string $name): void
 {
-    if ($name === FOLDER_DEFAULT || !in_array($type, ['reminders', 'notes'], true)) {
-        return;   // never delete the default
+    if (!in_array($type, ['reminders', 'notes'], true) || folder_is_fixed($type, $name)) {
+        return;   // the permanent folders are never deleted
     }
     $data = folders_load($dir);
     $data[$type] = array_values(array_filter($data[$type], fn($f) => $f !== $name));
+    if (is_array($data['hidden'][$type] ?? null)) {
+        $data['hidden'][$type] = array_values(array_filter($data['hidden'][$type], fn($f) => $f !== $name));
+    }
     folders_save($dir, $data);
 }
 
@@ -206,9 +261,14 @@ function folders_delete(string $dir, string $type, string $name): void
  * the two apps pick a view the same way.
  * $groups is [ ['label' => 'Sean', 'options' => [ [value, label, color], … ] ], … ];
  * a group with an empty label lists its options loose at the top.
+ *
+ * Each of my own folders also carries a checkbox saying whether it shows in the "All"
+ * view: tapping the row still switches to that folder, tapping the box only switches it
+ * on or off. $hidden lists the folders currently switched off; $csrf being non-empty is
+ * what turns the boxes on at all (a page that doesn't handle `folder_vis` passes '').
  */
 function render_folder_pick(array $groups, string $active, string $activeLabel = 'All',
-                            string $manageLabel = ''): void
+                            string $manageLabel = '', array $hidden = [], string $csrf = ''): void
 {
     $e = fn($x) => htmlspecialchars((string) $x, ENT_QUOTES);
     $cur = '';
@@ -217,6 +277,7 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
             if ($active === $val) { $cur = $col; $activeLabel = $label; }
         }
     }
+    $boxes = $csrf !== '';
     ?>
     <div class="folderpick">
       <button type="button" class="folderpick-btn" id="folderSelBtn" aria-haspopup="listbox"
@@ -225,13 +286,25 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
       </button>
       <div class="folderpick-menu" id="folderSelMenu" role="listbox" hidden>
         <a class="folderpick-opt<?= ($active === 'All' || $active === '') ? ' on' : '' ?>" href="?folder=All">
+          <?php if ($boxes): ?><span class="fvis-pad" aria-hidden="true"></span><?php endif; ?>
           <span class="fdot all"></span><span>All</span>
         </a>
         <?php foreach ($groups as $g): ?>
           <?php if (empty($g['options'])) { continue; } ?>
           <?php if ($g['label'] !== ''): ?><div class="folderpick-group"><?= $e($g['label']) ?></div><?php endif; ?>
           <?php foreach ($g['options'] as [$val, $label, $col]): ?>
+            <?php // Only my own folders can be hidden; a shared one is theirs to show. ?>
+            <?php $own = $boxes && strncmp($val, '@', 1) !== 0; ?>
             <a class="folderpick-opt<?= $active === $val ? ' on' : '' ?>" href="?folder=<?= urlencode($val) ?>">
+              <?php if ($boxes): ?>
+                <?php if ($own): ?>
+                  <input type="checkbox" class="fvis" data-folder="<?= $e($val) ?>"
+                         <?= in_array($val, $hidden, true) ? '' : 'checked' ?>
+                         title="Show in All" aria-label="Show <?= $e($label) ?> in All">
+                <?php else: ?>
+                  <span class="fvis-pad" aria-hidden="true"></span>
+                <?php endif; ?>
+              <?php endif; ?>
               <span class="fdot" style="background:<?= $e($col) ?>"></span><span><?= $e($label) ?></span>
             </a>
           <?php endforeach; ?>
@@ -259,6 +332,21 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
       m.addEventListener('click', function (e) {
         if (e.target.closest('.folderpick-manage')) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
       });
+      // The show/hide box lives inside the row's link, so it has to swallow the click
+      // that would otherwise navigate to that folder. It posts in the background and
+      // reloads only when the All view is what's on screen and would actually change.
+      var CSRF = <?= json_encode($csrf) ?>;
+      m.addEventListener('click', function (e) {
+        var cb = e.target.closest('.fvis');
+        if (!cb) { return; }
+        e.preventDefault(); e.stopPropagation();
+        cb.checked = !cb.checked;
+        var body = new URLSearchParams({ csrf: CSRF, action: 'folder_vis',
+                                         name: cb.dataset.folder, show: cb.checked ? '1' : '' });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
+          .then(function () { location.reload(); })
+          .catch(function () { location.reload(); });
+      });
     })();</script>
     <?php
 }
@@ -272,10 +360,12 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
 function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                              string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
                              string $extraButton = '', array $colors = [], array $palette = [],
-                             array $sharedRows = [], array $sharedPalette = []): void
+                             array $sharedRows = [], array $sharedPalette = [],
+                             string $type = 'reminders'): void
 {
-    $csrf = htmlspecialchars($csrf, ENT_QUOTES);
-    $vw   = htmlspecialchars($view, ENT_QUOTES);
+    $csrf  = htmlspecialchars($csrf, ENT_QUOTES);
+    $vw    = htmlspecialchars($view, ENT_QUOTES);
+    $fixed = folders_fixed($type);   // the permanent ones carry no delete ×
     if (!$palette) { $palette = app_palette('reminders'); }
     if (!$sharedPalette) { $sharedPalette = app_palette('reminders', true); }
     ?>
@@ -308,7 +398,7 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
                 </form>
               </details>
               <span class="fname"><?= htmlspecialchars($f, ENT_QUOTES) ?></span>
-              <?php if ($f !== FOLDER_DEFAULT): ?>
+              <?php if (!in_array($f, $fixed, true)): ?>
                 <form method="post" action="" style="display:inline">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="delete_folder">
@@ -347,7 +437,7 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
             <?php endforeach; ?>
           </ul>
         <?php endif; ?>
-        <p class="fhint">Deleting a folder keeps its items — they move to <?= FOLDER_DEFAULT ?>.</p>
+        <p class="fhint">Deleting a folder keeps its items — they move to <?= htmlspecialchars($fixed[0], ENT_QUOTES) ?>.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
     </div>
@@ -414,6 +504,14 @@ function folder_nav_styles(): string
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt:hover { background: #262626; color: #fff; }
+    /* The show-in-All box. Sized and coloured by hand so it doesn't look like a stray
+       form control in a menu, with a blank of the same width keeping the rows that
+       don't have one (All, the partner's folders) lined up with the ones that do. */
+    .folderpick-opt .fvis {
+      flex: 0 0 auto; width: 14px; height: 14px; margin: 0; accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .folderpick-opt .fvis-pad { flex: 0 0 auto; width: 14px; }
     .folderpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
     /* "Manage folders", the last row of the picker menu. */
     .folderpick-manage {
