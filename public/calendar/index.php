@@ -211,6 +211,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // --- Show/hide a calendar in the "all" view (AJAX), the same as a reminder folder ---
+    if ($action === 'cal_vis') {
+        $cid = (string) ($_POST['name'] ?? '');
+        $cur = array_values(array_filter((array) ($calPrefs['hidden_cals'] ?? []), fn($x) => $x !== $cid));
+        if ($cid !== '' && empty($_POST['show'])) { $cur[] = $cid; }
+        $calPrefs['hidden_cals'] = $cur;
+        store_write($prefFile, $calPrefs);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+    // --- The "All calendars" master checkbox: show or hide every calendar at once ---
+    if ($action === 'cal_vis_all') {
+        $allIds = array_values(array_merge(array_column($calList, 'id'), $sharedIds));
+        $calPrefs['hidden_cals'] = empty($_POST['show']) ? $allIds : [];
+        store_write($prefFile, $calPrefs);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     // --- Share one of my calendars / reminder folders with the other person ---
     if ($action === 'share_set' && $partner) {
         share_handle_set($cfg['data_dir'], $me,
@@ -393,6 +414,9 @@ if (isset($_GET['cal'])) {
     $calPrefs['last_cal'] = (string) $_GET['cal'];
     store_write($prefFile, $calPrefs);
 }
+// Calendars switched off in the picker (by id). "All" then means every calendar I
+// haven't hidden — the same show/hide model the reminder folders use.
+$hiddenCals  = array_values(array_filter((array) ($calPrefs['hidden_cals'] ?? []), 'is_string'));
 $calView     = (string) ($calPrefs['last_cal'] ?? 'all');
 $visibleCals = null;                                  // null = show every calendar
 $onlyFolder  = null;                                  // set = show just this shared folder's reminders
@@ -404,6 +428,11 @@ if (strncmp($calView, 'f:', 2) === 0) {
     $visibleCals = [$calView];
 } elseif ($calView !== 'all') {
     $calView = 'all';   // stale id (a deleted calendar, or one of the old sets)
+}
+// In the "all" view, honour the per-calendar checkboxes: show every calendar that isn't
+// switched off. (A single-calendar view already narrowed to just that one above.)
+if ($calView === 'all') {
+    $visibleCals = array_values(array_filter($pickIds, fn($id) => !in_array($id, $hiddenCals, true)));
 }
 
 // --- Sync: gather this user's dated reminders + notes for the visible month ---
@@ -622,8 +651,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem;
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
     }
+    .calpick-opt .cpick-name { flex: 1; min-width: 0; }
     .calpick-opt:hover { background: #262626; color: #fff; }
-    .calpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* Show/hide checkbox per calendar — a drawn box, exactly like the folder picker's, so
+       cancelling the row's link click doesn't fight a real checkbox's toggle. */
+    .calpick-opt .cvis {
+      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px;
+      cursor: pointer; position: relative; box-sizing: border-box;
+    }
+    .calpick-opt .cvis.on { background: var(--accent); border-color: var(--accent); }
+    .calpick-opt .cvis.on::after {
+      content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+      border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
+    }
+    .calpick-opt .cvis-pad { flex: 0 0 auto; width: 14px; }
+    .calpick-opt .cshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
+    }
     /* "Manage calendars", the last row of the picker menu. */
     .calpick-manage {
       width: 100%; background: none; border: none; border-top: 1px solid #333;
@@ -976,16 +1021,28 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 title="<?= e($curName) ?>" aria-label="<?= e($curName) ?>">
           <span class="cdot<?= $curColor === '' ? ' all' : '' ?>"<?= $curColor === '' ? '' : ' style="background:' . e($curColor) . '"' ?>></span>
         </button>
+        <?php // One flat list with a show/hide checkbox on every calendar — the same shape
+              // and behaviour as the reminders folder picker. "All calendars" carries a
+              // master checkbox that shows or hides them all; a shared calendar wears a
+              // badge instead of an owner heading. ?>
         <div class="calpick-menu" id="calSelMenu" role="listbox" hidden>
-          <a class="calpick-opt<?= $calView === 'all' ? ' on' : '' ?>" href="?cal=all">
+          <a class="calpick-opt" href="?cal=all">
+            <span class="cvis cvis-all<?= empty($hiddenCals) ? ' on' : '' ?>" role="checkbox"
+                  tabindex="0" aria-checked="<?= empty($hiddenCals) ? 'true' : 'false' ?>"
+                  title="Show every calendar" aria-label="Show every calendar"></span>
             <span class="cdot all"></span><span>All calendars</span>
           </a>
           <?php foreach ($pickGroups as [$glabel, $opts]): ?>
-            <?php if (!$opts) { continue; } ?>
-            <div class="calpick-group"><?= e($glabel) ?></div>
             <?php foreach ($opts as [$val, $name, $col]): ?>
-              <a class="calpick-opt<?= $calView === $val ? ' on' : '' ?>" href="?cal=<?= urlencode($val) ?>">
-                <span class="cdot" style="background:<?= e($col) ?>"></span><span><?= e($name) ?></span>
+              <?php $isCal = in_array($val, $pickIds, true); $isShared = in_array($val, $sharedIds, true); ?>
+              <a class="calpick-opt" href="?cal=<?= urlencode($val) ?>">
+                <?php if ($isCal): ?>
+                  <span class="cvis<?= in_array($val, $hiddenCals, true) ? '' : ' on' ?>" role="checkbox"
+                        tabindex="0" aria-checked="<?= in_array($val, $hiddenCals, true) ? 'false' : 'true' ?>"
+                        data-cal="<?= e($val) ?>" title="Show on the calendar" aria-label="Show <?= e($name) ?>"></span>
+                <?php else: ?><span class="cvis-pad" aria-hidden="true"></span><?php endif; ?>
+                <span class="cdot" style="background:<?= e($col) ?>"></span><span class="cpick-name"><?= e($name) ?></span>
+                <?php if ($isShared): ?><span class="cshared-badge"><?= e(share_name($partner)) ?></span><?php endif; ?>
               </a>
             <?php endforeach; ?>
           <?php endforeach; ?>
@@ -1940,9 +1997,34 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     });
     document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-    // Carry the open day across, the way the old select did.
+    // Toggling a calendar's visibility keeps the menu open (we reopen it after the reload
+    // that re-filters the grid), so you can flip several without it closing on you.
+    const open = () => {
+      menu.hidden = false;
+      const r = btn.getBoundingClientRect();
+      menu.style.top = (r.bottom + 5) + 'px';
+      menu.style.right = (window.innerWidth - r.right) + 'px';
+      btn.setAttribute('aria-expanded', 'true');
+    };
+    try { if (sessionStorage.getItem('calPickOpen') === '1') { sessionStorage.removeItem('calPickOpen'); open(); } } catch (_) {}
+    menu.addEventListener('click', e => {
+      const cb = e.target.closest('.cvis'); if (!cb) return;
+      e.preventDefault(); e.stopPropagation();
+      const on = !cb.classList.contains('on');
+      cb.classList.toggle('on', on); cb.setAttribute('aria-checked', on ? 'true' : 'false');
+      const body = cb.classList.contains('cvis-all')
+        ? { csrf: CSRF, action: 'cal_vis_all', show: on ? 1 : '' }
+        : { csrf: CSRF, action: 'cal_vis', name: cb.dataset.cal, show: on ? 1 : '' };
+      try { sessionStorage.setItem('calPickOpen', '1'); } catch (_) {}
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                  body: new URLSearchParams(body) })
+        .then(() => location.reload()).catch(() => location.reload());
+    });
+    // Carry the open day across, the way the old select did. A tap on the checkbox is
+    // handled above, so it never navigates.
     menu.querySelectorAll('.calpick-opt').forEach(a => {
       a.addEventListener('click', e => {
+        if (e.target.closest('.cvis')) { return; }
         if (a.classList.contains('calpick-manage')) { close(); return; }   // opens the manager, not a nav
         e.preventDefault();
         const u = new URL(a.href, location.href);
