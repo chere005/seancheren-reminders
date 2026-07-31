@@ -156,7 +156,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 unset($c);
             }
         } elseif ($action === 'cal_reorder') {
-            $pos = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
+            // The posted order interleaves my own calendars with the partner's shared ones,
+            // so it's kept whole in calprefs (cal_order) — it drives the manage list and the
+            // same-time event order. My own list is also reordered by its subset, since some
+            // readers (the default picker) still walk the own-only list.
+            $ord = array_values(array_filter((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []), 'is_string'));
+            $valid = array_merge($calIdsNow, $sharedIds);
+            $ord = array_values(array_filter($ord, fn($x) => in_array($x, $valid, true)));
+            $calPrefs['cal_order'] = $ord;
+            store_write($prefFile, $calPrefs);
+            $pos = array_flip($ord);
             usort($calList, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
         } elseif ($action === 'cal_default') {
             // Which calendar new events land in. Kept in calprefs, not the calendar list.
@@ -171,7 +180,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $defNow   = (string) ($calPrefs['default_cal'] ?? '');
         if (!in_array($defNow, $idsAfter, true)) { $defNow = $idsAfter[0] ?? ''; }
         header('Content-Type: application/json');
-        echo json_encode(['ok' => true, 'list' => array_values($calList), 'default' => $defNow]);
+        echo json_encode(['ok' => true, 'list' => array_values($calList), 'default' => $defNow,
+                          'order' => array_values(array_filter((array) ($calPrefs['cal_order'] ?? []), 'is_string'))]);
         exit;
     }
 
@@ -549,8 +559,20 @@ ksort($byDay);
 // dots and the day panel read the same way. A stable sort (PHP 8+) leaves events in
 // time order and reminders in the order they were gathered.
 $kindRank = ['event' => 0, 'reminder' => 1, 'note' => 2];
+// Same-time events fall in the calendar order set in Manage calendars (cal_order, which
+// interleaves mine and the partner's); reminders keep their gathered order (stable sort).
+$calRank = array_flip(array_values(array_filter((array) ($calPrefs['cal_order'] ?? []), 'is_string')));
 foreach ($byDay as $d => $list) {
-    usort($list, fn($a, $b) => ($kindRank[$a['kind']] ?? 9) <=> ($kindRank[$b['kind']] ?? 9));
+    usort($list, function ($a, $b) use ($kindRank, $calRank) {
+        $k = ($kindRank[$a['kind']] ?? 9) <=> ($kindRank[$b['kind']] ?? 9);
+        if ($k !== 0) { return $k; }
+        if (($a['kind'] ?? '') === 'event') {
+            $t = ((($a['time'] ?? '') ?: '99:99')) <=> ((($b['time'] ?? '') ?: '99:99'));
+            if ($t !== 0) { return $t; }
+            return ($calRank[$a['cal'] ?? ''] ?? 999) <=> ($calRank[$b['cal'] ?? ''] ?? 999);
+        }
+        return 0;
+    });
     $byDay[$d] = $list;
 }
 
@@ -933,6 +955,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
     /* Read-only colour dot for a partner's shared calendar (no swatch button). */
     .callist .cdot-ro { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #444; }
+    /* Badge marking a shared calendar as the partner's, in place of an owner heading. */
+    .callist .cshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
+    }
     .callist .cdel {
       flex: 0 0 auto; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
@@ -1754,6 +1781,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const VIEWED_CAL = '<?= e(in_array($calView, $calIds, true) ? $calView : '') ?>';
   const newEventCal = () => VIEWED_CAL || DEFAULT_CAL;
   let CALS   = <?= json_encode(array_values($calList), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  // The interleaved manage order (mine + the partner's shared ids), driving the manage list.
+  let CAL_ORDER = <?= json_encode(array_values(array_filter((array) ($calPrefs['cal_order'] ?? []), 'is_string'))) ?>;
   const FOLDERS = <?= json_encode(array_values($remFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const PARTNER = <?= json_encode($partner ? share_name($partner) : null) ?>;
   const SHARED_FOLDERS = <?= json_encode(array_values($sharedFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -1780,6 +1809,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       .then(j => {
         if (!j) return;
         if (j.default !== undefined) { DEFAULT_CAL = j.default; }
+        if (j.order)  { CAL_ORDER = j.order; }   // keep the interleaved order in step after a drag
         if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderDefault(); if (PARTNER) renderShare(); }
         if (j.hidden) { HIDDEN = j.hidden; HIDDEN_SHARED = j.hiddenShared || []; calDirty = true; renderFolders(); }
         if (j.shares) { SHARES = j.shares; calDirty = true; renderShare(); }
@@ -1789,46 +1819,49 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   function renderCals() {
     calRows.innerHTML = '';
-    const cals = onlyCals();
-    cals.forEach(c => {
+    // One interleaved list, mine and the partner's together in the saved order — no owner
+    // heading. Mine are fully editable (swatch, delete) and drag; the partner's are
+    // read-only (a badge marks them) but still drag, since reordering theirs is my own view
+    // preference and only decides the order of same-time events on the calendar.
+    const mine   = onlyCals();
+    const shared = SHARED_CALS.map(c => ({ id: c.id, name: c.name, color: c.color, shared: true }));
+    const byId = {};
+    mine.forEach(c => { byId[c.id] = c; });
+    shared.forEach(c => { byId[c.id] = c; });
+    const seen = {}, ordered = [];
+    CAL_ORDER.forEach(id => { if (byId[id] && !seen[id]) { seen[id] = 1; ordered.push(byId[id]); } });
+    mine.forEach(c => { if (!seen[c.id]) { seen[c.id] = 1; ordered.push(c); } });
+    shared.forEach(c => { if (!seen[c.id]) { seen[c.id] = 1; ordered.push(c); } });
+    const canDelete = mine.length > 1;   // never leave the user with no calendar of their own
+
+    ordered.forEach(c => {
       const li = document.createElement('li');
       li.dataset.id = c.id;
-
       const handle = document.createElement('span');
       handle.className = 'chandle'; handle.textContent = '☰'; handle.title = 'Drag to reorder';
+      li.appendChild(handle);
 
-      const sw = document.createElement('button');
-      sw.type = 'button'; sw.className = 'cswatch'; sw.style.background = c.color; sw.title = 'Choose colour';
-      sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, c.id); });
-
-      const name = document.createElement('span');
-      name.className = 'cname'; name.textContent = c.name;
-
-      li.append(handle, sw, name);
-      if (cals.length > 1) {                 // never leave the user with no calendar
-        const del = document.createElement('button');
-        del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
-        del.addEventListener('click', () => {
-          calApi('cal_delete', { id: c.id, confirm: 1 });   // the arming already confirmed it
-        });
-        li.appendChild(del);
+      if (c.shared) {
+        const dot = document.createElement('span');
+        dot.className = 'cdot-ro'; dot.style.background = c.color;
+        const name = document.createElement('span'); name.className = 'cname'; name.textContent = c.name;
+        const badge = document.createElement('span'); badge.className = 'cshared-badge'; badge.textContent = PARTNER;
+        li.append(dot, name, badge);
+      } else {
+        const sw = document.createElement('button');
+        sw.type = 'button'; sw.className = 'cswatch'; sw.style.background = c.color; sw.title = 'Choose colour';
+        sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, c.id); });
+        const name = document.createElement('span'); name.className = 'cname'; name.textContent = c.name;
+        li.append(sw, name);
+        if (canDelete) {
+          const del = document.createElement('button');
+          del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
+          del.addEventListener('click', () => { calApi('cal_delete', { id: c.id, confirm: 1 }); });
+          li.appendChild(del);
+        }
       }
       calRows.appendChild(li);
     });
-    // The partner's shared calendars, read-only: you can see them (and put them in a
-    // set), but their name, colour and existence stay theirs.
-    if (SHARED_CALS.length) {
-      calRows.appendChild(subHead(PARTNER + '’s calendars'));
-      SHARED_CALS.forEach(c => {
-        const li = document.createElement('li');
-        const dot = document.createElement('span');
-        dot.className = 'cdot-ro'; dot.style.background = c.color;
-        const name = document.createElement('span');
-        name.className = 'cname'; name.textContent = c.name;
-        li.append(dot, name);
-        calRows.appendChild(li);
-      });
-    }
   }
 
   // Which calendar new events default to, when you aren't viewing one in particular.
