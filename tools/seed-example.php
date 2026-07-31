@@ -10,8 +10,11 @@
  * no other user's data is read or touched.
  *
  * deploy.sh doesn't send tools/, and it never sends data/, so the live site needs this
- * run there once:  scp tools/seed-example.php <host>:/home/tmp/ && ssh <host> \
- *   'php /home/tmp/seed-example.php && rm /home/tmp/seed-example.php'
+ * run there once. It must run as the WEB user, not over SSH: /home/protected/data/ is
+ * owned by web (drwx------), so a CLI run as the SSH login user gets Permission denied on
+ * every write. Seed over HTTP instead — scp this file plus a throwaway wrapper
+ *   (<?php $argv=['x','--force']; require __DIR__.'/seed-example.php';  guarded by a secret)
+ * into /home/public/, curl the wrapper once, then delete both.
  * (the script finds lib/ at /home/protected/lib the same way every page does).
  */
 
