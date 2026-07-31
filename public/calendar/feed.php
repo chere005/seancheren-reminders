@@ -61,6 +61,17 @@ function feed_scope(string $dir, string $user, ?string $pin = null): array {
     return [null, $hidden];   // stale id — fall back to everything
 }
 
+/** How much of a reminder folder the widget shows, matching the calendar page:
+ *  'all' (dated + undated riding under today), 'dated' (only dated) or 'none'. Calendar
+ *  folder defaults to 'all', others to 'dated'; an old hidden folder reads as 'none'. */
+function feed_rf_mode(array $prefs, string $folder): string {
+    $m = $prefs['rf_mode'][$folder] ?? null;
+    if (in_array($m, ['all', 'dated', 'none'], true)) { return $m; }
+    $hidden = (array) ($prefs['hidden_folders'] ?? []);
+    if (in_array($folder, $hidden, true)) { return 'none'; }
+    return $folder === FOLDER_CALENDAR ? 'all' : 'dated';
+}
+
 /** Upcoming reminders (open, overdue rolled to today) + events, next 21 days.
  *  Notes are deliberately left out — the widget is for what's *due*, and a dated note
  *  isn't. They're dropped here rather than only in the script, so a widget still running
@@ -70,13 +81,15 @@ function build_feed(string $dir, string $user, ?string $pin = null): array {
     $until = date('Y-m-d', strtotime('+21 days'));
     $items = [];
     [$visibleCals, $hidFolders] = feed_scope($dir, $user, $pin);
+    $prefs  = loadlist(ufile($dir, $user, 'calprefs'));
     $defCal = null;
 
     foreach (reminders_folder_migrate(loadlist(ufile($dir, $user, 'reminders'))) as $r) {
         if (($r['type'] ?? '') === 'section' || !empty($r['done'])) { continue; }
-        if (in_array($r['folder'] ?? '', $hidFolders, true)) { continue; }   // folder switched off
-        // Undated items in the permanent "Calendar" *folder* ride along under today.
-        $rides = empty($r['due']) && ($r['folder'] ?? '') === FOLDER_CALENDAR;
+        $mode = feed_rf_mode($prefs, (string) ($r['folder'] ?? ''));
+        if ($mode === 'none') { continue; }                            // folder switched off
+        // Undated reminders ride along under today only when the folder is set to "All".
+        $rides = empty($r['due']) && $mode === 'all';
         if (empty($r['due']) && !$rides) { continue; }
         $eff = $rides ? $today : (($r['due'] < $today) ? $today : $r['due']);
         // Its own (possibly rolled) date, then any repeats inside the window.

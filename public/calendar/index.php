@@ -77,6 +77,21 @@ $hidFolders = array_values(array_filter((array) ($calPrefs['hidden_folders'] ?? 
 $hidShared  = array_values(array_filter((array) ($calPrefs['hidden_shared_folders'] ?? []), 'is_string'));
 $remFolders = folders_load($cfg['data_dir'])['reminders'];
 
+/**
+ * How much of a reminder folder shows on the calendar: 'all' (its dated reminders plus
+ * its undated ones riding along under today), 'dated' (only dated) or 'none'. The
+ * permanent Calendar folder defaults to 'all' — the ride-along is its whole point — and
+ * every other folder to 'dated'; a folder switched off under the old model reads as 'none'.
+ */
+function rf_mode(array $prefs, string $folder, bool $shared = false): string
+{
+    $m = $prefs[$shared ? 'rf_mode_shared' : 'rf_mode'][$folder] ?? null;
+    if (in_array($m, ['all', 'dated', 'none'], true)) { return $m; }
+    $hidden = (array) ($prefs[$shared ? 'hidden_shared_folders' : 'hidden_folders'] ?? []);
+    if (in_array($folder, $hidden, true)) { return 'none'; }
+    return (!$shared && $folder === FOLDER_CALENDAR) ? 'all' : 'dated';
+}
+
 // --- Sharing: the other person's calendars and reminder folders, if they shared any ---
 $me          = current_user() ?? '';
 $partner     = share_partner();
@@ -175,6 +190,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'hidden' => $hidFolders, 'hiddenShared' => $hidShared]);
+        exit;
+    }
+
+    // --- How much of a reminder folder shows on the calendar: all / dated / none (AJAX) ---
+    if ($action === 'rf_mode') {
+        $fname    = (string) ($_POST['name'] ?? '');
+        $mode     = in_array($_POST['mode'] ?? '', ['all', 'dated', 'none'], true) ? $_POST['mode'] : 'dated';
+        $isTheirs = !empty($_POST['shared']);
+        $pool     = $isTheirs ? $sharedFolders : $remFolders;
+        $key      = $isTheirs ? 'rf_mode_shared' : 'rf_mode';
+        if (in_array($fname, $pool, true)) {
+            $modes = is_array($calPrefs[$key] ?? null) ? $calPrefs[$key] : [];
+            $modes[$fname] = $mode;
+            $calPrefs[$key] = $modes;
+            store_write($prefFile, $calPrefs);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -415,10 +448,12 @@ $remDays = function (string $due, ?array $rep, string $eff) use ($monthFrom, $mo
 
 foreach ($onlyFolder === null ? load_reminder_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
     if (($r['type'] ?? '') === 'section') { continue; }
-    // Undated items in the permanent "Calendar" *folder* ride along under today.
-    $rides = empty($r['due']) && ($r['folder'] ?? '') === FOLDER_CALENDAR;
+    $rfolder = $r['folder'] ?? folder_fallback('reminders');
+    $mode    = rf_mode($calPrefs, $rfolder);
+    if ($mode === 'none') { continue; }                       // folder switched off
+    // Undated reminders ride along under today only when the folder is set to "All".
+    $rides = empty($r['due']) && $mode === 'all';
     if (empty($r['due']) && !$rides) { continue; }
-    if (in_array($r['folder'] ?? '', $hidFolders, true)) { continue; }   // folder switched off
     $done = !empty($r['done']);                                    // done are hidden until "Completed"
     $eff  = $rides ? $todayYmd
           : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);   // overdue rolls onto today; done/future stay
@@ -449,17 +484,21 @@ foreach ($evList as $ev) {
 if ($partner) {
     $theirDef = $theirCalIds[0] ?? '';
     foreach (load_reminder_list(user_data_file($cfg['data_dir'], 'reminders', $partner)) as $r) {
-        if (($r['type'] ?? '') === 'section' || empty($r['due'])) { continue; }
+        if (($r['type'] ?? '') === 'section') { continue; }
         $f = $r['folder'] ?? '';
         if (!in_array($f, $sharedFolders, true)) { continue; }
-        // Picking a folder in the dropdown overrides the show/hide checkboxes.
-        if ($onlyFolder !== null ? $f !== $onlyFolder : in_array($f, $hidShared, true)) { continue; }
+        // Picking a folder in the dropdown shows just that one; otherwise the All/Dated/None
+        // mode for their folder decides, the same as for my own.
+        $smode = $onlyFolder !== null ? ($f === $onlyFolder ? 'all' : 'none') : rf_mode($calPrefs, $f, true);
+        if ($smode === 'none') { continue; }
+        $srides = empty($r['due']) && $smode === 'all';
+        if (empty($r['due']) && !$srides) { continue; }
         $done = !empty($r['done']);
-        $eff  = (!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due'];
+        $eff  = $srides ? $todayYmd : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);
         $rep = repeat_get($r);
-        foreach ($remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
+        foreach ($srides ? [[$todayYmd, false]] : $remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
             $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
-                            'done' => $done, 'rolled' => $wasRolled, 'due' => $r['due'],
+                            'done' => $done, 'rolled' => (!$srides && $wasRolled), 'due' => $r['due'] ?? null,
                             'rep' => $rep, 'owner' => $partner,
                             'color' => $remFolderTheirs[$f] ?? app_palette('reminders', true)[0]];
         }
@@ -863,6 +902,28 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .callist .cdel:hover { border-color: #f66; color: #f66; }
     .callist .cmember { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
+    /* Per-folder All/Dated/None dropdown: an icon-only button that drops a worded menu. */
+    .rfmode { position: relative; flex: 0 0 auto; }
+    .rfmode-btn {
+      width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+      background: #1a1a1a; border: 1px solid #444; border-radius: 999px; color: var(--accent);
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; padding: 0;
+    }
+    .rfmode-btn.off { color: #777; }
+    .rfmode-btn:hover { border-color: #888; }
+    .rfmode-menu {
+      position: absolute; right: 0; top: 36px; z-index: 20; background: #1c1c1c;
+      border: 1px solid #333; border-radius: 8px; padding: 0.25rem; min-width: 118px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    }
+    .rfmode-menu[hidden] { display: none; }
+    .rfmode-opt {
+      display: flex; align-items: center; gap: 0.5rem; width: 100%; text-align: left;
+      background: none; border: none; color: #ddd; padding: 0.45rem 0.5rem; border-radius: 6px;
+      font-size: 0.9rem; font-family: inherit; cursor: pointer;
+    }
+    .rfmode-opt:hover { background: #262626; color: #fff; }
+    .rfmode-opt .rfmode-ic { width: 16px; text-align: center; color: var(--accent); }
     .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
     /* Default-calendar picker, under the calendar list. */
     .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
@@ -1706,6 +1767,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   let SHARES = <?= json_encode($myShares, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN = <?= json_encode(array_values($hidFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN_SHARED = <?= json_encode(array_values($hidShared), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  // How much of each reminder folder shows on the calendar: 'all' | 'dated' | 'none'.
+  const RF_MODE = <?= json_encode(array_combine($remFolders, array_map(fn($f) => rf_mode($calPrefs, $f), $remFolders)) ?: (object) []) ?>;
+  const RF_MODE_SHARED = <?= json_encode($sharedFolders ? array_combine($sharedFolders, array_map(fn($f) => rf_mode($calPrefs, $f, true), $sharedFolders)) : (object) []) ?>;
   let calDirty = false;          // something changed -> reload on close so dots/colours catch up
 
   const calModal = document.getElementById('calModal');
@@ -1808,17 +1872,41 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     return li;
   }
 
-  // Reminder folders: ticked means that folder's reminders appear on the calendar.
+  // Reminder folders: each carries an All / Dated / None dropdown deciding how much of it
+  // shows on the calendar. The button is icon-only (● all, 🗓 dated, ✕ none) so it stays
+  // small; the words appear in the menu it drops.
+  const RF_ICON = { all: '●', dated: '🗓', none: '✕' };
+  const RF_LABEL = { all: 'All', dated: 'Dated', none: 'None' };
+  function modeRow(label, mode, shared) {
+    const li = document.createElement('li');
+    const name = document.createElement('span'); name.className = 'cname'; name.textContent = label;
+    const dd = document.createElement('div'); dd.className = 'rfmode';
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'rfmode-btn';
+    let cur = RF_LABEL[mode] ? mode : 'dated';
+    const paint = () => { btn.textContent = RF_ICON[cur]; btn.title = RF_LABEL[cur]; btn.classList.toggle('off', cur === 'none'); };
+    const menu = document.createElement('div'); menu.className = 'rfmode-menu'; menu.hidden = true;
+    ['all', 'dated', 'none'].forEach(m => {
+      const o = document.createElement('button'); o.type = 'button'; o.className = 'rfmode-opt';
+      o.innerHTML = '<span class="rfmode-ic">' + RF_ICON[m] + '</span>' + RF_LABEL[m];
+      o.addEventListener('click', e => {
+        e.stopPropagation(); cur = m; paint(); menu.hidden = true;
+        calApi('rf_mode', shared ? { name: label, mode: m, shared: 1 } : { name: label, mode: m });
+      });
+      menu.appendChild(o);
+    });
+    btn.addEventListener('click', e => { e.stopPropagation(); document.querySelectorAll('.rfmode-menu').forEach(x => { if (x !== menu) x.hidden = true; }); menu.hidden = !menu.hidden; });
+    paint();
+    dd.append(btn, menu); li.append(name, dd);
+    return li;
+  }
+  document.addEventListener('click', () => document.querySelectorAll('.rfmode-menu').forEach(x => x.hidden = true));
   const folderRows = document.getElementById('folderRows');
   function renderFolders() {
     folderRows.innerHTML = '';
-    FOLDERS.forEach(f => folderRows.appendChild(
-      checkRow(f, HIDDEN.indexOf(f) === -1, on => calApi('folder_vis', { name: f, show: on ? 1 : 0 }))));
+    FOLDERS.forEach(f => folderRows.appendChild(modeRow(f, RF_MODE[f] || 'dated', false)));
     if (SHARED_FOLDERS.length) {
       folderRows.appendChild(subHead(PARTNER + '’s folders'));
-      SHARED_FOLDERS.forEach(f => folderRows.appendChild(
-        checkRow(f, HIDDEN_SHARED.indexOf(f) === -1,
-                 on => calApi('folder_vis', { name: f, shared: 1, show: on ? 1 : 0 }))));
+      SHARED_FOLDERS.forEach(f => folderRows.appendChild(modeRow(f, RF_MODE_SHARED[f] || 'dated', true)));
     }
   }
 
