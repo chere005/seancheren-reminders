@@ -974,6 +974,12 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       clickT = setTimeout(() => { clickT = null; location.href = href; }, 220);
     });
   }
+  // Desktop: double-click a section or folder head to enter edit mode too (a note has
+  // its own click-delay above). Notes had no way in here except on a note itself.
+  document.addEventListener('dblclick', (e) => {
+    if (editingNow() || gBlocked(e.target)) return;
+    if (e.target.closest('.section-head, .folder-head')) setEdit(true);
+  });
   // Leave edit mode by tapping away from what you're editing. A tap stays in edit only
   // on a note row, a section name field, an edit control, the toolbar, or a modal.
   document.addEventListener('click', (e) => {
