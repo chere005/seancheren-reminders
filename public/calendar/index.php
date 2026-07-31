@@ -499,10 +499,14 @@ foreach ($byDay as $d => $list) {
     $byDay[$d] = $list;
 }
 
-// Which day starts selected? ?day= param, else today if this month, else none.
+// Which day starts selected? An explicit ?day= wins; otherwise today when the viewed
+// month is the current one, and the first of the month for any other month — so paging
+// to another month lands you on its 1st rather than on nothing.
 $selDay = (string) ($_GET['day'] ?? '');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selDay) || $selDay < $monthFrom || $selDay > $monthTo) {
-    $selDay = ($todayYmd >= $monthFrom && $todayYmd <= $monthTo) ? $todayYmd : '';
+    $selDay = (substr($todayYmd, 0, 7) === sprintf('%04d-%02d', $year, $month))
+        ? $todayYmd
+        : sprintf('%04d-%02d-01', $year, $month);
 }
 $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 ?><!DOCTYPE html>

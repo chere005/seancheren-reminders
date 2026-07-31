@@ -48,8 +48,14 @@ function folders_load(string $dir, ?string $user = null): array
         if ($type === 'reminders') {
             $have = array_filter($have, fn($f) => $f !== FOLDER_DEFAULT);
         }
-        $data[$type] = array_values(array_unique(array_merge($fixed,
-            array_filter($have, fn($f) => !in_array($f, $fixed, true)))));
+        // Keep the stored order — the permanent folders can be dragged too, so they're
+        // no longer forced to the front. Any fixed folder that isn't in the list yet
+        // (a fresh account) is added at the front, its default spot.
+        $have = array_values(array_unique(array_filter($have, fn($f) => is_string($f) && $f !== '')));
+        foreach (array_reverse($fixed) as $ff) {
+            if (!in_array($ff, $have, true)) { array_unshift($have, $ff); }
+        }
+        $data[$type] = $have;
     }
     return $data;
 }
@@ -80,23 +86,22 @@ function folder_hidden_set(string $dir, string $type, string $name, bool $hidden
 }
 
 /**
- * Persist a new order for a type's folders, from the Manage-folders drag. The fixed
- * folders are always forced first by folders_load, so only the custom folders' order
- * is meaningful: names that aren't real custom folders are dropped, and any custom
- * folder the request left out keeps its place at the end so nothing can vanish.
+ * Persist a new order for a type's folders, from the Manage-folders drag. Every folder
+ * can be reordered now, the permanent ones included: names that aren't real folders are
+ * dropped, and any folder the request left out keeps its place at the end so nothing can
+ * vanish (a fixed folder that's missing is re-added by folders_load regardless).
  */
 function folders_reorder(string $dir, string $type, array $order): void
 {
     if (!in_array($type, ['reminders', 'notes'], true)) { return; }
-    $data   = folders_load($dir);
-    $fixed  = folders_fixed($type);
-    $custom = array_values(array_filter($data[$type] ?? [], fn($f) => !in_array($f, $fixed, true)));
+    $data = folders_load($dir);
+    $all  = array_values($data[$type] ?? []);
     $wanted = [];
     foreach ($order as $f) {
-        if (in_array($f, $custom, true) && !in_array($f, $wanted, true)) { $wanted[] = $f; }
+        if (in_array($f, $all, true) && !in_array($f, $wanted, true)) { $wanted[] = $f; }
     }
-    foreach ($custom as $f) { if (!in_array($f, $wanted, true)) { $wanted[] = $f; } }
-    $data[$type] = array_merge($fixed, $wanted);
+    foreach ($all as $f) { if (!in_array($f, $wanted, true)) { $wanted[] = $f; } }
+    $data[$type] = $wanted;
     folders_save($dir, $data);
 }
 
@@ -409,14 +414,10 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
         <ul class="flist" id="fReorder">
           <?php foreach ($folders as $f): ?>
             <?php $fFixed = in_array($f, $fixed, true); ?>
-            <li data-folder="<?= htmlspecialchars($f, ENT_QUOTES) ?>"<?= $fFixed ? ' class="fpinned"' : '' ?>>
-              <?php // Drag a custom folder to reorder it; the permanent ones stay pinned
-                    // first, so they carry a blank slot of the same width instead. ?>
-              <?php if (!$fFixed): ?>
-                <span class="fhandle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
-              <?php else: ?>
-                <span class="fhandle blank" aria-hidden="true"></span>
-              <?php endif; ?>
+            <li data-folder="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
+              <?php // Every folder drags to reorder, the permanent ones included. They
+                    // just keep their × off, since they can't be deleted. ?>
+              <span class="fhandle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
               <?php // The swatch opens a <details> palette: picking a colour is an
                     // ordinary POST, like everything else in this window. ?>
               <details class="fcolor">
