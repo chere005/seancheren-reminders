@@ -57,27 +57,36 @@ CONNECT.md             → how to resume the Claude Code session from your phone
 
 | App | Login | Storage | Highlights |
 |-----|-------|---------|------------|
-| Reminders | yes | `reminders-<user>.json` | folders (dropdown) + sections (bold groups), a **+** on each section to add inline, **+ Section** on the folder row, dates and times read out of what you type, a permanent **Calendar** group that rides along on the calendar, inline text edit, a Completed toggle |
+| Reminders | yes | `reminders-<user>.json` | folders (dropdown, each with a show-in-All checkbox) + sections (bold groups), a **+** on each section to add inline, **+ Section** on the folder row, dates and times read out of what you type, two permanent folders — **Reminders** and **Calendar**, whose undated items ride along on the calendar — inline text edit, a Completed toggle |
 | Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, **+ Section** beside **+ Note**, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
-| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), swipe up for a two-week view, per-day panel, several calendars and calendar sets, per-calendar colours, quick-add window |
-| Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes, sections, a pencil beside the title for edit mode |
+| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), tap a day to open it, swipe up for the week view and sideways to page, per-day panel, several calendars with their own colours, quick-add window |
+| Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes (swipe or arrow to page a week), a Month view drawing each day as a pie of how much got ticked, sections with **+ Section** underneath, a pencil beside the title for edit mode |
 | Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections and a quote window (quote + your note + page + optional date) |
 | Chat | **no** | `chat.json` (shared) | public message board, live AJAX feed |
 
 ## Auth & data model
 
-- **Users** are defined in `lib/config.php` as a `username => password` map. Add or
-  remove people by editing that file. Login is a PHP session (`$_SESSION['user']`),
-  and one login covers the whole suite.
+- **Users** are defined in `lib/config.php` as a `username => password` map, plus
+  anyone who signed up (`data/accounts.json`). Add or remove people by editing that
+  file. Login is a PHP session (`$_SESSION['user']`), one login covers the whole
+  suite, and it lasts a year — you stay signed in until you actually log out.
+- A demo account, **example / examplepassword**, is built by
+  `php tools/seed-example.php`. It fills the account with plausible reminders
+  (dated, undated, repeating, and several overdue and still open), events, notes and
+  two months of habit history, all relative to today. Neither `tools/` nor `data/`
+  is deployed, so run it on the server too if you want the demo live.
 - Each user gets **their own data files** (`reminders-alice.json`, …), so people
   don't see each other's items. Chat is the deliberate exception (shared + public).
 - **Everything is encrypted at rest.** All reads and writes go through
   `store_read()` / `store_write()`, which use AES-256-CBC behind an `ENC1:` prefix.
   Legacy plaintext files are still readable and get encrypted on their next write.
 - **Folders** are a per-user filter; **sections** are bold headers that group items
-  within a list. Both reminders and notes have both. Folders are added, removed and
-  given a default in the folder window behind the **+** next to the app title (edit
-  mode only); the default is where new items land while you're viewing "All".
+  within a folder. Both reminders and notes have both. Reminders always has the two
+  permanent folders **Reminders** and **Calendar**; notes always has **General**.
+  Each folder in the dropdown carries a checkbox for whether "All" includes it.
+  Folders are added, removed and given a default in the folder window behind
+  **Manage folders**, the last row of that dropdown; the default is where new items
+  land while you're viewing "All".
 - Writes are `POST` + CSRF token, then either a redirect or — for the drag/tick
   style interactions — a JSON reply.
 - Every app wears the same **top bar**: back button, the app's name, one round
@@ -95,9 +104,7 @@ directly. Tick them in the **Share** window — behind the **+** in Reminders, o
 Share button in the Calendar's manage window. Nothing is shared until you tick it,
 and each of you ticks your own. Shared reminder folders show up in the folder dropdown as
 `@aki:Groceries`; while one is selected, reads and writes go to the owner's file.
-A shared calendar can also be dropped into one of your calendar sets, so a set can
-span both people. Un-sharing takes effect immediately — a set that still lists the
-calendar simply stops resolving it.
+Un-sharing takes effect immediately.
 Their sections and folder list stay theirs to arrange. Anyone who isn't in the
 sean/aki pair gets no sharing UI at all.
 
