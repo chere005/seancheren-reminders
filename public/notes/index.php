@@ -97,7 +97,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // A shared folder is someone else's list: you can work its notes, but its folders
     // and sections stay theirs to arrange.
-    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder'], true)) {
+    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder', 'reorder_folders'], true)) {
         http_response_code(403);
         exit('That belongs to ' . htmlspecialchars(share_name($owner), ENT_QUOTES) . '.');
     }
@@ -130,6 +130,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                           empty($_POST['show']));
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'notes')]);
+        exit;
+    }
+    // Drag-reorder of the custom folders from the Manage-folders window (AJAX).
+    if ($_POST['action'] === 'reorder_folders') {
+        $order = array_values(array_filter(explode("\x1F", (string) ($_POST['order'] ?? '')),
+                                           fn($s) => $s !== ''));
+        folders_reorder($cfg['data_dir'], 'notes', $order);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'folders' => folders_load($cfg['data_dir'])['notes']]);
         exit;
     }
     if ($_POST['action'] === 'set_default_folder') {

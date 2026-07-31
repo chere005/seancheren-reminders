@@ -80,6 +80,27 @@ function folder_hidden_set(string $dir, string $type, string $name, bool $hidden
 }
 
 /**
+ * Persist a new order for a type's folders, from the Manage-folders drag. The fixed
+ * folders are always forced first by folders_load, so only the custom folders' order
+ * is meaningful: names that aren't real custom folders are dropped, and any custom
+ * folder the request left out keeps its place at the end so nothing can vanish.
+ */
+function folders_reorder(string $dir, string $type, array $order): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data   = folders_load($dir);
+    $fixed  = folders_fixed($type);
+    $custom = array_values(array_filter($data[$type] ?? [], fn($f) => !in_array($f, $fixed, true)));
+    $wanted = [];
+    foreach ($order as $f) {
+        if (in_array($f, $custom, true) && !in_array($f, $wanted, true)) { $wanted[] = $f; }
+    }
+    foreach ($custom as $f) { if (!in_array($f, $wanted, true)) { $wanted[] = $f; } }
+    $data[$type] = array_merge($fixed, $wanted);
+    folders_save($dir, $data);
+}
+
+/**
  * Every folder's colour, keyed by name. A folder that hasn't been given one takes
  * the next palette colour by position, so a new folder is distinct straight away.
  */
@@ -385,9 +406,17 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
           <input type="text" name="name" placeholder="New folder" maxlength="40" autocomplete="off">
           <button type="submit" class="plus" title="Add folder">+</button>
         </form>
-        <ul class="flist">
+        <ul class="flist" id="fReorder">
           <?php foreach ($folders as $f): ?>
-            <li>
+            <?php $fFixed = in_array($f, $fixed, true); ?>
+            <li data-folder="<?= htmlspecialchars($f, ENT_QUOTES) ?>"<?= $fFixed ? ' class="fpinned"' : '' ?>>
+              <?php // Drag a custom folder to reorder it; the permanent ones stay pinned
+                    // first, so they carry a blank slot of the same width instead. ?>
+              <?php if (!$fFixed): ?>
+                <span class="fhandle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
+              <?php else: ?>
+                <span class="fhandle blank" aria-hidden="true"></span>
+              <?php endif; ?>
               <?php // The swatch opens a <details> palette: picking a colour is an
                     // ordinary POST, like everything else in this window. ?>
               <details class="fcolor">
@@ -473,6 +502,29 @@ function folder_modal_script(): string
          . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});"
          . "var sum=det&&det.querySelector('summary');if(sum)sum.style.background=col;"
          . "if(det)det.open=false;});"
+         // Drag a custom folder by its handle to reorder it; the permanent folders stay
+         // pinned first. On drop, POST the new order (custom folders only) in the background.
+         . "var list=document.getElementById('fReorder');if(list){var drag=null,"
+         . "ce=m.querySelector('input[name=csrf]'),CSRF=ce?ce.value:'';"
+         . "var clr=function(){list.querySelectorAll('.fdrop-before,.fdrop-after').forEach(function(li){"
+         . "li.classList.remove('fdrop-before','fdrop-after');});};"
+         . "var rows=function(){return [].slice.call(list.querySelectorAll('li:not(.fpinned)'));};"
+         . "list.addEventListener('pointerdown',function(e){var h=e.target.closest('.fhandle');"
+         . "if(!h||h.classList.contains('blank'))return;drag=h.closest('li');if(!drag)return;"
+         . "e.preventDefault();drag.classList.add('dragging');h.setPointerCapture(e.pointerId);});"
+         . "list.addEventListener('pointermove',function(e){if(!drag)return;e.preventDefault();clr();"
+         . "var y=e.clientY,tgt=null,after=false;rows().forEach(function(li){if(li===drag)return;"
+         . "var r=li.getBoundingClientRect();if(y>=r.top){tgt=li;after=y>(r.top+r.height/2);}});"
+         . "if(tgt)tgt.classList.add(after?'fdrop-after':'fdrop-before');});"
+         . "var drop=function(){if(!drag)return;var mk=list.querySelector('.fdrop-before,.fdrop-after');"
+         . "var moved=false;if(mk){if(mk.classList.contains('fdrop-after'))mk.after(drag);else mk.before(drag);moved=true;}"
+         . "clr();drag.classList.remove('dragging');drag=null;if(!moved)return;"
+         . "var order=rows().map(function(li){return li.dataset.folder;});"
+         . "var body=new URLSearchParams();body.set('csrf',CSRF);body.set('action','reorder_folders');"
+         . "body.set('order',order.join('\\u001f'));"
+         . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});};"
+         . "list.addEventListener('pointerup',drop);"
+         . "list.addEventListener('pointercancel',function(){clr();if(drag){drag.classList.remove('dragging');drag=null;}});}"
          . "document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();</script>";
 }
 
@@ -567,6 +619,16 @@ function folder_nav_styles(): string
       background: #222; border: 1px solid #333; border-radius: 8px;
     }
     .foldermodal .flist .fname { flex: 1; font-size: 0.95rem; word-break: break-word; }
+    /* Drag handle for reordering a custom folder; the pinned permanent ones show a
+       blank slot of the same width so every name still lines up. */
+    .foldermodal .fhandle {
+      flex: 0 0 auto; width: 18px; text-align: center; color: #666; cursor: grab;
+      font-size: 0.95rem; line-height: 1; touch-action: none; user-select: none;
+    }
+    .foldermodal .fhandle.blank { cursor: default; }
+    .foldermodal .flist li.dragging { opacity: 0.5; }
+    .foldermodal .flist li.fdrop-before { box-shadow: 0 -2px 0 0 var(--accent, #34d399); }
+    .foldermodal .flist li.fdrop-after { box-shadow: 0 2px 0 0 var(--accent, #34d399); }
     .foldermodal .flist .fdel {
       background: none; border: 1px solid #444; color: #999; border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
