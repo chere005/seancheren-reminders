@@ -385,19 +385,30 @@ $today = date('Y-m-d');
 // colour, then a shared-palette default — the same rule Reminders uses.
 $theirColors     = $partner ? folder_colors($cfg['data_dir'], 'notes', $partner) : [];
 $sharedOverrides = folder_shared_colors($cfg['data_dir'], 'notes');
-$sharedRows      = [];
-$folderGroups = [['label' => $sharedFolders ? share_name($me) : '',
-                  'options' => array_map(fn($f) => [$f, $f, $folderColors[$f] ?? app_palette('notes')[0]], $myFolders)]];
-if ($sharedFolders) {
-    $sharedOpts = [];
-    foreach ($sharedFolders as $i => $f) {
-        $key = '@' . $partner . ':' . $f;
-        $col = folder_shared_color($sharedOverrides, $theirColors, 'notes', $key, $f, $i);
-        $sharedOpts[] = [$key, $f, $col];
-        $sharedRows[] = ['key' => $key, 'label' => $f, 'color' => $col];
-    }
-    $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
+// Mine and the partner's shared folders are one interleaved list, ordered by the
+// Manage-folders drag (folders_display_order) — the same order for the picker, the manager
+// and the "All" listing, exactly as Reminders does it.
+$optByKey   = [];   // display key => [val, label, colour, shared?, partner-or-'']
+foreach ($myFolders as $f) {
+    $optByKey[$f] = [$f, $f, $folderColors[$f] ?? app_palette('notes')[0], false, ''];
 }
+$sharedKeys = [];
+foreach ($sharedFolders as $i => $f) {
+    $key = '@' . $partner . ':' . $f;
+    $col = folder_shared_color($sharedOverrides, $theirColors, 'notes', $key, $f, $i);
+    $optByKey[$key] = [$key, $f, $col, true, $partner];
+    $sharedKeys[]   = $key;
+}
+$dispOrder  = folders_display_order($cfg['data_dir'], 'notes', $myFolders, $sharedKeys);
+$pickOpts   = [];
+$modalRows  = [];
+foreach ($dispOrder as $k) {
+    if (!isset($optByKey[$k])) { continue; }
+    [$val, $label, $col, $sh, $who] = $optByKey[$k];
+    $pickOpts[]  = [$val, $label, $col];
+    $modalRows[] = ['key' => $val, 'label' => $label, 'color' => $col, 'shared' => $sh, 'partner' => $who];
+}
+$folderGroups = [['label' => '', 'options' => $pickOpts]];
 
 /** The colour of a folder as this viewer sees it, for the dot on a section header —
  *  the same resolution the picker uses. (Reminders carries the identical helper.) */
@@ -468,6 +479,31 @@ if (!$editing) {
         if (!in_array($f, $folderOrder, true)) { $folderOrder[] = $f; }
     }
     $showFolders = $viewFolder === 'All' && count($folderOrder) > 1;
+
+    // The order the "All" listing renders in — my own folders and the partner's read-only
+    // shared ones interleaved, following the same display order as the picker and manager.
+    // Each unit is ['own', name] or ['shared', folder, index, key].
+    $noteUnits = [];
+    if ($viewFolder === 'All') {
+        if (!$isShared) {
+            foreach ($dispOrder as $k) {
+                if (strncmp($k, '@', 1) === 0) {
+                    if (in_array($k, $sharedHidden, true)) { continue; }
+                    $sf = $optByKey[$k][1];
+                    $i  = array_search($sf, $sharedFolders, true);
+                    if ($i !== false) { $noteUnits[] = ['shared', $sf, (int) $i, $k]; }
+                } elseif (in_array($k, $folderOrder, true)) {
+                    $noteUnits[] = ['own', $k];
+                }
+            }
+        }
+        // Any folder derived from notes/sections that the display order doesn't mention.
+        foreach ($folderOrder as $f) {
+            $seen = false;
+            foreach ($noteUnits as $nu) { if ($nu[0] === 'own' && $nu[1] === $f) { $seen = true; break; } }
+            if (!$seen) { $noteUnits[] = ['own', $f]; }
+        }
+    }
 
     // Sections and loose notes bucketed per folder, so each folder block can hold both.
     $secByFolder   = [];
@@ -850,17 +886,23 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   </div>
 
   <?php if (!$isShared) {
-        render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New notes go to', '',
-                            $folderColors, app_palette('notes'), $sharedRows, app_palette('notes', true));
+        render_folder_modal($modalRows, $csrf, $view, '', app_palette('notes'),
+                            app_palette('notes', true), 'notes');
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
   <?php // The permanent group always renders, so there's always a + to add against. ?>
    <div id="notes-root">
-    <?php if ($showFolders): ?>
-      <?php // "All" across several folders: one collapsible block per folder, each
-            // holding that folder's own sections and then its loose notes. ?>
-      <?php foreach ($folderOrder as $sfolder): ?>
+    <?php if ($viewFolder === 'All'): ?>
+      <?php // "All": one collapsible block per folder, mine and the partner's read-only
+            // shared ones interleaved in the order set in Manage folders. ?>
+      <?php foreach ($noteUnits as $u): ?>
+        <?php if ($u[0] === 'shared'):
+                $scol = folder_shared_color($sharedOverrides, $theirColors, 'notes', $u[3], $u[1], $u[2]);
+                render_shared_note_folder_ro($cfg['data_dir'], $partner, $u[1], $u[3], $scol);
+                continue;
+              endif; ?>
+        <?php $sfolder = $u[1]; ?>
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
             <?= folder_collapse_button() ?>
@@ -892,16 +934,6 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <?php render_note_default_group($ungrouped, $csrf, $view, $addTarget); ?>
       </div>
     <?php endif; ?>
-    <?php // In "All", the partner's shared note folders I haven't switched off show here,
-          // read-only and badged — their data is never mine to edit. ?>
-    <?php if (!$isShared && $viewFolder === 'All' && $partner):
-            foreach ($sharedFolders as $i => $sf):
-                $skey = '@' . $partner . ':' . $sf;
-                if (in_array($skey, $sharedHidden, true)) { continue; }
-                $scol = folder_shared_color($sharedOverrides, $theirColors, 'notes', $skey, $sf, $i);
-                render_shared_note_folder_ro($cfg['data_dir'], $partner, $sf, $skey, $scol);
-            endforeach;
-          endif; ?>
    </div>
 
 <?php else: ?>

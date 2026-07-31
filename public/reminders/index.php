@@ -699,18 +699,48 @@ if ($partner && !$isShared) {
 $myColors        = folder_colors($cfg['data_dir'], 'reminders');
 $theirColors     = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
 $sharedOverrides = folder_shared_colors($cfg['data_dir'], 'reminders');
-$sharedRows      = [];
-$folderGroups = [['label' => share_name($me),
-                  'options' => array_map(fn($f) => [$f, $f, $myColors[$f] ?? app_palette('reminders')[0]], $myFolders)]];
-if ($sharedFolders) {
-    $sharedOpts = [];
-    foreach ($sharedFolders as $i => $f) {
-        $key = '@' . $partner . ':' . $f;
-        $col = folder_shared_color($sharedOverrides, $theirColors, 'reminders', $key, $f, $i);
-        $sharedOpts[]  = [$key, $f, $col];
-        $sharedRows[]  = ['key' => $key, 'label' => $f, 'color' => $col];
+// Mine and the partner's shared folders are one interleaved list now, ordered by the
+// Manage-folders drag (folders_display_order). The same order drives the picker options,
+// the manager rows and the "All" listing below, so all three agree.
+$optByKey   = [];   // display key => [val, label, colour, shared?, partner-or-'']
+foreach ($myFolders as $f) {
+    $optByKey[$f] = [$f, $f, $myColors[$f] ?? app_palette('reminders')[0], false, ''];
+}
+$sharedKeys = [];
+foreach ($sharedFolders as $i => $f) {
+    $key = '@' . $partner . ':' . $f;
+    $col = folder_shared_color($sharedOverrides, $theirColors, 'reminders', $key, $f, $i);
+    $optByKey[$key] = [$key, $f, $col, true, $partner];
+    $sharedKeys[]   = $key;
+}
+$dispOrder  = folders_display_order($cfg['data_dir'], 'reminders', $myFolders, $sharedKeys);
+$pickOpts   = [];
+$modalRows  = [];
+foreach ($dispOrder as $k) {
+    if (!isset($optByKey[$k])) { continue; }
+    [$val, $label, $col, $sh, $who] = $optByKey[$k];
+    $pickOpts[]  = [$val, $label, $col];
+    $modalRows[] = ['key' => $val, 'label' => $label, 'color' => $col, 'shared' => $sh, 'partner' => $who];
+}
+$folderGroups = [['label' => '', 'options' => $pickOpts]];
+
+// The order the "All" listing renders in — mine and the partner's read-only shared folders
+// interleaved, following the same display order as the picker. A single-folder view is just
+// that one folder. Each unit is ['own', name] or ['shared', folder, index, key].
+$renderUnits = [];
+if ($viewFolder === 'All' && !$isShared) {
+    foreach ($dispOrder as $k) {
+        if (strncmp($k, '@', 1) === 0) {
+            if (in_array($k, $sharedHidden, true)) { continue; }
+            $sf = $optByKey[$k][1];
+            $i  = array_search($sf, $sharedFolders, true);
+            if ($i !== false) { $renderUnits[] = ['shared', $sf, (int) $i, $k]; }
+        } elseif (in_array($k, $viewFolders, true)) {
+            $renderUnits[] = ['own', $k];
+        }
     }
-    $folderGroups[] = ['label' => share_name($partner), 'options' => $sharedOpts];
+} else {
+    foreach ($viewFolders as $f) { $renderUnits[] = ['own', $f]; }
 }
 
 /**
@@ -1092,9 +1122,8 @@ $sectionInput =
   </div>
 
   <?php if (!$isShared) {
-        render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
-                            '', $myColors, app_palette('reminders'),
-                            $sharedRows, app_palette('reminders', true), 'reminders');
+        render_folder_modal($modalRows, $csrf, $view, '', app_palette('reminders'),
+                            app_palette('reminders', true), 'reminders');
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
@@ -1108,7 +1137,14 @@ $sectionInput =
       // list to it too, and keeps the layout identical whether you're on one or "All".
       $showFolders = true;
     ?>
-    <?php foreach ($viewFolders as $sfolder): ?>
+    <?php foreach ($renderUnits as $u): ?>
+      <?php if ($u[0] === 'shared'):
+              // The partner's shared folder, read-only and badged, in its interleaved spot.
+              render_shared_folder_ro($cfg['data_dir'], $partner, $u[1], $u[3],
+                  folder_shared_color($sharedOverrides, $theirColors, 'reminders', $u[3], $u[1], $u[2]), $today);
+              continue;
+            endif; ?>
+      <?php $sfolder = $u[1]; ?>
       <?php if ($showFolders): ?>
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
@@ -1199,16 +1235,6 @@ $sectionInput =
       <?php endif; ?>
       <?php if ($showFolders): ?></div><?php endif; ?>
     <?php endforeach; ?>
-    <?php // In "All", the partner's shared folders I haven't switched off show here,
-          // read-only and badged — their data is never mine to edit. ?>
-    <?php if (!$isShared && $view === 'All' && $partner):
-            foreach ($sharedFolders as $i => $sf):
-                $skey = '@' . $partner . ':' . $sf;
-                if (in_array($skey, $sharedHidden, true)) { continue; }
-                $scol = folder_shared_color($sharedOverrides, $theirColors, 'reminders', $skey, $sf, $i);
-                render_shared_folder_ro($cfg['data_dir'], $partner, $sf, $skey, $scol, $today);
-            endforeach;
-          endif; ?>
    </div>
 
     <?php if ($doneCount): ?>
