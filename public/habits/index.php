@@ -37,7 +37,8 @@ function habit_section_color(array $s, int $i): string
 
 // Render one habit's name bubble + 7 day cells into the grid.
 function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0): void { ?>
-        <div class="hname" data-id="<?= e($h['id']) ?>">
+        <div class="hname" data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>">
+          <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -119,6 +120,55 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'color' => $now]);
+        exit;
+    }
+
+    // Drag-reorder of habits and sections (AJAX). The stored order *is* the display
+    // order here — ungrouped habits first, then each section row followed by its own —
+    // so the whole list is rewritten from what the drag ended up with rather than
+    // patched in place. Anything the client didn't mention keeps its place at the end,
+    // so a stale page can't quietly drop a habit.
+    if ($_POST['action'] === 'reorder') {
+        $order = json_decode((string) ($_POST['order'] ?? ''), true);       // [{id, section}, …]
+        $secs  = json_decode((string) ($_POST['sections'] ?? ''), true);    // [section id, …]
+        if (is_array($order) && is_array($secs)) {
+            $byId = [];
+            foreach ($habits as $it) { $byId[(string) ($it['id'] ?? '')] = $it; }
+            $secIds = [];
+            foreach ($habits as $it) { if (is_section($it)) { $secIds[] = (string) $it['id']; } }
+            // Only ids we actually hold, and each one only once.
+            $secs = array_values(array_unique(array_filter(array_map('strval', $secs),
+                fn($id) => in_array($id, $secIds, true))));
+            foreach ($secIds as $id) { if (!in_array($id, $secs, true)) { $secs[] = $id; } }
+
+            $want = [];   // section id ('' = ungrouped) => [habit id, …]
+            foreach ($order as $row) {
+                $id  = (string) ($row['id'] ?? '');
+                $sec = (string) ($row['section'] ?? '');
+                if (!isset($byId[$id]) || is_section($byId[$id])) { continue; }
+                if ($sec !== '' && !in_array($sec, $secs, true)) { $sec = ''; }
+                $want[$sec][] = $id;
+            }
+            $placed = [];
+            foreach ($want as $rows) { foreach ($rows as $id) { $placed[$id] = true; } }
+            // Whatever the drag never mentioned stays where it was, under its own section.
+            foreach ($habits as $it) {
+                if (is_section($it) || isset($placed[(string) $it['id']])) { continue; }
+                $sec = (string) ($it['section'] ?? '');
+                if ($sec !== '' && !in_array($sec, $secs, true)) { $sec = ''; }
+                $want[$sec][] = (string) $it['id'];
+            }
+
+            $out = [];
+            foreach ($want[''] ?? [] as $id) { $h = $byId[$id]; $h['section'] = ''; $out[] = $h; }
+            foreach ($secs as $sid) {
+                $out[] = $byId[$sid];
+                foreach ($want[$sid] ?? [] as $id) { $h = $byId[$id]; $h['section'] = $sid; $out[] = $h; }
+            }
+            save_habits($dataFile, $out);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -320,6 +370,20 @@ foreach ($habitItems as $h) {
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The drag handle on a habit and on a section. Hidden with visibility rather than
+       display, as everywhere else, so turning edit mode on doesn't shove the names
+       sideways. Nothing else on the grid moves. */
+    .hdrag {
+      flex: 0 0 auto; width: 16px; color: #6a5f8c; cursor: grab; visibility: hidden;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem;
+      line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    body.editing .hdrag { visibility: visible; }
+    .hdrag:active { cursor: grabbing; color: var(--accent); }
+    /* What is being dragged dims; where it will land is a single accent line, because
+       shuffling a CSS grid live made it impossible to see what you were about to get. */
+    .hname.hdragging, .hsection.hdragging { opacity: 0.4; }
+    .hdrop { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
     /* The section's colour dot, left of its name — the same swatch-opens-a-palette
        control the folder manager uses, shrunk to the size of the folder heading's dot.
        It's the same element in and out of edit mode, so turning editing on shifts
@@ -527,7 +591,8 @@ foreach ($habitItems as $h) {
       <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
 
       <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
-        <div class="hsection">
+        <div class="hsection" data-section="<?= e($s['id']) ?>">
+          <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <?php // The section's colour. Out of edit mode it's just a dot; in edit mode the
                 // dot opens the palette under it, exactly as a folder's swatch does. It's
                 // the same element either way, so entering edit mode shifts nothing. ?>
@@ -682,6 +747,77 @@ foreach ($habitItems as $h) {
   };
   wireAdd('newHabitBtn', 'newHabitForm');
   wireAdd('newSecBtn', 'newSecForm');
+
+  // ----- Drag to reorder habits and sections (edit mode) -----
+  // The grid is one flat CSS grid: a habit is a name cell plus its day cells, and a
+  // section spans the full width. Live-shuffling that is a mess, so nothing moves until
+  // the drop — the target is outlined, and on release the new order is posted and the
+  // page reloads to draw it. Same bargain the Reminders drag makes.
+  (function () {
+    const grid = document.getElementById('wGrid');
+    if (!grid) { return; }
+    let drag = null, over = null, pid = null;
+
+    const rowsNow = () => [...grid.querySelectorAll('.hname[data-id]')];
+    const secsNow = () => [...grid.querySelectorAll('.hsection[data-section]')];
+    const clearOver = () => { if (over) { over.classList.remove('hdrop'); over = null; } };
+
+    // Where a thing sits in the single top-to-bottom sequence of the grid.
+    const seq = () => [...grid.querySelectorAll('.hname[data-id], .hsection[data-section]')];
+
+    grid.addEventListener('pointerdown', (e) => {
+      if (!document.body.classList.contains('editing')) { return; }
+      if (!e.target.closest('.hdrag')) { return; }
+      const host = e.target.closest('.hname[data-id], .hsection[data-section]');
+      if (!host) { return; }
+      e.preventDefault();
+      drag = host; pid = e.pointerId;
+      host.classList.add('hdragging');
+      try { host.setPointerCapture(pid); } catch (_) {}
+      if (navigator.vibrate) { navigator.vibrate(12); }
+    });
+
+    document.addEventListener('pointermove', (e) => {
+      if (!drag) { return; }
+      e.preventDefault();
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const host  = under && under.closest('.hname[data-id], .hsection[data-section]');
+      if (!host || host === drag) { clearOver(); return; }
+      // A section only ever lands among sections; a habit lands anywhere.
+      if (drag.classList.contains('hsection') && !host.classList.contains('hsection')) { return; }
+      if (host !== over) { clearOver(); over = host; over.classList.add('hdrop'); }
+    }, { passive: false });
+
+    const drop = () => {
+      if (!drag) { return; }
+      const moved = drag, target = over;
+      drag.classList.remove('hdragging'); clearOver(); drag = null;
+      if (!target) { return; }
+
+      const list = seq();
+      const from = list.indexOf(moved), to = list.indexOf(target);
+      if (from < 0 || to < 0) { return; }
+      list.splice(from, 1);
+      list.splice(to > from ? to : to, 0, moved);      // land where the outline was
+
+      // Read the intended order straight back out of that sequence: a section opens a
+      // new group, and every habit after it belongs to it until the next one.
+      const order = [], sections = [];
+      let cur = '';
+      list.forEach(el => {
+        if (el.classList.contains('hsection')) { cur = el.dataset.section; sections.push(cur); }
+        else { order.push({ id: el.dataset.id, section: cur }); }
+      });
+      const body = new URLSearchParams({ csrf: CSRF, action: 'reorder',
+        order: JSON.stringify(order), sections: JSON.stringify(sections) });
+      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+        .then(() => location.reload()).catch(() => location.reload());
+    };
+    document.addEventListener('pointerup', drop);
+    document.addEventListener('pointercancel', () => {
+      if (drag) { drag.classList.remove('hdragging'); clearOver(); drag = null; }
+    });
+  })();
 
   // ----- A section's colour swatch: post in the background, recolour in place -----
   // Same shape as the folder manager's, so the grid never reloads mid-edit.
