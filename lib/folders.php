@@ -121,23 +121,53 @@ function folders_set_all_hidden(string $dir, string $type, bool $hidden): void
 }
 
 /**
- * Persist a new order for a type's folders, from the Manage-folders drag. Every folder
- * can be reordered now, the permanent ones included: names that aren't real folders are
- * dropped, and any folder the request left out keeps its place at the end so nothing can
- * vanish (a fixed folder that's missing is re-added by folders_load regardless).
+ * Persist a new order for a type's folders, from the Manage-folders drag. The order can
+ * now interleave my own folders with the partner's shared ones ("@partner:Folder" keys),
+ * so it's kept as a single display list under `order[$type]`. My own folders' relative
+ * order is mirrored into `$type` too, since some readers (colour-by-position) still want
+ * an own-only list. Names that are neither a real folder nor an "@"-key are dropped, and
+ * any own folder the request left out keeps its place at the end so nothing can vanish.
  */
 function folders_reorder(string $dir, string $type, array $order): void
 {
     if (!in_array($type, ['reminders', 'notes'], true)) { return; }
     $data = folders_load($dir);
-    $all  = array_values($data[$type] ?? []);
-    $wanted = [];
-    foreach ($order as $f) {
-        if (in_array($f, $all, true) && !in_array($f, $wanted, true)) { $wanted[] = $f; }
+    $own  = array_values($data[$type] ?? []);
+    $keys = [];
+    foreach ($order as $k) {
+        $ok = in_array($k, $own, true) || strncmp($k, '@', 1) === 0;
+        if ($ok && !in_array($k, $keys, true)) { $keys[] = $k; }
     }
-    foreach ($all as $f) { if (!in_array($f, $wanted, true)) { $wanted[] = $f; } }
-    $data[$type] = $wanted;
+    // Own folders left out of the request keep their place at the end.
+    foreach ($own as $f) { if (!in_array($f, $keys, true)) { $keys[] = $f; } }
+    $data['order'][$type] = $keys;
+    // Mirror the own-only order (colours default by position, so it wants to be stable).
+    $ownOrder = [];
+    foreach ($keys as $k) { if (in_array($k, $own, true)) { $ownOrder[] = $k; } }
+    foreach ($own as $f) { if (!in_array($f, $ownOrder, true)) { $ownOrder[] = $f; } }
+    $data[$type] = $ownOrder;
     folders_save($dir, $data);
+}
+
+/**
+ * The order folders show in — my own and the partner's shared ones interleaved, as set by
+ * the Manage-folders drag. Stored keys are re-validated on read (an own folder that's gone,
+ * or a shared key no longer shared, drops out); anything the stored order doesn't mention
+ * is appended — my own folders first, then the shared keys — so a brand-new folder or a
+ * freshly shared one still appears. `$sharedKeys` are full "@partner:Folder" strings.
+ */
+function folders_display_order(string $dir, string $type, array $ownFolders, array $sharedKeys): array
+{
+    $data   = folders_load($dir);
+    $stored = is_array($data['order'][$type] ?? null) ? $data['order'][$type] : [];
+    $valid  = array_merge($ownFolders, $sharedKeys);
+    $out    = [];
+    foreach ($stored as $k) {
+        if (in_array($k, $valid, true) && !in_array($k, $out, true)) { $out[] = $k; }
+    }
+    foreach ($ownFolders as $f) { if (!in_array($f, $out, true)) { $out[] = $f; } }
+    foreach ($sharedKeys as $k) { if (!in_array($k, $out, true)) { $out[] = $k; } }
+    return $out;
 }
 
 /**
@@ -466,17 +496,15 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
  * It posts the add_folder / delete_folder actions the pages already handle, so
  * each change is an ordinary POST -> redirect, not AJAX.
  */
-function render_folder_modal(array $folders, string $csrf, string $view = 'All',
-                             string $default = FOLDER_DEFAULT, string $defaultLabel = 'New items go to',
-                             string $extraButton = '', array $colors = [], array $palette = [],
-                             array $sharedRows = [], array $sharedPalette = [],
-                             string $type = 'reminders'): void
+function render_folder_modal(array $rows, string $csrf, string $view = 'All',
+                             string $extraButton = '', array $palette = [],
+                             array $sharedPalette = [], string $type = 'reminders'): void
 {
     $csrf  = htmlspecialchars($csrf, ENT_QUOTES);
     $vw    = htmlspecialchars($view, ENT_QUOTES);
     $fixed = folders_fixed($type);   // the permanent ones carry no delete ×
-    if (!$palette) { $palette = app_palette('reminders'); }
-    if (!$sharedPalette) { $sharedPalette = app_palette('reminders', true); }
+    if (!$palette) { $palette = app_palette($type); }
+    if (!$sharedPalette) { $sharedPalette = app_palette($type, true); }
     ?>
     <div class="modal-backdrop" id="folderModal">
       <div class="foldermodal">
@@ -487,36 +515,44 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
           <input type="text" name="name" placeholder="New folder" maxlength="40" autocomplete="off">
           <button type="submit" class="plus" title="Add folder">+</button>
         </form>
+        <?php // One interleaved list: my own folders and the partner's shared ones together,
+              // in the order I've dragged them into. A shared row wears a badge (its data is
+              // never mine to edit — only recolour how it shows in my picker, and reorder it
+              // in my list), so it carries no delete ×; my own folders keep theirs unless
+              // permanent. Every row drags to reorder by its handle. ?>
         <ul class="flist" id="fReorder">
-          <?php foreach ($folders as $f): ?>
-            <?php $fFixed = in_array($f, $fixed, true); ?>
-            <li data-folder="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
-              <?php // Every folder drags to reorder, the permanent ones included. They
-                    // just keep their × off, since they can't be deleted. ?>
+          <?php foreach ($rows as $r): ?>
+            <?php $shared = !empty($r['shared']);
+                  $key    = (string) $r['key'];
+                  $pal    = $shared ? $sharedPalette : $palette; ?>
+            <li data-folder="<?= htmlspecialchars($key, ENT_QUOTES) ?>"<?= $shared ? ' class="fshared"' : '' ?>>
               <span class="fhandle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
               <?php // The swatch opens a <details> palette: picking a colour is an
-                    // ordinary POST, like everything else in this window. ?>
+                    // ordinary POST, like everything else in this window. A shared row's
+                    // colour is stored as my own override, keyed by its "@partner:Folder". ?>
               <details class="fcolor">
-                <summary style="background:<?= htmlspecialchars($colors[$f] ?? $palette[0], ENT_QUOTES) ?>"
+                <summary style="background:<?= htmlspecialchars($r['color'], ENT_QUOTES) ?>"
                          title="Colour"></summary>
                 <form class="fswatches" method="post" action="">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="set_folder_color">
                   <input type="hidden" name="view" value="<?= $vw ?>">
-                  <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
-                  <?php foreach ($palette as $col): ?>
+                  <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
+                  <?php foreach ($pal as $col): ?>
                     <button type="submit" name="color" value="<?= $col ?>" style="background:<?= $col ?>"
                             title="<?= $col ?>"></button>
                   <?php endforeach; ?>
                 </form>
               </details>
-              <span class="fname"><?= htmlspecialchars($f, ENT_QUOTES) ?></span>
-              <?php if (!in_array($f, $fixed, true)): ?>
+              <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
+              <?php if ($shared): ?>
+                <span class="fshared-badge" title="Shared by <?= htmlspecialchars($r['partner'], ENT_QUOTES) ?>"><?= htmlspecialchars($r['partner'], ENT_QUOTES) ?></span>
+              <?php elseif (!in_array($key, $fixed, true)): ?>
                 <form method="post" action="" style="display:inline">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
                   <input type="hidden" name="action" value="delete_folder">
                   <input type="hidden" name="view" value="<?= $vw ?>">
-                  <input type="hidden" name="name" value="<?= htmlspecialchars($f, ENT_QUOTES) ?>">
+                  <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
                   <button type="submit" class="fdel needs-confirm"
                           title="Delete folder">&times;</button>
                 </form>
@@ -524,32 +560,6 @@ function render_folder_modal(array $folders, string $csrf, string $view = 'All',
             </li>
           <?php endforeach; ?>
         </ul>
-        <?php // Folders the other person shared with me: I can recolour how they show in
-              // my picker (stored in my own file), but nothing else about them is mine. ?>
-        <?php if ($sharedRows): ?>
-          <h3 class="fshared-h">Shared with me</h3>
-          <ul class="flist">
-            <?php foreach ($sharedRows as $r): ?>
-              <li>
-                <details class="fcolor">
-                  <summary style="background:<?= htmlspecialchars($r['color'], ENT_QUOTES) ?>"
-                           title="Colour"></summary>
-                  <form class="fswatches" method="post" action="">
-                    <input type="hidden" name="csrf" value="<?= $csrf ?>">
-                    <input type="hidden" name="action" value="set_folder_color">
-                    <input type="hidden" name="view" value="<?= $vw ?>">
-                    <input type="hidden" name="name" value="<?= htmlspecialchars($r['key'], ENT_QUOTES) ?>">
-                    <?php foreach ($sharedPalette as $col): ?>
-                      <button type="submit" name="color" value="<?= $col ?>" style="background:<?= $col ?>"
-                              title="<?= $col ?>"></button>
-                    <?php endforeach; ?>
-                  </form>
-                </details>
-                <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
-              </li>
-            <?php endforeach; ?>
-          </ul>
-        <?php endif; ?>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= htmlspecialchars($fixed[0], ENT_QUOTES) ?>.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
@@ -718,6 +728,12 @@ function folder_nav_styles(): string
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
+    /* Badge marking a shared row as the partner's, in place of an owner heading — the same
+       chip the picker dropdown wears, since that's where the name comes from. */
+    .foldermodal .fshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
+    }
     /* The folder's colour: a swatch that opens the palette under it. */
     .foldermodal .fcolor { flex: 0 0 auto; position: relative; }
     .foldermodal .fcolor summary {
