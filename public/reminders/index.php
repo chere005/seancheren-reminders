@@ -1426,7 +1426,7 @@ $sectionInput =
   // on a reminder also opens its text for editing straight away.
   const gestureBlocked = (t) => t.closest('.check, .del, .sec-add, .section-del, .sec-collapse, button, a, input, textarea, select');
   const gestureEdit = (target) => {
-    const li = target.closest('li[data-id]'), head = target.closest('.section-head');
+    const li = target.closest('li[data-id]'), head = target.closest('.section-head, .folder-head');
     if (!li && !head) return;
     if (!editing()) setEdit(true);
     if (li) startInlineEdit(li);
@@ -1441,7 +1441,7 @@ $sectionInput =
   document.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' || editing()) return;      // touch/pen only; desktop uses dblclick
     if (gestureBlocked(e.target) && !e.target.closest('.text')) return;
-    if (!e.target.closest('li[data-id], .section-head')) return;
+    if (!e.target.closest('li[data-id], .section-head, .folder-head')) return;
     lpEl = e.target; lpX = e.clientX; lpY = e.clientY;
     lpT = setTimeout(() => { lpT = null; if (navigator.vibrate) navigator.vibrate(12); gestureEdit(lpEl); }, 500);
   });
@@ -1458,7 +1458,7 @@ $sectionInput =
   document.addEventListener('click', (e) => {
     if (!editing() || suppressClick) return;
     if (e.target.closest('.textedit, .text, .sectitle, .sec-handle, .secadd-row, .newsection,'
-        + ' .foldernav, button, a, input, textarea, select,'
+        + ' .folder-head, .foldernav, button, a, input, textarea, select,'
         + ' .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
     setEdit(false);
   });

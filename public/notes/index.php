@@ -939,7 +939,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   const editingNow = () => document.body.classList.contains('editing');
   const gBlocked = (t) => t.closest('.ndel, .sec-add, .section-del, .sec-collapse, button, input, textarea, select');
   const gestureEdit = (target) => {
-    if (!target.closest('li[data-id], .section-head')) return;
+    if (!target.closest('li[data-id], .section-head, .folder-head')) return;
     setEdit(true);
   };
   let gSuppress = false;
@@ -949,7 +949,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
   document.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' || editingNow()) return;
-    if (gBlocked(e.target) || !e.target.closest('li[data-id], .section-head')) return;
+    if (gBlocked(e.target) || !e.target.closest('li[data-id], .section-head, .folder-head')) return;
     lpEl = e.target; lpX = e.clientX; lpY = e.clientY;
     lpT = setTimeout(() => {
       lpT = null; if (navigator.vibrate) navigator.vibrate(12);
@@ -978,7 +978,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   // on a note row, a section name field, an edit control, the toolbar, or a modal.
   document.addEventListener('click', (e) => {
     if (!editingNow() || gSuppress) return;
-    if (e.target.closest('.noteitem, .sectitle, .sec-handle, .listbar, button, a, input, textarea, select,'
+    if (e.target.closest('.noteitem, .sectitle, .sec-handle, .listbar, .folder-head, button, a, input, textarea, select,'
         + ' .modal-backdrop, .setmodal-backdrop, .sh-modal, .tabbar')) return;
     setEdit(false);
   });
