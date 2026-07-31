@@ -816,9 +816,9 @@ $sectionInput =
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
     .section-del {
+      flex: 0 0 auto; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
       background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
-      padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
-      font-family: inherit;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
     /* Subsections: padding-left indents the content, so the delete × stays pinned to the
@@ -863,11 +863,14 @@ $sectionInput =
     .due.past   { color: var(--k-overdue); background: var(--k-overdue-bg); }   /* gone by */
     .due.today  { color: var(--k-reminder); background: var(--k-reminder-bg); }   /* due today */
     .due.future { color: var(--k-event-soft); background: var(--k-event-bg); }   /* still ahead */
+    /* Fixed size + flex-centring, so the glyph (or the empty check) sits dead centre
+       rather than being positioned by padding and a couple of &nbsp;s. */
     .check, .del {
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0;
       background: none; border: 1px solid #444; color: #ccc; cursor: pointer;
-      border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
+      border-radius: 6px; font-size: 0.95rem; line-height: 1;
     }
-    .check { padding: 0.25rem 0.4rem; }
     .check:hover { border-color: #7a7; color: #7a7; }
     .del:hover { border-color: #f66; color: #f66; }
 
@@ -875,7 +878,7 @@ $sectionInput =
        The handles keep their column either way — hiding them with display:none nudged
        every line of text sideways the moment you started editing. */
     .del, .section-del { display: none; }
-    body.editing .del, body.editing .section-del { display: inline-block; }
+    body.editing .del, body.editing .section-del { display: inline-flex; }
     .drag-handle, .sec-handle { visibility: hidden; }
     body.editing .drag-handle, body.editing .sec-handle { visibility: visible; }
     .drag-handle, .sec-handle {
@@ -1000,7 +1003,9 @@ $sectionInput =
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <div class="folder-label"><?= e($sfolder) ?></div>
-            <?php // Edit-mode only: a "+" to the right of the folder name that reveals an
+            <?php // The folder's own colour, the same dot its entry wears in the picker. ?>
+            <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
+            <?php // Edit-mode only: a "+" just right of the colour dot that reveals an
                   // inline section-name field (below), so a folder with no sections of its
                   // own — like the permanent Reminders/Calendar — can get its first. ?>
             <?php if (!$isShared): ?>
@@ -1015,9 +1020,7 @@ $sectionInput =
                 <button type="submit" class="plus" title="Add section">+</button>
               </form>
             <?php endif; ?>
-            <?php // The folder's own colour, the same dot its entry wears in the picker,
-                  // then a short rule trailing off to the right edge on the same line. ?>
-            <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
+            <?php // A short rule trailing off to the right edge on the same line. ?>
             <span class="folder-rule" aria-hidden="true"></span>
           </div>
       <?php endif; ?>
