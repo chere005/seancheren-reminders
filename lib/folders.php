@@ -392,6 +392,12 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         cb.setAttribute('aria-checked', on ? 'true' : 'false');
         // The "All" box is a master switch: it shows or hides every folder at once.
         var isAll = cb.classList.contains('fvis-all');
+        // Changing what's in view expands the sections and folders, so whatever you just
+        // switched on is open rather than hidden behind a collapse you'd forgotten about.
+        try {
+          localStorage.removeItem('collapsed:' + location.pathname);
+          localStorage.removeItem('foldercollapsed:' + location.pathname);
+        } catch (_) {}
         var body = new URLSearchParams(isAll
           ? { csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '' }
           : { csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' });
