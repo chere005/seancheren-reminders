@@ -483,7 +483,11 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     ?>
     <header>
       <div class="hleft">
-        <button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>
+        <?php // Same two-buttons-in-one-slot as the rest of the suite: "<" normally,
+              // a black × that leaves edit mode while editing. ?>
+        <button type="button" class="backbtn goback" onclick="history.back()" aria-label="Back">&lsaquo;</button>
+        <button type="button" class="backbtn exitedit" id="exitEditBtn"
+                title="Done editing" aria-label="Leave edit mode">&times;</button>
         <div class="htitle"><?= $titleHtml ?></div>
       </div>
       <div class="hright">
@@ -536,6 +540,9 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     }
     .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
+    .backbtn.exitedit { display: none; background: #000; border-color: #444; color: #eee; font-size: 1.2rem; }
+    body.editing .backbtn.exitedit { display: inline-flex; }
+    body.editing .backbtn.goback { display: none; }
     .htitle h1 { font-size: 1.35rem; }
     .htitle .ht-sub { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
 
@@ -1185,6 +1192,15 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     requestAnimationFrame(() => loveBanner.classList.add('show'));
     setTimeout(() => loveBanner.classList.remove('show'), 2000);
     setTimeout(() => loveBanner.remove(), 2500);
+  }
+
+  // ---- The black × in the back button's slot: leaves edit mode ----
+  const exitEditBtn = document.getElementById('exitEditBtn');
+  if (exitEditBtn) {
+    exitEditBtn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      document.body.classList.remove('editing');
+    });
   }
 
   // ---- Username dropdown ----

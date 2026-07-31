@@ -40,39 +40,27 @@ function kind_spec(string $kind): ?array
 define('CAL_COLORS', app_palette('calendar'));
 
 /**
- * Calendars and calendar sets share one list, the way sections share a list elsewhere:
- *   calendar -> ['id','name','color']            set -> ['id','type'=>'set','name','cals'=>[ids]]
- * List order is display order.
+ * A calendar is ['id','name','color']; list order is display order. There used to be a
+ * second kind of row here — a "calendar set", a saved group of calendars to view
+ * together — and it earned its keep nowhere: the picker, the manage window, the widget
+ * and the day panel each had a branch for it. Any set rows still in a file are dropped
+ * on the next load. This predicate is only kept to recognise and discard them.
  */
 function is_calset(array $it): bool { return ($it['type'] ?? '') === 'set'; }
-
-/**
- * A dot's background: one colour on its own, or several as equal pie segments.
- * A set doesn't own a colour any more — it wears its members'.
- */
-function cal_pie_bg(array $colors): string
-{
-    $colors = array_values(array_filter($colors));
-    if (!$colors) { return '#94a3b8'; }               // empty set: plain grey
-    if (count($colors) === 1) { return $colors[0]; }
-    $n = count($colors);
-    $stops = [];
-    foreach ($colors as $i => $c) {
-        $stops[] = sprintf('%s %.3f%% %.3f%%', $c, $i * 100 / $n, ($i + 1) * 100 / $n);
-    }
-    return 'conic-gradient(' . implode(',', $stops) . ')';
-}
 
 /** Always hands back at least one calendar, creating the default one on first use. */
 function load_calendars(string $file): array
 {
-    $list = store_read($file);
-    foreach ($list as &$it) { if (isset($it['color'])) { $it['color'] = cal_color_fix($it['color']); } }
+    $list  = store_read($file);
+    $clean = array_values(array_filter($list, fn($it) => !is_calset($it)));   // drop legacy sets
+    foreach ($clean as &$it) { if (isset($it['color'])) { $it['color'] = cal_color_fix($it['color']); } }
     unset($it);
-    foreach ($list as $it) { if (!is_calset($it)) { return $list; } }
-    $list[] = ['id' => bin2hex(random_bytes(6)), 'name' => 'Personal', 'color' => CAL_COLORS[0], 'created' => time()];
-    store_write($file, array_values($list));
-    return $list;
+    if (!$clean) {
+        $clean[] = ['id' => bin2hex(random_bytes(6)), 'name' => 'Personal',
+                    'color' => CAL_COLORS[0], 'created' => time()];
+    }
+    if (count($clean) !== count($list)) { store_write($file, $clean); }
+    return $clean;
 }
 
 $calFile = user_data_file($cfg['data_dir'], 'calendars');
@@ -94,7 +82,7 @@ $theirShares = $partner ? shares_load($cfg['data_dir'], $partner) : ['calendars'
 
 // Their whole calendar list (needed to resolve an event with no calendar), and the shared slice.
 $theirCals   = $partner ? array_values(array_filter(store_read(user_data_file($cfg['data_dir'], 'calendars', $partner)),
-                                                    fn($c) => !is_calset($c))) : [];
+                                                    fn($c) => !is_calset($c))) : [];   // their legacy sets too
 $theirCalIds = array_column($theirCals, 'id');
 $sharedCals  = array_values(array_filter($theirCals, fn($c) => in_array($c['id'] ?? '', $theirShares['calendars'], true)));
 $sharedIds   = array_column($sharedCals, 'id');
@@ -125,21 +113,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $ym       = $retDay !== '' ? substr($retDay, 0, 7) : ((string) ($_POST['ym'] ?? date('Y-m')));
     $stay = '';   // extra query bits for the redirect (e.g. keep edit mode on)
 
-    // --- Manage calendars / calendar sets (AJAX: answers with the fresh list, no reload) ---
-    if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder',
-                           'set_add', 'set_delete', 'set_members', 'set_reorder', 'cal_default'], true)) {
-        $calIdsNow = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+    // --- Manage calendars (AJAX: answers with the fresh list, no reload) ---
+    if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder', 'cal_default'], true)) {
+        $calIdsNow = array_column($calList, 'id');
         $name      = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
 
         if ($action === 'cal_add' && $name !== '') {
             $calList[] = ['id' => bin2hex(random_bytes(6)), 'name' => $name,
                           'color' => CAL_COLORS[count($calIdsNow) % count(CAL_COLORS)], 'created' => time()];
         } elseif ($action === 'cal_delete' && count($calIdsNow) > 1 && !empty($_POST['confirm'])) {
-            $calList = array_values(array_filter($calList, fn($c) => is_calset($c) || ($c['id'] ?? '') !== $id));
-            foreach ($calList as &$s) {   // drop it from any set that listed it
-                if (is_calset($s)) { $s['cals'] = array_values(array_filter($s['cals'] ?? [], fn($c) => $c !== $id)); }
-            }
-            unset($s);
+            $calList = array_values(array_filter($calList, fn($c) => ($c['id'] ?? '') !== $id));
             $evFile  = user_data_file($cfg['data_dir'], 'events');   // its events fall back to the first calendar
             $evs     = load_json_list($evFile);
             $touched = false;
@@ -149,51 +132,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         } elseif ($action === 'cal_color') {
             $color = (string) ($_POST['color'] ?? '');
             if (in_array($color, CAL_COLORS, true)) {
-                foreach ($calList as &$c) {   // sets carry a colour too
+                foreach ($calList as &$c) {
                     if (($c['id'] ?? '') === $id) { $c['color'] = $color; break; }
                 }
                 unset($c);
             }
-        } elseif ($action === 'set_reorder') {
-            // Sets keep their own order; calendars stay ahead of them in the list.
-            $pos  = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
-            $cals = array_values(array_filter($calList, fn($c) => !is_calset($c)));
-            $sets = array_values(array_filter($calList, 'is_calset'));
-            usort($sets, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
-            $calList = array_merge($cals, $sets);
         } elseif ($action === 'cal_reorder') {
-            $pos  = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
-            $cals = array_values(array_filter($calList, fn($c) => !is_calset($c)));
-            $sets = array_values(array_filter($calList, 'is_calset'));
-            usort($cals, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
-            $calList = array_merge($cals, $sets);
-        } elseif ($action === 'set_add' && $name !== '') {
-            $calList[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'set', 'name' => $name,
-                          'color' => CAL_COLORS[count($calList) % count(CAL_COLORS)],
-                          'cals' => [], 'created' => time()];
-        } elseif ($action === 'set_delete' && !empty($_POST['confirm'])) {
-            $calList = array_values(array_filter($calList, fn($c) => !(is_calset($c) && ($c['id'] ?? '') === $id)));
+            $pos = array_flip((array) (json_decode((string) ($_POST['order'] ?? '[]'), true) ?: []));
+            usort($calList, fn($a, $b) => ($pos[$a['id']] ?? 999) <=> ($pos[$b['id']] ?? 999));
         } elseif ($action === 'cal_default') {
             // Which calendar new events land in. Kept in calprefs, not the calendar list.
             if (in_array($id, $calIdsNow, true)) {
                 $calPrefs['default_cal'] = $id;
                 store_write($prefFile, $calPrefs);
             }
-        } elseif ($action === 'set_members') {
-            // A set may hold the other person's shared calendars alongside my own.
-            $pool = array_merge($calIdsNow, $sharedIds);
-            $want = (array) (json_decode((string) ($_POST['cals'] ?? '[]'), true) ?: []);
-            foreach ($calList as &$s) {
-                if (is_calset($s) && ($s['id'] ?? '') === $id) {
-                    $s['cals'] = array_values(array_intersect($pool, $want));
-                    break;
-                }
-            }
-            unset($s);
         }
         save_json_list($calFile, $calList);
         // The chosen default may have just been deleted; fall back to the first calendar.
-        $idsAfter = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+        $idsAfter = array_column($calList, 'id');
         $defNow   = (string) ($calPrefs['default_cal'] ?? '');
         if (!in_array($defNow, $idsAfter, true)) { $defNow = $idsAfter[0] ?? ''; }
         header('Content-Type: application/json');
@@ -222,12 +178,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // --- Share one of my calendars / reminder folders with the other person ---
     if ($action === 'share_set' && $partner) {
         share_handle_set($cfg['data_dir'], $me,
-                         array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id'),
+                         array_column($calList, 'id'),
                          $remFolders, folders_load($cfg['data_dir'])['notes']);
     }
 
     // An event's calendar, ignored unless it names one that exists.
-    $calIds  = array_column(array_values(array_filter($calList, fn($c) => !is_calset($c))), 'id');
+    $calIds  = array_column($calList, 'id');
     $evCal   = (string) ($_POST['cal'] ?? '');
     $evCalOk = in_array($evCal, $calIds, true) ? $evCal : '';
 
@@ -238,6 +194,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // "Every 2 weeks" from the window's repeat row; null when it happens once.
     $rep = repeat_clean($_POST['rep_unit'] ?? '', $_POST['rep_n'] ?? 1);
+
+    /**
+     * Whatever was just added has to be *visible* afterwards, or adding it reads as
+     * having failed. The view is a filter — one calendar, or one of the partner's
+     * shared folders — and a new item lands wherever the add window said, which is
+     * very often outside it. Rather than refuse the add or silently drop it behind the
+     * filter, widen the view back to "all" and un-hide the folder it went into.
+     */
+    $showAgain = function (?string $cal, string $folder = '') use (&$calPrefs, $prefFile, $hidFolders) {
+        $dirty = false;
+        $view  = (string) ($calPrefs['last_cal'] ?? 'all');
+        // $cal null = "not a calendar thing" (a reminder): only a shared-folder view,
+        // which hides everything of mine, has to give way.
+        $hides = $cal === null ? strncmp($view, 'f:', 2) === 0 : ($view !== 'all' && $view !== $cal);
+        if ($hides) { $calPrefs['last_cal'] = 'all'; $dirty = true; }
+        if ($folder !== '' && in_array($folder, $hidFolders, true)) {
+            $calPrefs['hidden_folders'] = array_values(array_filter($hidFolders, fn($f) => $f !== $folder));
+            $dirty = true;
+        }
+        if ($dirty) { store_write($prefFile, $calPrefs); }
+    };
 
     if ($action === 'add_event' && $text !== '') {
         // The window offers my calendars and the partner's shared ones in two separate
@@ -251,6 +228,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                    'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
                    'cal' => $toThem ? $shCal : $evCalOk, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
+        $showAgain($toThem ? $shCal : ($evCalOk !== '' ? $evCalOk : ($calIds[0] ?? '')));
     } elseif ($action === 'add_reminder' && $text !== '') {
         // A reminder belongs to a folder and a group, never to a calendar. Mine lands in
         // whichever folder Reminders is set to add to; picking from the partner's picker
@@ -279,6 +257,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                    'folder' => $remFolder,
                    'section' => $section, 'repeat' => $rep, 'created' => time()];
         save_json_list($file, $list);
+        // Reminders aren't filtered by calendar, but the folder they landed in may be
+        // switched off, and viewing one of the partner's folders hides mine entirely.
+        $showAgain(null, $toThem ? '' : $remFolder);
     } elseif ($action === 'add_note' && $text !== '') {
         $file  = user_data_file($cfg['data_dir'], 'notes');
         $list  = load_json_list($file);
@@ -365,9 +346,8 @@ $tailBlank = (7 - ($leadBlank + $daysInMo) % 7) % 7;
 $prev = date('Y-m', mktime(0, 0, 0, $month - 1, 1, $year));
 $next = date('Y-m', mktime(0, 0, 0, $month + 1, 1, $year));
 
-// --- Which calendar (or set) is on screen? ?cal= picks it; the choice sticks in the session. ---
-$calsOnly = array_values(array_filter($calList, fn($c) => !is_calset($c)));
-$setsOnly = array_values(array_filter($calList, 'is_calset'));
+// --- Which calendar is on screen? ?cal= picks it; the choice sticks in calprefs. ---
+$calsOnly = $calList;
 $calIds   = array_column($calsOnly, 'id');
 // New events land here when you aren't looking at one calendar in particular.
 // Chosen in the manage window; falls back to the first calendar.
@@ -394,11 +374,7 @@ if (strncmp($calView, 'f:', 2) === 0) {
 } elseif (in_array($calView, $pickIds, true)) {
     $visibleCals = [$calView];
 } elseif ($calView !== 'all') {
-    foreach ($setsOnly as $s) {
-        // $pickIds, not $calIds — a set can hold shared calendars too.
-        if (($s['id'] ?? '') === $calView) { $visibleCals = array_values(array_intersect($pickIds, $s['cals'] ?? [])); break; }
-    }
-    if ($visibleCals === null) { $calView = 'all'; }   // stale id (deleted calendar/set)
+    $calView = 'all';   // stale id (a deleted calendar, or one of the old sets)
 }
 
 // --- Sync: gather this user's dated reminders + notes for the visible month ---
@@ -865,7 +841,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       cursor: pointer; padding: 0;
     }
     /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
-    .callist .setrow .cswatch { border-radius: 50%; }
     /* Read-only colour dot for a partner's shared calendar (no swatch button). */
     .callist .cdot-ro { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #444; }
     .callist .cdel {
@@ -873,8 +848,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .callist .cdel:hover { border-color: #f66; color: #f66; }
-    .callist li.setrow { cursor: pointer; }
-    .callist .ccount { font-size: 0.75rem; color: #666; white-space: nowrap; }
     .callist .cmember { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
     .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
     /* Default-calendar picker, under the calendar list. */
@@ -907,13 +880,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <?php
     // Custom picker rather than a <select>: a native option can't carry a colour dot.
     $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
-    if ($setsOnly) {
-      $pickGroups[] = ['Calendar sets', array_map(
-        fn($x) => [$x['id'], $x['name'],
-                   cal_pie_bg(array_map(fn($id) => $calColor[$id] ?? CAL_COLORS[0],
-                                        array_values(array_intersect($pickIds, $x['cals'] ?? []))))],
-        $setsOnly)];
-    }
     if ($sharedCals || $sharedFolders) {
       $pickGroups[] = [share_name($partner), array_merge(
         array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $sharedCals),
@@ -1229,7 +1195,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   </form>
 </div>
 
-<!-- Manage calendars + calendar sets (opened by the + beside "Calendar" in edit mode) -->
+<!-- Manage calendars (opened from "Manage calendars" in the picker dropdown) -->
 <div class="modal-backdrop" id="calModal">
   <div class="modal calmodal">
     <div class="cm-section" data-cm="cals">
@@ -1246,16 +1212,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         </div>
       </div>
     </div>
-    <div class="cm-section" data-cm="sets">
-      <h2 class="cm-head">Calendar sets<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
-      <div class="cm-body">
-        <div class="addrow">
-          <input type="text" id="setName" placeholder="New set" maxlength="40" autocomplete="off">
-          <button type="button" class="plus" id="setAdd" title="Add set">+</button>
-        </div>
-        <ul class="callist" id="setRows"></ul>
-      </div>
-    </div>
     <div class="cm-section" data-cm="folders">
       <h2 class="cm-head">Reminder folders<span class="cm-chev" aria-hidden="true">&#9662;</span></h2>
       <div class="cm-body">
@@ -1270,18 +1226,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 </div>
 
 <?php if ($partner) { echo share_modal_html($partner); } ?>
-
-<!-- Which calendars belong to a set -->
-<div class="modal-backdrop" id="setModal">
-  <div class="modal">
-    <h2 id="setHeading">Set</h2>
-    <ul class="callist" id="setMembers"></ul>
-    <div class="buttons" style="margin-top:1.1rem">
-      <button type="button" class="cancel" id="setCancel">Cancel</button>
-      <button type="button" class="ok" id="setSave">Save</button>
-    </div>
-  </div>
-</div>
 
 <div class="swatches" id="swatchPop" hidden></div>
 
@@ -1381,6 +1325,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mSecTheirs.addEventListener('change', () => { if (mSecTheirs.value) mSec.selectedIndex = -1; });
     mSec.addEventListener('change', () => { mSecTheirs.value = ''; });
   }
+  // Put both pairs back to "mine", so a window opened after one that used the partner's
+  // side doesn't quietly keep writing into their file.
+  const ownerReset = () => {
+    if (mCalTheirs) { mCalTheirs.value = ''; }
+    if (mSecTheirs) { mSecTheirs.value = ''; }
+    if (mCal && mCal.selectedIndex < 0) { mCal.selectedIndex = 0; }
+    if (mSec && mSec.selectedIndex < 0) { mSec.selectedIndex = 0; }
+  };
   const showTime = (val) => {
     mTime.value = val || ''; mTimeRow.hidden = false;
     mCalRow.hidden = false; mSecRow.hidden = true;
@@ -1418,6 +1370,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mOk.textContent = 'Add';
     mText.value = '';
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
+    // Whose pickers were last used doesn't carry over. They're sticky selects, and
+    // leaving the partner's set meant the next thing you added silently went into
+    // *their* file — it looked like the add had simply not happened.
+    ownerReset();
     mCal.value = newEventCal();            // the calendar you're looking at, else the default
     showTime('');
     showRep('event', null);
@@ -1437,6 +1393,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
+    ownerReset();                          // editing only ever touches my own items
     if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); }
     else { mTime.value = time || ''; hideTime(kind); }
     showRep(kind, rep);
@@ -1659,8 +1616,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     renderPanel(date);
   };
 
+  // A day is selected by a *tap* and nothing else. Watching `click` meant every swipe
+  // across the grid selected whichever cell the finger happened to lift off, so the
+  // month you paged to opened on a day you never picked. A tap is: pointer down and up
+  // on the same cell, without the finger travelling — anything else is a swipe, and the
+  // swipe handler below is welcome to it.
+  (function () {
+    const TAP = 10;                       // px of travel still counts as a tap
+    let downCell = null, downX = 0, downY = 0;
+    const grid = document.getElementById('calGrid');
+    grid.addEventListener('pointerdown', e => {
+      downCell = e.target.closest('.cell[data-date]');
+      downX = e.clientX; downY = e.clientY;
+    });
+    grid.addEventListener('pointerup', e => {
+      const cell = e.target.closest('.cell[data-date]');
+      const from = downCell; downCell = null;
+      if (!cell || cell !== from) { return; }
+      if (Math.abs(e.clientX - downX) > TAP || Math.abs(e.clientY - downY) > TAP) { return; }
+      selectDay(cell.dataset.date);
+    });
+    grid.addEventListener('pointercancel', () => { downCell = null; });
+  })();
   document.querySelectorAll('.cell[data-date]').forEach(cell => {
-    cell.addEventListener('click', () => selectDay(cell.dataset.date));
     cell.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDay(cell.dataset.date); }
     });
@@ -1715,24 +1693,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   let calDirty = false;          // something changed -> reload on close so dots/colours catch up
 
   const calModal = document.getElementById('calModal');
-  const setModal = document.getElementById('setModal');
   const calRows  = document.getElementById('calRows');
-  const setRows  = document.getElementById('setRows');
   const swatchPop= document.getElementById('swatchPop');
-  const isSet    = c => c.type === 'set';
-  const onlyCals = () => CALS.filter(c => !isSet(c));
-  const onlySets = () => CALS.filter(isSet);
-  // Colours by calendar id — mine plus the partner's — so a set can draw its members.
-  const colorOf = id => (onlyCals().concat(SHARED_CALS).find(c => c.id === id) || {}).color;
-  // One colour, or several as equal pie segments. Mirrors cal_pie_bg() in PHP.
-  const pieBg = cols => {
-    cols = cols.filter(Boolean);
-    if (!cols.length) return '#94a3b8';
-    if (cols.length === 1) return cols[0];
-    const n = cols.length;
-    return 'conic-gradient(' + cols.map((c, i) =>
-      c + ' ' + (i * 100 / n).toFixed(3) + '% ' + ((i + 1) * 100 / n).toFixed(3) + '%').join(',') + ')';
-  };
+  const onlyCals = () => CALS;
 
   // Every change posts here and gets the whole list back, so the UI never guesses.
   const calApi = (action, extra) => {
@@ -1742,7 +1705,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       .then(j => {
         if (!j) return;
         if (j.default !== undefined) { DEFAULT_CAL = j.default; }
-        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderSets(); renderDefault(); if (PARTNER) renderShare(); }
+        if (j.list)   { CALS = j.list; calDirty = true; renderCals(); renderDefault(); if (PARTNER) renderShare(); }
         if (j.hidden) { HIDDEN = j.hidden; HIDDEN_SHARED = j.hiddenShared || []; calDirty = true; renderFolders(); }
         if (j.shares) { SHARES = j.shares; calDirty = true; renderShare(); }
       })
@@ -1809,42 +1772,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     calApi('cal_default', { id: DEFAULT_CAL });
   });
 
-  function renderSets() {
-    setRows.innerHTML = '';
-    const sets = onlySets();
-    if (!sets.length) {
-      const p = document.createElement('li');
-      p.className = 'calempty'; p.style.background = 'none'; p.style.border = 'none';
-      p.textContent = 'No sets yet. A set shows several calendars at once.';
-      setRows.appendChild(p);
-      return;
-    }
-    sets.forEach(s => {
-      const li = document.createElement('li');
-      li.className = 'setrow'; li.dataset.id = s.id;
-      const handle = document.createElement('span');
-      handle.className = 'chandle'; handle.textContent = '☰'; handle.title = 'Drag to reorder';
-      // A set has no colour of its own: the swatch is its members', in pie segments.
-      const sw = document.createElement('span');
-      sw.className = 'cswatch'; sw.style.cursor = 'default';
-      sw.style.background = pieBg((s.cals || []).map(colorOf));
-      const name = document.createElement('span');
-      name.className = 'cname'; name.textContent = s.name;
-      const count = document.createElement('span');
-      count.className = 'ccount';
-      const n = (s.cals || []).length;
-      count.textContent = n + (n === 1 ? ' calendar' : ' calendars');
-      const del = document.createElement('button');
-      del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete set';
-      del.addEventListener('click', e => {
-        e.stopPropagation();
-        calApi('set_delete', { id: s.id, confirm: 1 });   // the arming already confirmed it
-      });
-      li.append(handle, sw, name, count, del);
-      li.addEventListener('click', () => openSetPicker(s));
-      setRows.appendChild(li);
-    });
-  }
 
   // A checkbox row: ticked/unticked calls back with the new state.
   function checkRow(label, checked, onChange) {
@@ -1910,43 +1837,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     if (!swatchPop.hidden && !swatchPop.contains(e.target) && !e.target.closest('.cswatch')) swatchPop.hidden = true;
   });
 
-  // Which calendars are in this set.
-  let editingSet = null;
-  function openSetPicker(s) {
-    editingSet = s.id;
-    document.getElementById('setHeading').textContent = s.name;
-    const box = document.getElementById('setMembers');
-    box.innerHTML = '';
-    const memberRow = c => {
-      const li = document.createElement('li');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.className = 'cmember'; cb.value = c.id;
-      cb.checked = (s.cals || []).indexOf(c.id) !== -1;
-      const sw = document.createElement('span');
-      sw.className = 'cswatch'; sw.style.background = c.color; sw.style.cursor = 'default';
-      const name = document.createElement('span');
-      name.className = 'cname'; name.textContent = c.name;
-      li.append(cb, sw, name);
-      li.addEventListener('click', e => { if (e.target !== cb) cb.checked = !cb.checked; });
-      return li;
-    };
-    onlyCals().forEach(c => box.appendChild(memberRow(c)));
-    // The other person's calendars can go in a set too — they stay theirs, we just show them.
-    if (SHARED_CALS.length) {
-      box.appendChild(subHead(PARTNER + '’s calendars'));
-      SHARED_CALS.forEach(c => box.appendChild(memberRow(c)));
-    }
-    setModal.classList.add('open');
-  }
-  document.getElementById('setSave').addEventListener('click', () => {
-    const ids = [...document.querySelectorAll('#setMembers .cmember')].filter(c => c.checked).map(c => c.value);
-    calApi('set_members', { id: editingSet, cals: JSON.stringify(ids) }).then(() => setModal.classList.remove('open'));
-  });
-  document.getElementById('setCancel').addEventListener('click', () => setModal.classList.remove('open'));
-  setModal.addEventListener('click', e => { if (e.target === setModal) setModal.classList.remove('open'); });
 
-  // Drag to reorder, for calendars and for sets (pointer events, so touch works).
-  // Both lists behave the same; only the action they save under differs.
+  // Drag to reorder the calendar list (pointer events, so touch works).
   const wireReorder = (list, action) => {
     let dragging = null;
     list.addEventListener('pointerdown', e => {
@@ -1973,23 +1865,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     list.addEventListener('pointercancel', end);
   };
   wireReorder(calRows, 'cal_reorder');
-  wireReorder(setRows, 'set_reorder');
 
   const addCal = () => {
     const i = document.getElementById('calName');
     if (i.value.trim()) { calApi('cal_add', { name: i.value.trim() }); i.value = ''; }
   };
-  const addSet = () => {
-    const i = document.getElementById('setName');
-    if (i.value.trim()) { calApi('set_add', { name: i.value.trim() }); i.value = ''; }
-  };
   document.getElementById('calAdd').addEventListener('click', addCal);
-  document.getElementById('setAdd').addEventListener('click', addSet);
   document.getElementById('calName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addCal(); } });
-  document.getElementById('setName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSet(); } });
 
   document.getElementById('calMgr').addEventListener('click', () => {
-    renderCals(); renderSets(); renderDefault(); renderFolders();
+    renderCals(); renderDefault(); renderFolders();
     calModal.classList.add('open');
   });
   // Collapse/expand the manager's sections (Calendars, Sets, Reminder folders); remembered.
@@ -2068,12 +1953,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
   const shareModalEl = document.getElementById('shareModal');
   const anyModalOpen = () => modal.classList.contains('open')
-    || calModal.classList.contains('open') || setModal.classList.contains('open')
+    || calModal.classList.contains('open')
     || (shareModalEl && shareModalEl.classList.contains('open'));
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (shareModalEl && shareModalEl.classList.contains('open')) { shareModalEl.classList.remove('open'); return; }
-    if (setModal.classList.contains('open')) { setModal.classList.remove('open'); return; }
     if (calModal.classList.contains('open')) { closeCalModal(); return; }
     if (modal.classList.contains('open')) { closeModal(); return; }
     if (document.body.classList.contains('editing')) { document.body.classList.remove('editing'); return; }
@@ -2131,36 +2015,25 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       });
     });
 
-    // Swipe up on the calendar half to collapse it, down to open it back out.
-    let sy = null, sx = null, swiping = false;
+    // Swipe up on the calendar half to collapse it to a week, down to open it back out;
+    // sideways pages. Day selection is a tap and lives in its own handler, so a swipe
+    // never has to be filtered back out of a click here.
+    let sy = null, sx = null;
     const wrap = document.querySelector('.cal-top') || grid.parentElement;
     wrap.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) { sy = null; return; }
-      sy = e.touches[0].clientY; sx = e.touches[0].clientX; swiping = false;
+      sy = e.touches[0].clientY; sx = e.touches[0].clientX;
     }, { passive: true });
-    // Once the finger has clearly moved, this is a swipe and not a tap. Marking it here
-    // (rather than only at touchend) lets the day cells ignore the synthetic click the
-    // browser fires on whichever cell the finger happened to lift off — without this,
-    // paging through months also "selected" a day on every swipe.
-    wrap.addEventListener('touchmove', (e) => {
-      if (sy === null || swiping) { return; }
-      const t = e.touches[0];
-      if (Math.abs(t.clientX - sx) > 12 || Math.abs(t.clientY - sy) > 12) { swiping = true; }
-    }, { passive: true });
-    // Capture-phase, so it beats the .cell click handler that selects a day.
-    wrap.addEventListener('click', (e) => {
-      if (!swiping) { return; }
-      e.preventDefault(); e.stopPropagation();
-    }, true);
     wrap.addEventListener('touchend', (e) => {
       if (sy === null) { return; }
       const t = e.changedTouches[0], dy = t.clientY - sy, dx = t.clientX - sx;
       sy = null;
-      // The synthetic click lands just after touchend; clear the flag behind it.
-      if (swiping) { setTimeout(() => { swiping = false; }, 350); }
-      // A firm sideways swipe steps a month: left = forward, right = back.
+      // A firm sideways swipe pages: left = forward, right = back. It matches whatever
+      // the arrows do — a week at a time in week mode, a month in month mode — so the
+      // gesture and the buttons never disagree about how far one step is.
       if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)) {
-        location.href = dx < 0 ? '?ym=<?= $next ?>' : '?ym=<?= $prev ?>';
+        if (weekMode) { step(dx < 0 ? 1 : -1); }
+        else { location.href = dx < 0 ? '?ym=<?= $next ?>' : '?ym=<?= $prev ?>'; }
         return;
       }
       if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) { return; }   // a tap, or a small drag

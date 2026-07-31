@@ -28,6 +28,14 @@ function chrome_styles(): string
     }
     .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
     .backbtn:hover { border-color: #888; color: #fff; }
+    /* In edit mode the back button becomes a black × that leaves edit mode — going
+       "back" while editing almost always meant "I'm done editing", and there was no
+       other way out on a page with nothing empty to tap. The two share the slot, so
+       swapping them never shifts the title beside it. */
+    .backbtn.exitedit { display: none; background: #000; border-color: #444; color: #eee; font-size: 1.2rem; }
+    body.editing .backbtn.exitedit { display: inline-flex; }
+    body.editing .backbtn.goback { display: none; }
+    .backbtn.exitedit:hover { border-color: #888; color: #fff; }
     /* The manage-folders (folder icon) or Edit (pencil) button beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
     .titlebtn svg { display: block; }
@@ -110,9 +118,15 @@ function chrome_styles(): string
     . section_rename_styles();
 }
 
+/**
+ * The top-left button. Two buttons in one slot: the "<" that goes back, and the black
+ * "×" that only shows in edit mode and leaves it (wired in chrome_script()).
+ */
 function back_button(): string
 {
-    return '<button type="button" class="backbtn" onclick="history.back()" aria-label="Back">&lsaquo;</button>';
+    return '<button type="button" class="backbtn goback" onclick="history.back()" aria-label="Back">&lsaquo;</button>'
+         . '<button type="button" class="backbtn exitedit" id="exitEditBtn"'
+         . ' title="Done editing" aria-label="Leave edit mode">&times;</button>';
 }
 
 /** A monochrome folder glyph (inherits the button's colour) for the manage-folders button. */
@@ -694,6 +708,10 @@ function chrome_script(): string
          . "document.addEventListener('click',function(e){if(!m.hidden&&!m.contains(e.target)){m.hidden=true;}});}"
          // A page can define window.sectionEditToggle to treat the section pencils
          // differently from the header button; otherwise they just click it.
+         // The black × in the back button's slot: the way out of edit mode.
+         . "var xb=document.getElementById('exitEditBtn');if(xb){xb.addEventListener('click',function(e){"
+         . "e.preventDefault();e.stopPropagation();document.body.classList.remove('editing');"
+         . "if(document.activeElement&&document.activeElement.blur){document.activeElement.blur();}});}"
          . "var eb=document.getElementById('editBtn');if(eb){"
          . "document.querySelectorAll('.sec-edit').forEach(function(s){"
          . "s.addEventListener('click',function(){"

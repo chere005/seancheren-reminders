@@ -22,7 +22,7 @@ function safe_user(string $u): string { return preg_replace('/[^A-Za-z0-9_-]/', 
 function ufile(string $dir, string $user, string $base): string { return "$dir/{$base}-" . safe_user($user) . ".json"; }
 function loadlist(string $f): array { return store_read($f); }
 
-/** This user's own calendar ids (sets excluded). */
+/** This user's own calendar ids. (A stray legacy "set" row is skipped — see index.php.) */
 function feed_cal_ids(string $dir, string $user): array {
     $ids = [];
     foreach (loadlist(ufile($dir, $user, 'calendars')) as $c) {
@@ -56,14 +56,8 @@ function feed_scope(string $dir, string $user, ?string $pin = null): array {
     }
 
     $view = (string) ($prefs['last_cal'] ?? 'all');
-    $sets = [];
-    foreach (loadlist(ufile($dir, $user, 'calendars')) as $c) {
-        if (($c['type'] ?? '') === 'set') { $sets[$c['id'] ?? ''] = (array) ($c['cals'] ?? []); }
-    }
-
     if ($view === 'all' || strncmp($view, 'f:', 2) === 0) { return [null, $hidden]; }
     if (in_array($view, $calIds, true))  { return [[$view], $hidden]; }
-    if (isset($sets[$view]))             { return [array_values(array_intersect($calIds, $sets[$view])), $hidden]; }
     return [null, $hidden];   // stale id — fall back to everything
 }
 
@@ -190,20 +184,27 @@ if (data.error) {
 } else if (!items.length) {
   const t = w.addText("Nothing coming up."); t.textColor = META; t.font = Font.systemFont(12);
 } else {
-  // Two sections, Reminders first then Calendar, each grouped by day. The day's date is
-  // a heading on the left with the hairline under it, so the rows themselves only carry
-  // their time on the right.
+  // The day is the section, not the kind: one heading per date, reminders before events
+  // under it. The heading gets a light rule directly beneath it (so the date reads as a
+  // heading rather than as another row) and a heavier one between days, which is the
+  // only thing separating one day's list from the next.
   const max = config.widgetFamily === "large" ? 8 : (config.widgetFamily === "small" ? 3 : 5);
-  const reminders = items.filter(it => it.kind === "reminder");
-  const events    = items.filter(it => it.kind !== "reminder");
+  const RANK = { reminder: 0, event: 1, note: 2 };
+  const byDay = [];
+  for (const it of items) {
+    const last = byDay[byDay.length - 1];
+    if (last && last.date === it.date) { last.list.push(it); }
+    else { byDay.push({ date: it.date, list: [it] }); }
+  }
+  for (const d of byDay) { d.list.sort((a, b) => (RANK[a.kind] ?? 9) - (RANK[b.kind] ?? 9)); }
   let budget = max;
 
-  const hairline = () => {
+  // A full-width rule. `weight` 1 is the hairline under a date, 2 the divider between days.
+  const rule = (weight, color) => {
     const div = w.addStack();
-    div.size = new Size(0, 1);
-    div.backgroundColor = new Color("#2a2a2a");
+    div.size = new Size(0, weight);
+    div.backgroundColor = new Color(color);
     div.addSpacer();
-    w.addSpacer(4);
   };
 
   const drawRow = (it) => {
@@ -237,40 +238,41 @@ if (data.error) {
     w.addSpacer(5);
   };
 
-  const section = (title, list) => {
-    if (!list.length || budget <= 0) { return; }
-    const h = w.addText(title.toUpperCase());
+  let first = true;
+  for (const day of byDay) {
+    if (budget <= 0) { break; }
+    if (!first) {                       // heavier rule marks the change of day
+      w.addSpacer(7);
+      rule(2, "#3a3a3a");
+      w.addSpacer(8);
+    }
+    first = false;
+    const isToday = day.date === data.today;
+    const h = w.addText(longDate(day.date, data.today).toUpperCase());
     h.font = Font.boldSystemFont(10);
-    h.textColor = new Color("#8a8a8a");
-    w.addSpacer(5);
-    let prevDate = null;
-    for (const it of list) {
+    h.textColor = isToday ? new Color(COLORS.reminder) : new Color("#9a9a9a");
+    w.addSpacer(3);
+    rule(1, isToday ? "#2f5f4d" : "#242424");   // the date's own light underline
+    w.addSpacer(6);
+    for (const it of day.list) {
       if (budget <= 0) { break; }
-      if (it.date !== prevDate) {           // day heading on the left, hairline beneath
-        const d = w.addText(shortDate(it.date, data.today));
-        d.font = Font.mediumSystemFont(10);
-        d.textColor = META;
-        w.addSpacer(3);
-        hairline();
-        prevDate = it.date;
-      }
       drawRow(it);
       budget--;
     }
-    w.addSpacer(6);
-  };
-
-  section("Reminders", reminders);
-  section("Calendar", events);
+  }
 }
 
 if (config.runsInWidget) { Script.setWidget(w); } else { await w.presentMedium(); }
 Script.complete();
 
-function shortDate(ymd, today) {
-  if (ymd === today) return "today";
+// The day heading: "Today", otherwise "Sat · Aug 1" — the weekday earns its place once
+// it's a heading rather than a note at the end of a row.
+function longDate(ymd, today) {
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric" });
+  const date = new Date(y, m - 1, d);
+  const md = date.toLocaleDateString([], { month: "short", day: "numeric" });
+  if (ymd === today) return "Today · " + md;
+  return date.toLocaleDateString([], { weekday: "short" }) + " · " + md;
 }
 
 // Stored as 24-hour "HH:MM"; shown as "2pm" / "2:30pm".
