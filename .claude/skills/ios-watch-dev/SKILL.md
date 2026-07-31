@@ -91,6 +91,25 @@ means editing four places in the pbxproj — and a *shared* file needs entries i
 **both** targets. Get this wrong and the build breaks in confusing ways. Full
 procedure and the bundle-id rule: `references/xcode-project.md`.
 
+**Three files here are committed and easy to lose.** `Seancheren.xcodeproj/` must
+contain `project.pbxproj` and `xcshareddata/xcschemes/{Seancheren,SeancherenWatch}.xcscheme`.
+They have gone missing once already — commit `a944ab9 "random ios changes?"` deleted
+all three and nothing else, which went unnoticed because *the Swift files were all
+still there*: the app simply stopped being openable, and the failure looks like
+Xcode's problem rather than git's. If a build or an open fails oddly, check they
+exist before debugging anything else:
+
+```sh
+ls ios/Seancheren.xcodeproj/project.pbxproj \
+   ios/Seancheren.xcodeproj/xcshareddata/xcschemes/
+git log --diff-filter=D -- 'ios/Seancheren.xcodeproj/*'   # when did it go?
+git checkout <last-good-commit> -- ios/Seancheren.xcodeproj/project.pbxproj
+```
+
+`.gitignore` deliberately excludes only per-user state (`xcuserdata/`, `*.xcuserdatad`,
+`build/`, `DerivedData/`) — the project and its **shared** schemes are meant to be in
+the repo. Never add the `.xcodeproj` wholesale to `.gitignore` to quiet a diff.
+
 ## Building / checking a change
 
 - Open `ios/Seancheren.xcodeproj`, set your team under Signing & Capabilities
