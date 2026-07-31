@@ -49,5 +49,21 @@ rsync -rlptzv $DRY -e "$SSH" \
   --exclude='config.php' --exclude='.DS_Store' --exclude='*.swp' \
   lib/ "$HOST:/home/protected/lib/"
 
+# 4. Make the tree web-readable on the SERVER. PHP runs as the `web` user, which
+#    owns neither the files nor their group, so it reads them via the "other"
+#    bits — a file left at 0600 is unreadable by web and Apache 403s that one
+#    page while every sibling serves fine (git tracks only the exec bit, so it
+#    never warns, and rsync -p copies a bad local mode up verbatim). openrsync
+#    on macOS has no --chmod, so fix it here instead: add-only (a+rX never
+#    grants write or strips anything), and never touch config.php.
+if [[ -z "$DRY" ]]; then
+  echo "==> Ensuring web-readable perms on the server…"
+  $SSH "$HOST" '
+    chmod -R a+rX /home/public
+    find /home/protected/lib -type d -exec chmod a+rx {} +
+    find /home/protected/lib -type f ! -name config.php -exec chmod a+r {} +
+  '
+fi
+
 echo "==> Done. Live data in /home/protected/data/ was not touched."
 [[ -n "$DRY" ]] && echo "    (that was a dry run — re-run without --dry-run to apply)"
