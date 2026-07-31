@@ -711,6 +711,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     .sec-add {
+    /* Same grey outlined pill as "+ Section" on the list bar (.listedit) — the same act,
+       just against one section — only kept at its small icon size. */
       flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex; align-self: center;
