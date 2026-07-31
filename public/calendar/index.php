@@ -241,6 +241,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         echo json_encode(['ok' => true]);
         exit;
     }
+    // --- Tapping a calendar's row: that one becomes the only one ticked ---
+    if ($action === 'cal_vis_only') {
+        $cid    = (string) ($_POST['name'] ?? '');
+        $allIds = array_values(array_merge(array_column($calList, 'id'), $sharedIds));
+        $calPrefs['hidden_cals'] = array_values(array_filter($allIds, fn($x) => $x !== $cid));
+        store_write($prefFile, $calPrefs);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
 
     // --- Share one of my calendars / reminder folders with the other person ---
     if ($action === 'share_set' && $partner) {
@@ -2077,6 +2087,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     });
     // Carry the open day across, the way the old select did. A tap on the checkbox is
     // handled above, so it never navigates.
+    //
+    // Tapping the *row* also makes that calendar the only one ticked — the quick way to
+    // look at one without unticking the rest by hand — and the "All calendars" row does
+    // what its own box does: everything on, or, if it already was, everything off. The
+    // ticks therefore always say what's actually drawn on the grid.
     menu.querySelectorAll('.calpick-opt').forEach(a => {
       a.addEventListener('click', e => {
         if (e.target.closest('.cvis')) { return; }
@@ -2085,7 +2100,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         const u = new URL(a.href, location.href);
         if (selected) u.searchParams.set('day', selected);
         u.searchParams.set('ym', '<?= e($ym) ?>');
-        location.href = u.toString();
+        const go = () => { location.href = u.toString(); };
+        const box = a.querySelector('.cvis');
+        if (!box) { go(); return; }                       // not a calendar row: plain nav
+        const body = box.classList.contains('cvis-all')
+          ? { csrf: CSRF, action: 'cal_vis_all', show: box.classList.contains('on') ? '' : 1 }
+          : { csrf: CSRF, action: 'cal_vis_only', name: box.dataset.cal };
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams(body) }).then(go).catch(go);
       });
     });
   })();

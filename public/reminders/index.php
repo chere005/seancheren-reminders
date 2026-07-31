@@ -368,9 +368,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'reminders')]);
         exit;
     }
-    // The "All" master checkbox in the picker: show or hide every folder at once (AJAX).
+    // The "All" master in the picker — its box or its row: show or hide every folder at
+    // once, the partner's shared ones included (the picker sends the keys it drew).
     if ($_POST['action'] === 'folder_vis_all') {
-        folders_set_all_hidden($cfg['data_dir'], 'reminders', empty($_POST['show']));
+        $keys = folder_pick_keys((string) ($_POST['keys'] ?? ''));
+        if ($keys) { folders_set_visible($cfg['data_dir'], 'reminders', $keys, empty($_POST['show']) ? [] : $keys); }
+        else       { folders_set_all_hidden($cfg['data_dir'], 'reminders', empty($_POST['show'])); }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'reminders')]);
+        exit;
+    }
+    // Tapping a folder's row: that one becomes the only one ticked (AJAX).
+    if ($_POST['action'] === 'folder_vis_only') {
+        $keys = folder_pick_keys((string) ($_POST['keys'] ?? ''));
+        folders_set_visible($cfg['data_dir'], 'reminders', $keys, [(string) ($_POST['name'] ?? '')]);
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'reminders')]);
         exit;

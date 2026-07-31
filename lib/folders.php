@@ -120,6 +120,39 @@ function folders_set_all_hidden(string $dir, string $type, bool $hidden): void
     folders_save($dir, $data);
 }
 
+/** The picker posts the keys it drew as one \x1F-joined field; unpack it. */
+function folder_pick_keys(string $raw): array
+{
+    return array_values(array_filter(explode("\x1F", $raw), fn($s) => $s !== ''));
+}
+
+/**
+ * Set exactly which of the picker's rows are showing: everything in $keys is hidden
+ * except what's in $show. The picker hands over the keys it drew, so my own folders and
+ * the partner's "@partner:Folder" ones are written in one go — the "All" master used to
+ * touch only my own, which left it reading "off" with nothing left to switch on, and a
+ * shared folder switched off by hand could never be brought back by it.
+ *
+ * My own names are checked against the folders I actually have; a shared key is taken as
+ * given (as the per-row box always has), since hiding is only ever a view preference of
+ * mine and a stale key hides nothing.
+ */
+function folders_set_visible(string $dir, string $type, array $keys, array $show): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data = folders_load($dir);
+    $mine = array_values($data[$type] ?? []);
+    $own  = $shared = [];
+    foreach ($keys as $k) {
+        if (!is_string($k) || $k === '') { continue; }
+        if (strncmp($k, '@', 1) === 0)      { $shared[] = $k; }
+        elseif (in_array($k, $mine, true))  { $own[] = $k; }
+    }
+    $data['hidden'][$type]        = array_values(array_diff(array_unique($own), $show));
+    $data['hidden_shared'][$type] = array_values(array_diff(array_unique($shared), $show));
+    folders_save($dir, $data);
+}
+
 /**
  * Persist a new order for a type's folders, from the Manage-folders drag. The order can
  * now interleave my own folders with the partner's shared ones ("@partner:Folder" keys),
@@ -459,10 +492,30 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
       m.addEventListener('click', function (e) {
         if (e.target.closest('.folderpick-manage')) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
       });
+      var CSRF = <?= json_encode($csrf) ?>;
+      // Every folder key the menu drew, so a change can be written as "these are the ones
+      // showing" rather than one flag at a time — mine and the partner's in one go.
+      var allKeys = function () {
+        return [].map.call(m.querySelectorAll('.fvis[data-folder]'), function (c) { return c.dataset.folder; });
+      };
+      // Changing what's in view expands the sections and folders, so whatever you just
+      // switched on is open rather than hidden behind a collapse you'd forgotten about,
+      // and the menu reopens after the reload instead of folding away between taps.
+      var before = function () {
+        try {
+          localStorage.removeItem('collapsed:' + location.pathname);
+          localStorage.removeItem('foldercollapsed:' + location.pathname);
+          sessionStorage.setItem('folderPickOpen', '1');
+        } catch (_) {}
+      };
+      var post = function (params, then) {
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams(params) }).then(then).catch(then);
+      };
+
       // The show/hide box lives inside the row's link, so it has to swallow the click
       // that would otherwise navigate to that folder. It posts in the background and
-      // reloads only when the All view is what's on screen and would actually change.
-      var CSRF = <?= json_encode($csrf) ?>;
+      // reloads to re-filter what's on screen.
       m.addEventListener('click', function (e) {
         var cb = e.target.closest('.fvis');
         if (!cb) { return; }
@@ -470,21 +523,41 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         var on = !cb.classList.contains('on');
         cb.classList.toggle('on', on);
         cb.setAttribute('aria-checked', on ? 'true' : 'false');
-        // The "All" box is a master switch: it shows or hides every folder at once.
-        var isAll = cb.classList.contains('fvis-all');
-        // Changing what's in view expands the sections and folders, so whatever you just
-        // switched on is open rather than hidden behind a collapse you'd forgotten about.
-        try {
-          localStorage.removeItem('collapsed:' + location.pathname);
-          localStorage.removeItem('foldercollapsed:' + location.pathname);
-          sessionStorage.setItem('folderPickOpen', '1');   // reopen the menu after the reload
-        } catch (_) {}
-        var body = new URLSearchParams(isAll
-          ? { csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '' }
-          : { csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' });
-        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
-          .then(function () { location.reload(); })
-          .catch(function () { location.reload(); });
+        before();
+        var reload = function () { location.reload(); };
+        // "All" is a master switch: ticked only when every folder is showing, so one tap
+        // shows them all, and a second — with them all already on — hides the lot.
+        if (cb.classList.contains('fvis-all')) {
+          var keys = allKeys();
+          post({ csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '',
+                 keys: keys.join('\x1F') }, reload);
+        } else {
+          post({ csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' }, reload);
+        }
+      });
+
+      // Tapping the *row* rather than its box makes that folder the only one ticked — the
+      // quick way to look at one thing without unticking the rest by hand. The row still
+      // navigates to its own view afterwards, so the ticks always say what's on screen.
+      m.addEventListener('click', function (e) {
+        if (e.target.closest('.fvis')) { return; }          // the box has its own handler
+        var row = e.target.closest('a.folderpick-opt');
+        if (!row) { return; }
+        var box = row.querySelector('.fvis');
+        if (!box || !CSRF) { return; }                      // no boxes here: plain navigation
+        e.preventDefault();
+        var href = row.getAttribute('href'), keys = allKeys();
+        var go = function () { location.href = href; };
+        before();
+        if (box.classList.contains('fvis-all')) {
+          // The All row does what its box does: everything on, or — if it already was —
+          // everything off.
+          post({ csrf: CSRF, action: 'folder_vis_all', show: box.classList.contains('on') ? '' : '1',
+                 keys: keys.join('\x1F') }, go);
+        } else {
+          post({ csrf: CSRF, action: 'folder_vis_only', name: box.dataset.folder,
+                 keys: keys.join('\x1F') }, go);
+        }
       });
     })();</script>
     <?php
