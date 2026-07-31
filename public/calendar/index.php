@@ -23,6 +23,9 @@ function e(?string $s): string
 }
 
 function load_json_list(string $file): array { return store_read($file); }
+/** A reminders list, brought up to the permanent-folder model (see lib/util.php).
+ *  Read-only here: the Calendar normalises in memory and never rewrites the file. */
+function load_reminder_list(string $file): array { return reminders_folder_migrate(store_read($file)); }
 function save_json_list(string $file, array $list): void { store_write($file, array_values($list)); }
 
 /** File + field names for each item kind. */
@@ -230,24 +233,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         save_json_list($file, $list);
         $showAgain($toThem ? $shCal : ($evCalOk !== '' ? $evCalOk : ($calIds[0] ?? '')));
     } elseif ($action === 'add_reminder' && $text !== '') {
-        // A reminder belongs to a folder and a group, never to a calendar. Mine lands in
-        // whichever folder Reminders is set to add to; picking from the partner's picker
-        // instead carries their folder *and* group ("folder\x1Fgroup") and writes to
-        // their file — but only into a folder they still actually share with me.
+        // A reminder belongs to a folder and a group, never to a calendar. Both pickers
+        // carry "folder\x1Fgroup"; the partner's writes to *their* file, but only into a
+        // folder they still actually share with me. Both halves are re-validated here.
+        $splitSec = function (string $v): array {
+            return strpos($v, "\x1F") !== false ? explode("\x1F", $v, 2) : ['', $v];
+        };
         $shSec  = (string) ($_POST['section_shared'] ?? '');
         $toThem = false;
         if ($partner && $shSec !== '' && strpos($shSec, "\x1F") !== false) {
-            [$shFolder, $shGroup] = explode("\x1F", $shSec, 2);
+            [$shFolder, $shGroup] = $splitSec($shSec);
             $toThem = in_array($shFolder, $sharedFolders, true);
         }
+        [$myFolder, $myGroup] = $splitSec((string) ($_POST['section'] ?? ''));
+        if (!in_array($myFolder, $remFolders, true)) {
+            $myFolder = folder_default_get($cfg['data_dir'], 'reminders');
+        }
         $file      = user_data_file($cfg['data_dir'], 'reminders', $toThem ? $partner : null);
-        $list      = load_json_list($file);
-        $remFolder = $toThem ? $shFolder : folder_default_get($cfg['data_dir'], 'reminders');
-        $section   = $toThem ? $shGroup : (string) ($_POST['section'] ?? '');
+        $list      = load_reminder_list($file);
+        $remFolder = $toThem ? $shFolder : $myFolder;
+        $section   = $toThem ? $shGroup : $myGroup;
         // Sections are per-folder, so only that folder's sections are valid here.
-        $secOk    = [CALENDAR_SECTION => true];
+        $secOk    = [];
         foreach ($list as $it) {
-            if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $remFolder) {
+            if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $remFolder) {
                 $secOk[(string) $it['name']] = true;
             }
         }
@@ -274,10 +283,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         // A reminder shown from a shared folder still lives in its owner's file.
         $owner = ($partner && ($_POST['owner'] ?? '') === $partner) ? $partner : null;
         $file = user_data_file($cfg['data_dir'], 'reminders', $owner);
-        $list = load_json_list($file);
+        $list = load_reminder_list($file);
         foreach ($list as &$it) {
             // Only ever reach into a folder they actually shared.
-            if ($owner !== null && !in_array($it['folder'] ?? FOLDER_DEFAULT, $sharedFolders, true)) { continue; }
+            if ($owner !== null && !in_array($it['folder'] ?? '', $sharedFolders, true)) { continue; }
             if (($it['id'] ?? '') === $id) {
                 $rr = repeat_get($it);
                 if ($rr !== null && empty($it['done']) && !empty($it['due'])) {
@@ -404,11 +413,12 @@ $remDays = function (string $due, ?array $rep, string $eff) use ($monthFrom, $mo
     return $out;
 };
 
-foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
-    // Undated items in the permanent "Calendar" section ride along under today.
-    $rides = empty($r['due']) && strcasecmp((string) ($r['section'] ?? ''), CALENDAR_SECTION) === 0;
+foreach ($onlyFolder === null ? load_reminder_list(user_data_file($cfg['data_dir'], 'reminders')) : [] as $r) {
+    if (($r['type'] ?? '') === 'section') { continue; }
+    // Undated items in the permanent "Calendar" *folder* ride along under today.
+    $rides = empty($r['due']) && ($r['folder'] ?? '') === FOLDER_CALENDAR;
     if (empty($r['due']) && !$rides) { continue; }
-    if (in_array($r['folder'] ?? FOLDER_DEFAULT, $hidFolders, true)) { continue; }   // folder switched off
+    if (in_array($r['folder'] ?? '', $hidFolders, true)) { continue; }   // folder switched off
     $done = !empty($r['done']);                                    // done are hidden until "Completed"
     $eff  = $rides ? $todayYmd
           : ((!$done && $r['due'] < $todayYmd) ? $todayYmd : $r['due']);   // overdue rolls onto today; done/future stay
@@ -418,7 +428,7 @@ foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 
         $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                         'done' => $done, 'rolled' => (!$rides && $wasRolled),
                         'due' => $r['due'] ?? null, 'rep' => $rep,
-                        'color' => $remFolderColor[$r['folder'] ?? FOLDER_DEFAULT] ?? app_palette('reminders')[0]];
+                        'color' => $remFolderColor[$r['folder'] ?? ''] ?? app_palette('reminders')[0]];
     }
 }
 $evList = load_json_list(user_data_file($cfg['data_dir'], 'events'));
@@ -438,9 +448,9 @@ foreach ($evList as $ev) {
 // --- The other person's shared calendars and reminder folders, read from their files ---
 if ($partner) {
     $theirDef = $theirCalIds[0] ?? '';
-    foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders', $partner)) as $r) {
-        if (empty($r['due'])) { continue; }
-        $f = $r['folder'] ?? FOLDER_DEFAULT;
+    foreach (load_reminder_list(user_data_file($cfg['data_dir'], 'reminders', $partner)) as $r) {
+        if (($r['type'] ?? '') === 'section' || empty($r['due'])) { continue; }
+        $f = $r['folder'] ?? '';
         if (!in_array($f, $sharedFolders, true)) { continue; }
         // Picking a folder in the dropdown overrides the show/hide checkboxes.
         if ($onlyFolder !== null ? $f !== $onlyFolder : in_array($f, $hidShared, true)) { continue; }
@@ -1127,17 +1137,21 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     </div>
     <?php endif; ?>
     <?php
-      // Reminders answer to a group, not a calendar. The list is the groups in the
-      // folder new reminders go to, with the two permanent ones at the top.
+      // A reminder answers to a folder and a group, never a calendar. Since "Calendar"
+      // and "Reminders" became folders, one dropdown of the default folder's sections
+      // wasn't enough — an undated ride-along has to be filed in the Calendar *folder*.
+      // So mine is the same shape as the partner's: every folder, each with its groups,
+      // the value carrying "folder\x1Fgroup" (\x1F can't survive folder_clean()).
       $remDefFolder = folder_default_get($cfg['data_dir'], 'reminders');
-      $remSections  = [];
-      // Sections are per-folder — only the default folder's sections belong here.
-      foreach (load_json_list(user_data_file($cfg['data_dir'], 'reminders')) as $it) {
-          if (($it['type'] ?? '') !== 'section') { continue; }
-          if (($it['folder'] ?? FOLDER_DEFAULT) !== $remDefFolder) { continue; }
-          $nm = (string) ($it['name'] ?? '');
-          if ($nm !== '' && !in_array($nm, $remSections, true)
-              && strcasecmp($nm, CALENDAR_SECTION) !== 0) { $remSections[] = $nm; }
+      $myRemGroups  = [];
+      $myRem        = load_reminder_list(user_data_file($cfg['data_dir'], 'reminders'));
+      foreach ($remFolders as $mf) {
+          $myRemGroups[$mf] = [[$mf . "\x1F", 'Reminders']];   // the folder's catch-all
+          foreach ($myRem as $it) {
+              if (($it['type'] ?? '') !== 'section' || ($it['folder'] ?? '') !== $mf) { continue; }
+              $nm = (string) ($it['name'] ?? '');
+              if ($nm !== '') { $myRemGroups[$mf][] = [$mf . "\x1F" . $nm, $nm]; }
+          }
       }
     ?>
     <?php
@@ -1146,31 +1160,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       // occur in a folder_clean()ed name, and both halves are re-validated server-side.
       $sharedRemGroups = [];
       if ($sharedFolders) {
-          $theirRem = load_json_list(user_data_file($cfg['data_dir'], 'reminders', $partner));
+          $theirRem = load_reminder_list(user_data_file($cfg['data_dir'], 'reminders', $partner));
           foreach ($sharedFolders as $sf) {
-              $sharedRemGroups[$sf] = [[$sf . "\x1F" . CALENDAR_SECTION, CALENDAR_SECTION],
-                                       [$sf . "\x1F", 'Reminders']];
+              $sharedRemGroups[$sf] = [[$sf . "\x1F", 'Reminders']];   // the folder's catch-all
               foreach ($theirRem as $it) {
                   if (($it['type'] ?? '') !== 'section') { continue; }
-                  if (($it['folder'] ?? FOLDER_DEFAULT) !== $sf) { continue; }
+                  if (($it['folder'] ?? '') !== $sf) { continue; }
                   $nm = (string) ($it['name'] ?? '');
-                  if ($nm !== '' && strcasecmp($nm, CALENDAR_SECTION) !== 0) {
-                      $sharedRemGroups[$sf][] = [$sf . "\x1F" . $nm, $nm];
-                  }
+                  if ($nm !== '') { $sharedRemGroups[$sf][] = [$sf . "\x1F" . $nm, $nm]; }
               }
           }
       }
     ?>
     <div class="calrow" id="mSecRow" hidden>
-      <span class="tlabel"><?= $sharedRemGroups ? e(share_name($me)) : 'Group' ?></span>
+      <span class="tlabel"><?= $sharedRemGroups ? e(share_name($me)) : 'Goes in' ?></span>
       <select name="section" id="mSec">
-        <option value="<?= CALENDAR_SECTION ?>"><?= CALENDAR_SECTION ?></option>
-        <option value="">Reminders</option>
-        <?php foreach ($remSections as $sname): ?>
-          <option value="<?= e($sname) ?>"><?= e($sname) ?></option>
+        <?php foreach ($myRemGroups as $mf => $opts): ?>
+          <optgroup label="<?= e($mf) ?>">
+            <?php foreach ($opts as [$val, $label]): ?>
+              <option value="<?= e($val) ?>"<?= $mf === $remDefFolder && substr($val, -1) === "\x1F" ? ' selected' : '' ?>><?= e($label) ?></option>
+            <?php endforeach; ?>
+          </optgroup>
         <?php endforeach; ?>
       </select>
-      <span class="secnote">in <?= e($remDefFolder) ?></span>
     </div>
     <?php if ($sharedRemGroups): ?>
     <div class="calrow" id="mSecTheirsRow" hidden>

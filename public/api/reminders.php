@@ -10,9 +10,9 @@
  * ticking something off still happens on the phone.
  *
  * Like feed.php this reads the reminders file by hand. The grouping and ordering
- * mirror public/reminders/index.php — Calendar group first, then the ungrouped
- * catch-all, then the user's own sections, each undated-first and then by date —
- * so a change to how the list is shown needs making in both places.
+ * mirror public/reminders/index.php — the folder's ungrouped catch-all, then its own
+ * sections, each undated-first and then by date — so a change to how the list is shown
+ * needs making in both places.
  */
 
 $__libDir = null;
@@ -64,7 +64,7 @@ function api_item(array $r, string $today): array
 }
 
 $today = date('Y-m-d');
-$all   = store_read(user_data_file($dataDir, 'reminders', $user));
+$all   = reminders_folder_migrate(store_read(user_data_file($dataDir, 'reminders', $user)));
 
 // The folder the app would open on. A shared "@partner:Folder" view is skipped —
 // the watch shows your own list — and a deleted folder falls back to everything.
@@ -72,27 +72,26 @@ $view    = folder_last_get($dataDir, 'reminders', $user);
 $mine    = folders_load($dataDir, $user)['reminders'];
 if ($view !== 'All' && !in_array($view, $mine, true)) { $view = 'All'; }
 
-// Section names in creation order; Calendar is permanent and drawn on its own.
+// Section names in creation order. "Calendar" and "Reminders" are folders now, so the
+// list the watch draws is a folder's ungrouped rows first, then each of its sections.
 $sections = [];
 foreach ($all as $it) {
-    if (($it['type'] ?? '') === 'section' && !in_array($it['name'], $sections, true)
-        && strcasecmp((string) $it['name'], CALENDAR_SECTION) !== 0) {
+    if (($it['type'] ?? '') === 'section' && !in_array($it['name'], $sections, true)) {
         $sections[] = (string) $it['name'];
     }
 }
 
-$calRows = $ungrouped = $grouped = [];
+$ungrouped = $grouped = [];
 foreach ($all as $r) {
     if (($r['type'] ?? '') === 'section') { continue; }
-    if ($view !== 'All' && ($r['folder'] ?? FOLDER_DEFAULT) !== $view) { continue; }
+    if ($view !== 'All' && ($r['folder'] ?? '') !== $view) { continue; }
     $s = (string) ($r['section'] ?? '');
-    if (strcasecmp($s, CALENDAR_SECTION) === 0)        { $calRows[] = $r; }
-    elseif ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
-    else                                               { $ungrouped[] = $r; }
+    if ($s !== '' && in_array($s, $sections, true)) { $grouped[$s][] = $r; }
+    else                                            { $ungrouped[] = $r; }
 }
 
 $out = [];
-foreach (array_merge([[CALENDAR_SECTION, $calRows], ['Reminders', $ungrouped]],
+foreach (array_merge([['Reminders', $ungrouped]],
                      array_map(fn($s) => [$s, $grouped[$s] ?? []], $sections)) as [$name, $rows]) {
     $items = array_map(fn($r) => api_item($r, $today), api_sort($rows));
     if ($items) { $out[] = ['name' => $name, 'items' => array_values($items)]; }

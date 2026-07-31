@@ -13,7 +13,9 @@ require_login('Reminders');
 
 $cfg = app_config();
 
-// Ungrouped reminders live under a permanent, non-deletable group shown last.
+// Every folder ends with an ungrouped catch-all — the rows in that folder that aren't
+// in any section. It carries the app's name the way Notes' does, and it can't be
+// deleted or created; it's simply "the rest of this folder".
 const DEFAULT_SECTION = 'Reminders';
 
 if (empty($_SESSION['csrf'])) {
@@ -22,6 +24,9 @@ if (empty($_SESSION['csrf'])) {
 
 $me        = current_user() ?? '';
 $myFolders = folders_load($cfg['data_dir'])['reminders'];
+// Folders switched off in the picker. They still exist and can still be opened by
+// picking them; "All" just stops including them.
+$hidFolders = folders_hidden($cfg['data_dir'], 'reminders');
 
 // Folders the other person shared with me, shown in the picker as "@aki:Groceries".
 $partner       = share_partner();
@@ -71,7 +76,10 @@ function is_section(array $it): bool
     return ($it['type'] ?? '') === 'section';
 }
 
-function load_reminders(string $file): array { return sections_migrate(store_read($file)); }
+function load_reminders(string $file): array
+{
+    return reminders_folder_migrate(sections_migrate(store_read($file)));
+}
 function save_reminders(string $file, array $list): void { store_write($file, array_values($list)); }
 
 /**
@@ -138,7 +146,7 @@ function render_section_add_row(string $name, string $csrf, string $view, string
  * items only. Fed to the "Copy as Markdown" action in the settings window so the whole
  * list can be pasted elsewhere.
  */
-function reminders_markdown(array $secRows, array $grouped, array $calRows, array $ungrouped): string
+function reminders_markdown(array $secRows, array $grouped, array $looseByFolder): string
 {
     $line = function (array $r): string {
         $bits = [];
@@ -156,8 +164,7 @@ function reminders_markdown(array $secRows, array $grouped, array $calRows, arra
     };
     $md = '';
     foreach ($secRows as $s) { $md .= $block((string) $s['name'], $grouped[$s['id']] ?? []); }
-    $md .= $block(CALENDAR_SECTION, $calRows);
-    $md .= $block(DEFAULT_SECTION, $ungrouped);
+    foreach ($looseByFolder as $folder => $rows) { $md .= $block((string) $folder, $rows); }
     return trim($md);
 }
 
@@ -265,6 +272,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $editBack . '&fm=1');
         exit;
     }
+    // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
+    if ($_POST['action'] === 'folder_vis') {
+        folder_hidden_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''),
+                          empty($_POST['show']));
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'reminders')]);
+        exit;
+    }
     if ($_POST['action'] === 'set_folder_color') {
         $cname = (string) ($_POST['name'] ?? '');
         if (folder_shared_key_parse($cname)) {
@@ -280,10 +295,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'delete_folder') {
         $name = (string) ($_POST['name'] ?? '');
         folders_delete($cfg['data_dir'], 'reminders', $name);
-        // Move that folder's reminders back to General.
+        // Move that folder's reminders back to the permanent catch-all.
         $list = load_reminders($dataFile);
         foreach ($list as &$r) {
-            if (!is_section($r) && ($r['folder'] ?? FOLDER_DEFAULT) === $name) { $r['folder'] = FOLDER_DEFAULT; }
+            if (!is_section($r) && ($r['folder'] ?? '') === $name) { $r['folder'] = folder_fallback('reminders'); }
         }
         unset($r);
         save_reminders($dataFile, $list);
@@ -297,9 +312,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name = folder_clean((string) ($_POST['name'] ?? ''));
         // A section lands in the folder you're viewing (the default when you're on All).
         $secFolder = $viewFolder === 'All' ? $defFolder : $viewFolder;
-        // "Reminders" and "Calendar" are the two permanent groups — neither can be recreated.
-        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0
-            && strcasecmp($name, CALENDAR_SECTION) !== 0) {
+        // "Reminders" is the catch-all every folder already ends with, so a section
+        // can't be called that — there'd be two of them under one heading.
+        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0) {
             $list = load_reminders($dataFile);
             $dup  = false;
             foreach ($list as $it) {
@@ -329,17 +344,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'delete_section') {
         $name      = (string) ($_POST['name'] ?? '');
         $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
-        if (strcasecmp($name, CALENDAR_SECTION) === 0) {   // permanent, like the default group
-            header('Location: ' . $editBack);
-            exit;
-        }
         $list = load_reminders($dataFile);
         // Only this folder's copy of the section goes; other folders keep theirs.
         $list = array_filter($list, fn($it) => !(is_section($it)
             && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
         foreach ($list as &$r) {
             if (!is_section($r) && ($r['section'] ?? '') === $name
-                && ($r['folder'] ?? FOLDER_DEFAULT) === $secFolder) { $r['section'] = ''; }
+                && ($r['folder'] ?? folder_fallback('reminders')) === $secFolder) { $r['section'] = ''; }
         }
         unset($r);
         save_reminders($dataFile, $list);
@@ -363,7 +374,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $byId           = [];
         foreach ($list as $it) {
             if (is_section($it)) {
-                $f = $it['folder'] ?? FOLDER_DEFAULT;
+                $f = $it['folder'] ?? folder_fallback('reminders');
                 $secExists[$f . "\x1F" . $it['name']] = true;
                 if ($viewFolder !== 'All' && $f === $viewFolder) { $thisFolderSecs[$it['name']] = $it; }
                 else { $otherSecs[] = $it; }
@@ -387,10 +398,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
             $item = $byId[$id];
             $sec  = (string) ($o['section'] ?? '');
-            $f    = $item['folder'] ?? FOLDER_DEFAULT;
-            // Keep the permanent Calendar group; otherwise a section must exist in this item's folder.
-            if ($sec !== '' && strcasecmp($sec, CALENDAR_SECTION) !== 0
-                && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
+            $f    = $item['folder'] ?? folder_fallback('reminders');
+            // A section must exist in this item's own folder, or the row falls to the
+            // folder's catch-all.
+            if ($sec !== '' && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
             $item['section'] = $sec;
             $newReminders[]  = $item;
             $used[$id]       = true;
@@ -444,7 +455,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // in it. The forms only carry this field while editing (see the submit hook).
     $stay        = !empty($_POST['edit']) ? '&edit=1' : '';
     foreach ($list as $it) {
-        if (is_section($it)) { $sectionSet[($it['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $it['name']] = true; }
+        if (is_section($it)) { $sectionSet[($it['folder'] ?? folder_fallback('reminders')) . "\x1F" . $it['name']] = true; }
     }
 
     switch ($_POST['action']) {
@@ -454,9 +465,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $folder  = (string) ($_POST['folder'] ?? $addTarget);
             if (!in_array($folder, $folders, true)) { $folder = $addTarget; }
             $section = (string) ($_POST['section'] ?? '');
-            // The two permanent groups are legal targets even though they aren't stored sections.
-            if ($section !== '' && $section !== CALENDAR_SECTION
-                && !isset($sectionSet[$folder . "\x1F" . $section])) { $section = ''; }
+            // '' is the folder's catch-all; anything else has to be a real section there.
+            if ($section !== '' && !isset($sectionSet[$folder . "\x1F" . $section])) { $section = ''; }
 
             // A dated field from the window wins; otherwise read the date and time
             // out of what was typed ("Vet 8/3 2pm").
@@ -508,7 +518,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             // Clear completed within the folder being viewed (or all when viewing All).
             $list = array_filter($list, function ($r) use ($viewFolder) {
                 if (is_section($r) || empty($r['done'])) { return true; }
-                return $viewFolder !== 'All' && ($r['folder'] ?? FOLDER_DEFAULT) !== $viewFolder;
+                return $viewFolder !== 'All' && ($r['folder'] ?? folder_fallback('reminders')) !== $viewFolder;
             });
             break;
     }
@@ -521,41 +531,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 // --- Render ---
 $all = load_reminders($dataFile);
 
-// Section rows, in stored order, tagged with the folder they belong to. "Calendar" is
-// permanent and rendered separately, so it never appears among the user's own sections.
-// A folder view shows only its own sections; "All" shows every folder's.
+// Which folders are on screen. A folder view is just that one; "All" is every folder
+// that isn't switched off in the picker (a partner's list is theirs, so nothing of mine
+// is hidden there). The order is the folder list's, so the permanent two lead.
+$fbase       = $isShared ? $folders : $myFolders;
+$viewFolders = $viewFolder === 'All'
+    ? array_values(array_filter($fbase, fn($f) => $isShared || !in_array($f, $hidFolders, true)))
+    : [$viewFolder];
+
+$folderOf = fn(array $it): string => (string) ($it['folder'] ?? folder_fallback('reminders'));
+
+// Section rows, in stored order, tagged with the folder they belong to.
 $secRows = [];
 foreach ($all as $it) {
-    if (is_section($it) && strcasecmp((string) $it['name'], CALENDAR_SECTION) !== 0
-        && ($viewFolder === 'All' || ($it['folder'] ?? FOLDER_DEFAULT) === $viewFolder)) {
-        $secRows[] = $it;
-    }
+    if (is_section($it) && in_array($folderOf($it), $viewFolders, true)) { $secRows[] = $it; }
 }
 
-// Reminder rows, filtered to the viewed folder.
-$items = array_values(array_filter($all, fn($it) => !is_section($it)));
-if ($viewFolder !== 'All') {
-    $items = array_values(array_filter($items, fn($r) => ($r['folder'] ?? FOLDER_DEFAULT) === $viewFolder));
-}
+// Reminder rows, filtered to the folders on screen.
+$items = array_values(array_filter($all,
+    fn($it) => !is_section($it) && in_array($folderOf($it), $viewFolders, true)));
 
-// Split into the permanent Calendar group, the user's sections, and everything else.
 // A section is matched by folder *and* name, so same-named sections in two folders stay
-// distinct. Grouped rows are keyed by the section row's id.
+// distinct. Grouped rows are keyed by the section row's id; everything else falls to its
+// own folder's catch-all.
 $secByKey = [];   // "folder\x1Fname" => row id
-foreach ($secRows as $s) { $secByKey[($s['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s['name']] = $s['id']; }
+foreach ($secRows as $s) { $secByKey[$folderOf($s) . "\x1F" . $s['name']] = $s['id']; }
 
-$ungrouped = [];
-$calRows   = [];
-$grouped   = [];
+$looseByFolder = [];
+$grouped       = [];
 foreach ($items as $r) {
-    $s = (string) ($r['section'] ?? '');
-    if (strcasecmp($s, CALENDAR_SECTION) === 0) { $calRows[] = $r; continue; }
-    $key = ($r['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s;
-    if ($s !== '' && isset($secByKey[$key])) { $grouped[$secByKey[$key]][] = $r; }
-    else                                      { $ungrouped[] = $r; }
+    $sec = (string) ($r['section'] ?? '');
+    $key = $folderOf($r) . "\x1F" . $sec;
+    if ($sec !== '' && isset($secByKey[$key])) { $grouped[$secByKey[$key]][] = $r; }
+    else { $looseByFolder[$folderOf($r)][] = $r; }
 }
-$ungrouped = sort_by_date($ungrouped);
-$calRows   = sort_by_date($calRows);
+foreach ($viewFolders as $f) { if (!isset($looseByFolder[$f])) { $looseByFolder[$f] = []; } }
+$looseByFolder = array_replace(array_flip($viewFolders), $looseByFolder);   // keep folder order
+foreach ($looseByFolder as $f => $rows) { $looseByFolder[$f] = sort_by_date(is_array($rows) ? $rows : []); }
 foreach ($grouped as $id => $rows) { $grouped[$id] = sort_by_date($rows); }
 
 $openCount = count(array_filter($items, fn($r) => empty($r['done'])));
@@ -564,7 +576,7 @@ $csrf      = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 $today     = date('Y-m-d');
 
 // "Copy as Markdown": the whole visible list, copied from the share icon in the toolbar.
-$shareMd    = reminders_markdown($secRows, $grouped, $calRows, $ungrouped);
+$shareMd    = reminders_markdown($secRows, $grouped, $looseByFolder);
 
 // Calendars, as [id, name] pairs, for the share window.
 $shareCals = [];
@@ -920,7 +932,8 @@ $sectionInput =
       // The folder picker rides on the right, by the ⋮; "Manage folders" is the last
       // row of its dropdown rather than a button of its own.
       ob_start();
-      render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders');
+      render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
+                         $hidFolders, $isShared ? '' : $csrf);
       $titleControls = ob_get_clean();
     ?>
     <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
@@ -944,24 +957,21 @@ $sectionInput =
   <?php if (!$isShared) {
         render_folder_modal($myFolders, $csrf, $view, $defFolder, 'New reminders go to',
                             '', $myColors, app_palette('reminders'),
-                            $sharedRows, app_palette('reminders', true));
+                            $sharedRows, app_palette('reminders', true), 'reminders');
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
-  <?php // The permanent groups always render, so there's always a + to add against. ?>
+  <?php // Every folder on screen renders as a block: its sections, then the catch-all
+        // that holds whatever isn't in one. The catch-all always renders, so there is
+        // always a "+" to add against even in an empty folder. ?>
    <div id="rlist-root">
     <?php
-      // Folder labels + dividers: only meaningful in "All", and only once more than one
-      // folder is actually represented among the visible sections.
-      $secFolders  = array_unique(array_map(fn($s) => (string) ($s['folder'] ?? FOLDER_DEFAULT), $secRows));
-      $showFolders = $viewFolder === 'All' && count($secFolders) > 1;
-      $prevFolder  = null;
+      // Folder headings only earn their place when more than one folder is on screen —
+      // in a single-folder view the picker already says which one you're in.
+      $showFolders = count($viewFolders) > 1;
     ?>
-    <?php foreach ($secRows as $s): ?>
-      <?php $sname = (string) $s['name']; $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT); ?>
-      <?php $rows = $grouped[$s['id']] ?? []; ?>
-      <?php if ($showFolders && $sfolder !== $prevFolder): ?>
-        <?php if ($prevFolder !== null): ?></div><?php endif; ?>
+    <?php foreach ($viewFolders as $sfolder): ?>
+      <?php if ($showFolders): ?>
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
             <?= folder_collapse_button() ?>
@@ -972,62 +982,49 @@ $sectionInput =
             <span class="folder-rule" aria-hidden="true"></span>
           </div>
       <?php endif; ?>
-      <?php $prevFolder = $sfolder; ?>
-      <?php // Sections always render, empty or not — the same as the permanent Calendar
-            // and Reminders groups below. Each belongs to one folder; its rename and
-            // delete forms carry that folder, so acting on it never touches another. ?>
-      <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>"
-           data-id="<?= e($s['id']) ?>" style="--ind:<?= (int) ($s['indent'] ?? 0) ?>">
+      <?php // Sections always render, empty or not. Each belongs to one folder; its
+            // rename and delete forms carry that folder, so acting on it never touches
+            // another folder's same-named section. ?>
+      <?php foreach ($secRows as $s): ?>
+        <?php if ($folderOf($s) !== $sfolder) { continue; } ?>
+        <?php $sname = (string) $s['name']; ?>
+        <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>"
+             data-id="<?= e($s['id']) ?>" style="--ind:<?= (int) ($s['indent'] ?? 0) ?>">
+          <div class="section-head">
+            <?= section_collapse_button() ?>
+            <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
+            <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
+                  '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
+            <?php render_section_add_button($sname, $sfolder); ?>
+            <span class="sec-tail">
+              <?= indent_controls() ?>
+              <form method="post" action="" style="display:inline">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="action" value="delete_section">
+                <input type="hidden" name="view" value="<?= e($view) ?>">
+                <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+                <input type="hidden" name="name" value="<?= e($sname) ?>">
+                <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+              </form>
+            </span>
+          </div>
+          <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
+          <?php render_rows($grouped[$s['id']] ?? [], $csrf, $view, $today, $sname); ?>
+        </div>
+      <?php endforeach; ?>
+      <?php // The folder's catch-all: last, undeletable, no drag handle. ?>
+      <div class="section-group default-group" data-section="" data-folder="<?= e($sfolder) ?>">
         <div class="section-head">
           <?= section_collapse_button() ?>
-          <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
-          <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
-                '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
-          <?php render_section_add_button($sname, $sfolder); ?>
-          <span class="sec-tail">
-            <?= indent_controls() ?>
-            <form method="post" action="" style="display:inline">
-              <input type="hidden" name="csrf" value="<?= $csrf ?>">
-              <input type="hidden" name="action" value="delete_section">
-              <input type="hidden" name="view" value="<?= e($view) ?>">
-              <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
-              <input type="hidden" name="name" value="<?= e($sname) ?>">
-              <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
-            </form>
-          </span>
+          <span class="sec-handle blank" aria-hidden="true"></span>
+          <span class="section-title"><?= DEFAULT_SECTION ?></span>
+          <?php render_section_add_button('', $sfolder); ?>
         </div>
-        <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
-        <?php render_rows($rows, $csrf, $view, $today, $sname); ?>
+        <?php render_section_add_row('', $csrf, $view, $sfolder); ?>
+        <?php render_rows($looseByFolder[$sfolder] ?? [], $csrf, $view, $today, ''); ?>
       </div>
+      <?php if ($showFolders): ?></div><?php endif; ?>
     <?php endforeach; ?>
-    <?php if ($showFolders && $prevFolder !== null): ?></div><?php endif; ?>
-
-    <!-- Permanent "Calendar" group: undated items ride along on the Calendar under today.
-         It only makes sense in the default folder (and All), not in every folder. -->
-    <?php if ($viewFolder === 'All' || $viewFolder === $defFolder): ?>
-    <div class="section-group default-group" data-section="<?= CALENDAR_SECTION ?>">
-      <div class="section-head">
-        <?= section_collapse_button() ?>
-        <span class="sec-handle blank" aria-hidden="true"></span>
-        <span class="section-title"><?= CALENDAR_SECTION ?></span>
-        <?php render_section_add_button(CALENDAR_SECTION, $view); ?>
-      </div>
-      <?php render_section_add_row(CALENDAR_SECTION, $csrf, $view, $view); ?>
-      <?php render_rows($calRows, $csrf, $view, $today, CALENDAR_SECTION); ?>
-    </div>
-    <?php endif; ?>
-
-    <!-- Permanent "Reminders" group: always last, not deletable, no drag handle. -->
-    <div class="section-group default-group" data-section="">
-      <div class="section-head">
-        <?= section_collapse_button() ?>
-        <span class="sec-handle blank" aria-hidden="true"></span>
-        <span class="section-title"><?= DEFAULT_SECTION ?></span>
-        <?php render_section_add_button('', $view); ?>
-      </div>
-      <?php render_section_add_row('', $csrf, $view, $view); ?>
-      <?php render_rows($ungrouped, $csrf, $view, $today, ''); ?>
-    </div>
    </div>
 
     <?php if ($doneCount): ?>

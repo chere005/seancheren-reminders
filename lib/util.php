@@ -2,11 +2,52 @@
 /** Small shared helpers used by more than one app. */
 
 /**
- * The permanent Reminders section whose undated items ride along on the Calendar.
- * Anything filed here with no due date shows up under today, every day, until it's
- * ticked off. Reminders renders it; the Calendar reads it.
+ * The two permanent reminder *folders*. They used to be permanent sections that sat
+ * inside every folder at once, which meant a reminder had a folder and a group and the
+ * group was sometimes really a folder. Now they're just folders, undeletable, always
+ * first in the list:
+ *
+ *   Reminders — the catch-all a reminder lands in when nothing else is chosen.
+ *   Calendar  — an undated reminder here rides along on the calendar under *today*,
+ *               every day, until it's ticked off (it is not overdue; it isn't late).
+ *
+ * A folder holds user-made sections the same way it always did.
  */
+const FOLDER_REMINDERS = 'Reminders';
+const FOLDER_CALENDAR  = 'Calendar';
+
+/** The old permanent section name, kept only so the migration can recognise it. */
 const CALENDAR_SECTION = 'Calendar';
+
+/**
+ * Bring a reminders list up to the folder model above. Idempotent, and cheap enough to
+ * run on every read — the readers that don't own the file (the Calendar, the widget
+ * feed, quick.php, the API) normalise in memory and never write.
+ *
+ *   section "Calendar"      -> folder "Calendar", ungrouped
+ *   folder "General"/absent -> folder "Reminders"
+ *   the old "Calendar" section header rows are dropped; there is no such section now.
+ */
+function reminders_folder_migrate(array $list): array
+{
+    $out = [];
+    foreach ($list as $it) {
+        $isSec   = ($it['type'] ?? '') === 'section';
+        $section = (string) ($it['section'] ?? '');
+        $folder  = (string) ($it['folder'] ?? '');
+        if ($isSec && strcasecmp((string) ($it['name'] ?? ''), CALENDAR_SECTION) === 0) {
+            continue;                                  // the permanent section is a folder now
+        }
+        if (!$isSec && strcasecmp($section, CALENDAR_SECTION) === 0) {
+            $it['folder']  = FOLDER_CALENDAR;
+            $it['section'] = '';
+        } elseif ($folder === '' || $folder === SECTION_DEFAULT_FOLDER) {
+            $it['folder'] = FOLDER_REMINDERS;
+        }
+        $out[] = $it;
+    }
+    return $out;
+}
 
 /**
  * One colour per kind of thing, for every app that draws a dot, a chip or a tag.
