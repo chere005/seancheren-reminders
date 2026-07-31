@@ -290,8 +290,7 @@ function render_shared_folder_ro(string $dir, string $partner, string $folder, s
     <div class="folder-block shared-block" data-folder="<?= e($key) ?>">
       <div class="folder-head">
         <?= folder_collapse_button() ?>
-        <div class="folder-label"><?= e($folder) ?></div>
-        <span class="fdot" style="background:<?= e($color) ?>" aria-hidden="true"></span>
+        <div class="folder-label" style="background:<?= e(folder_tint($color)) ?>"><?= e($folder) ?></div>
         <span class="fshared-badge" title="Shared by <?= e($partner) ?>"><?= e($partner) ?></span>
         <span class="folder-rule" aria-hidden="true"></span>
       </div>
@@ -978,18 +977,17 @@ $sectionInput =
        than one folder together — bigger and a shade darker than a section header, so the
        two read as different levels of the same hierarchy rather than competing. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
-    /* The folder name is the top heading. Near-white read as "just bigger text" against
-       the gold section titles under it, so it's a darker orange — deeper than the section
-       gold, next to the goldenrod chevron beside it — outlined in a hairline of white so
-       it still carries at a glance. paint-order puts the stroke behind the glyph, or the
-       0.5px would eat into the letterforms rather than sit around them. */
+    /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
+       of the folder's own colour — 8-digit hex, inline, from folder_tint(). That wash is
+       what makes it read as the level above the gold section titles under it, and what
+       says "this whole run belongs to that folder"; the 11px dot it replaced was a full
+       stop you had to go looking for. The text itself is back to near-white *because* of
+       the wash: the colour identity is the chip, so the name only has to be legible, and
+       near-white is the one value that reads on all six folder colours at once. */
     .folder-label {
-      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: #d97706;
-      -webkit-text-stroke: 0.5px #fff; paint-order: stroke fill;
+      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: #f2f2f2;
+      border-radius: 999px; padding: 0.1rem 0.65rem;
     }
-    /* Half a rem off the name — between the section +'s spacing and the old wider gap —
-       and centred on the heading's own centre line rather than its text baseline. */
-    .folder-head .fdot { margin-left: 0.15rem; align-self: center; }
     /* A short rule on the heading's own line, trailing off to the right edge. It rides
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
@@ -1230,10 +1228,10 @@ $sectionInput =
         <div class="folder-block" data-folder="<?= e($sfolder) ?>">
           <div class="folder-head">
             <?= folder_collapse_button() ?>
-            <div class="folder-label"><?= e($sfolder) ?></div>
-            <?php // The folder's own colour, the same dot its entry wears in the picker. ?>
-            <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
-            <?php // Edit-mode only: a "+" just right of the colour dot that reveals an
+            <?php // The folder's own colour is the wash behind its name, where it used to
+                  // be a dot beside it — the same colour its entry wears in the picker. ?>
+            <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($sfolder))) ?>"><?= e($sfolder) ?></div>
+            <?php // Edit-mode only: a "+" just right of the folder's name that reveals an
                   // inline section-name field (below), so a folder with no sections of its
                   // own — like the permanent Reminders/Calendar — can get its first. ?>
             <?php if (!$isShared): ?>

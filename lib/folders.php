@@ -120,6 +120,17 @@ function folders_set_all_hidden(string $dir, string $type, bool $hidden): void
     folders_save($dir, $data);
 }
 
+/**
+ * A folder's colour at low opacity, for the rounded highlight behind its heading in the
+ * Reminders and Notes lists. Eight-digit hex rather than color-mix(), which is newer
+ * than some of the phones these run on. Anything that isn't a plain #rrggbb (a stored
+ * value that has drifted, a conic-gradient) gets no tint rather than a broken one.
+ */
+function folder_tint(string $hex, string $alpha = '33'): string
+{
+    return preg_match('/^#[0-9a-fA-F]{6}$/', $hex) ? $hex . $alpha : 'transparent';
+}
+
 /** The picker posts the keys it drew as one \x1F-joined field; unpack it. */
 function folder_pick_keys(string $raw): array
 {
