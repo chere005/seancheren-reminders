@@ -34,6 +34,9 @@ $sharedFolders = $partner
     ? array_values(array_intersect(folders_load($cfg['data_dir'], $partner)['reminders'],
                                    shares_load($cfg['data_dir'], $partner)['folders']))
     : [];
+// Which of the partner's shared folders I've switched off in my own "All" (keyed by the
+// full "@partner:Folder" key). Their data is read-only to me — this is just my view.
+$sharedHidden = $partner ? folders_shared_hidden($cfg['data_dir'], 'reminders') : [];
 
 /**
  * Which folder is being viewed? 'All', one of mine, or '@<partner>:<folder>' for
@@ -228,6 +231,65 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
     echo '</ul>';
 }
 
+/** A read-only list of the partner's reminders (in "All"): text, time and due only —
+ *  no check, drag or delete, since their data is never mine to edit. */
+function render_ro_rows(array $rows, string $today): void
+{
+    echo '<ul class="rlist ro">';
+    foreach (sort_by_date($rows) as $r) {
+        $done = !empty($r['done']);
+        $when = !empty($r['due']) ? ($r['due'] < $today ? 'past' : ($r['due'] === $today ? 'today' : 'future')) : '';
+        echo '<li class="ro-row' . ($done ? ' done' : '') . '">';
+        echo '<span class="ro-mark' . ($done ? ' on' : '') . '" aria-hidden="true">' . ($done ? '&#10003;' : '') . '</span>';
+        echo '<span class="text">' . e($r['text'] ?? '') . '</span>';
+        if (!empty($r['time'])) { echo '<span class="attime">' . e(date('g:ia', strtotime($r['time']))) . '</span>'; }
+        if (!empty($r['due']))  { echo '<span class="due ' . $when . '">' . e($r['due']) . '</span>'; }
+        echo '</li>';
+    }
+    echo '</ul>';
+}
+
+/** One of the partner's shared folders, rendered read-only in my "All": a badged head,
+ *  then their sections and the loose catch-all, all non-interactive. */
+function render_shared_folder_ro(string $dir, string $partner, string $folder, string $key,
+                                 string $color, string $today): void
+{
+    $all   = load_reminders(user_data_file($dir, 'reminders', $partner));
+    $secs  = array_values(array_filter($all, fn($it) => is_section($it) && ($it['folder'] ?? '') === $folder));
+    $items = array_values(array_filter($all, fn($it) => !is_section($it)
+        && ($it['folder'] ?? folder_fallback('reminders')) === $folder));
+    $names = array_map(fn($s) => (string) $s['name'], $secs);
+    $bySec = [];
+    $loose = [];
+    foreach ($items as $r) {
+        $s = (string) ($r['section'] ?? '');
+        if ($s !== '' && in_array($s, $names, true)) { $bySec[$s][] = $r; } else { $loose[] = $r; }
+    }
+    ?>
+    <div class="folder-block shared-block" data-folder="<?= e($key) ?>">
+      <div class="folder-head">
+        <?= folder_collapse_button() ?>
+        <div class="folder-label"><?= e($folder) ?></div>
+        <span class="fdot" style="background:<?= e($color) ?>" aria-hidden="true"></span>
+        <span class="fshared-badge" title="Shared by <?= e($partner) ?>"><?= e($partner) ?></span>
+        <span class="folder-rule" aria-hidden="true"></span>
+      </div>
+      <?php foreach ($secs as $s): $sn = (string) $s['name']; if (empty($bySec[$sn])) { continue; } ?>
+        <div class="section-group" data-section="<?= e($sn) ?>">
+          <div class="section-head"><span class="section-title"><?= e($sn) ?></span></div>
+          <?php render_ro_rows($bySec[$sn], $today); ?>
+        </div>
+      <?php endforeach; ?>
+      <?php if ($loose): ?>
+        <div class="section-group">
+          <div class="section-head"><span class="section-title"><?= DEFAULT_SECTION ?></span></div>
+          <?php render_ro_rows($loose, $today); ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <?php
+}
+
 // --- Handle mutations (POST -> redirect -> GET) ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
@@ -274,8 +336,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
     if ($_POST['action'] === 'folder_vis') {
-        folder_hidden_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''),
-                          empty($_POST['show']));
+        $vname = (string) ($_POST['name'] ?? '');
+        // A "@partner:Folder" key is one of theirs I'm showing/hiding in my own view.
+        if (strncmp($vname, '@', 1) === 0) {
+            folder_shared_hidden_set($cfg['data_dir'], 'reminders', $vname, empty($_POST['show']));
+        } else {
+            folder_hidden_set($cfg['data_dir'], 'reminders', $vname, empty($_POST['show']));
+        }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'reminders')]);
         exit;
@@ -847,6 +914,21 @@ $sectionInput =
     .subtask-btn:hover { border-color: #888; color: #ccc; }
     .subtask-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+    /* A partner's shared folder shown read-only in my "All": their rows carry no controls,
+       just a static tick where the check would be. The badge marks whose it is. */
+    .folder-head .fshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.15rem;
+    }
+    ul.rlist.ro > li { padding-left: 0.25rem; }
+    .ro-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem; border-bottom: 1px solid #222; }
+    .ro-row.done .text { color: #666; text-decoration: line-through; }
+    .ro-mark {
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border: 1px solid #333; border-radius: 6px;
+      color: var(--accent); font-size: 0.95rem; line-height: 1;
+    }
+
     ul { list-style: none; }
     li {
       display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem;
@@ -967,7 +1049,7 @@ $sectionInput =
       // row of its dropdown rather than a button of its own.
       ob_start();
       render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
-                         $hidFolders, $isShared ? '' : $csrf);
+                         array_merge($hidFolders, $sharedHidden), $isShared ? '' : $csrf);
       $titleControls = ob_get_clean();
     ?>
     <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
@@ -1074,6 +1156,16 @@ $sectionInput =
       </div>
       <?php if ($showFolders): ?></div><?php endif; ?>
     <?php endforeach; ?>
+    <?php // In "All", the partner's shared folders I haven't switched off show here,
+          // read-only and badged — their data is never mine to edit. ?>
+    <?php if (!$isShared && $view === 'All' && $partner):
+            foreach ($sharedFolders as $i => $sf):
+                $skey = '@' . $partner . ':' . $sf;
+                if (in_array($skey, $sharedHidden, true)) { continue; }
+                $scol = folder_shared_color($sharedOverrides, $theirColors, 'reminders', $skey, $sf, $i);
+                render_shared_folder_ro($cfg['data_dir'], $partner, $sf, $skey, $scol, $today);
+            endforeach;
+          endif; ?>
    </div>
 
     <?php if ($doneCount): ?>
