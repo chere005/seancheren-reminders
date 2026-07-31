@@ -85,6 +85,16 @@ function folder_hidden_set(string $dir, string $type, string $name, bool $hidden
     folders_save($dir, $data);
 }
 
+/** Show every folder (hidden = []) or hide every folder, from the picker's "All" master
+ *  checkbox. Only the viewer's own folders can be hidden, which is all this list holds. */
+function folders_set_all_hidden(string $dir, string $type, bool $hidden): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data = folders_load($dir);
+    $data['hidden'][$type] = $hidden ? array_values($data[$type] ?? []) : [];
+    folders_save($dir, $data);
+}
+
 /**
  * Persist a new order for a type's folders, from the Manage-folders drag. Every folder
  * can be reordered now, the permanent ones included: names that aren't real folders are
@@ -311,8 +321,14 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         <span class="fdot<?= $cur === '' ? ' all' : '' ?>"<?= $cur === '' ? '' : ' style="background:' . $e($cur) . '"' ?>></span>
       </button>
       <div class="folderpick-menu" id="folderSelMenu" role="listbox" hidden>
-        <a class="folderpick-opt<?= ($active === 'All' || $active === '') ? ' on' : '' ?>" href="?folder=All">
-          <?php if ($boxes): ?><span class="fvis-pad" aria-hidden="true"></span><?php endif; ?>
+        <a class="folderpick-opt" href="?folder=All">
+          <?php if ($boxes): ?>
+            <?php // The "All" box is a master switch: ticked when every folder is showing,
+                  // and tapping it shows them all or hides them all at once. ?>
+            <span class="fvis fvis-all<?= empty($hidden) ? ' on' : '' ?>" role="checkbox"
+                  tabindex="0" aria-checked="<?= empty($hidden) ? 'true' : 'false' ?>"
+                  title="Show every folder" aria-label="Show every folder in All"></span>
+          <?php endif; ?>
           <span class="fdot all"></span><span>All</span>
         </a>
         <?php foreach ($groups as $g): ?>
@@ -321,7 +337,7 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
           <?php foreach ($g['options'] as [$val, $label, $col]): ?>
             <?php // Only my own folders can be hidden; a shared one is theirs to show. ?>
             <?php $own = $boxes && strncmp($val, '@', 1) !== 0; ?>
-            <a class="folderpick-opt<?= $active === $val ? ' on' : '' ?>" href="?folder=<?= urlencode($val) ?>">
+            <a class="folderpick-opt" href="?folder=<?= urlencode($val) ?>">
               <?php if ($boxes): ?>
                 <?php // A drawn box rather than a real <input>: the row is a link, so the
                       // click has to be cancelled, and cancelling a checkbox's click also
@@ -374,8 +390,11 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         var on = !cb.classList.contains('on');
         cb.classList.toggle('on', on);
         cb.setAttribute('aria-checked', on ? 'true' : 'false');
-        var body = new URLSearchParams({ csrf: CSRF, action: 'folder_vis',
-                                         name: cb.dataset.folder, show: on ? '1' : '' });
+        // The "All" box is a master switch: it shows or hides every folder at once.
+        var isAll = cb.classList.contains('fvis-all');
+        var body = new URLSearchParams(isAll
+          ? { csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '' }
+          : { csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' });
         fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
           .then(function () { location.reload(); })
           .catch(function () { location.reload(); });
@@ -577,7 +596,8 @@ function folder_nav_styles(): string
       border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
     }
     .folderpick-opt .fvis-pad { flex: 0 0 auto; width: 14px; }
-    .folderpick-opt.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* The active folder is shown by the coloured dot on the picker button, so the row in
+       the menu isn't highlighted — the checkboxes are what the menu is about now. */
     /* "Manage folders", the last row of the picker menu. */
     .folderpick-manage {
       width: 100%; background: none; border: none; border-top: 1px solid #333;

@@ -132,6 +132,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'notes')]);
         exit;
     }
+    // The "All" master checkbox in the picker: show or hide every folder at once (AJAX).
+    if ($_POST['action'] === 'folder_vis_all') {
+        folders_set_all_hidden($cfg['data_dir'], 'notes', empty($_POST['show']));
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true, 'hidden' => folders_hidden($cfg['data_dir'], 'notes')]);
+        exit;
+    }
     // Drag-reorder of the custom folders from the Manage-folders window (AJAX).
     if ($_POST['action'] === 'reorder_folders') {
         $order = array_values(array_filter(explode("\x1F", (string) ($_POST['order'] ?? '')),
