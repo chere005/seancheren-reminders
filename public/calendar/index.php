@@ -991,11 +991,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
  <div class="wrap">
   <?php
     // Custom picker rather than a <select>: a native option can't carry a colour dot.
+    // Only calendars belong in this picker — reminder folders are controlled by the
+    // All/Dated/None dropdowns in "Manage calendars", not here.
     $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
-    if ($sharedCals || $sharedFolders) {
-      $pickGroups[] = [share_name($partner), array_merge(
-        array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $sharedCals),
-        array_map(fn($f) => ['f:' . $f, $f, '#34d399'], $sharedFolders))];
+    if ($sharedCals) {
+      $pickGroups[] = [share_name($partner),
+        array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $sharedCals)];
     }
     // What the closed button shows.
     $curName = 'All calendars'; $curColor = '';

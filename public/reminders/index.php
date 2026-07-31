@@ -432,6 +432,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name      = (string) ($_POST['name'] ?? '');
         $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         $list = load_reminders($dataFile);
+        // Deleting the permanent "Reminders" catch-all: allowed only when the folder has
+        // another section — its loose reminders move into that folder's first section, and
+        // the empty catch-all then stops rendering (it comes back if a loose item lands).
+        if ($name === '') {
+            $first = '';
+            foreach ($list as $it) {
+                if (is_section($it) && ($it['folder'] ?? '') === $secFolder) { $first = (string) $it['name']; break; }
+            }
+            if ($first !== '') {
+                foreach ($list as &$r) {
+                    if (!is_section($r) && ($r['section'] ?? '') === ''
+                        && ($r['folder'] ?? folder_fallback('reminders')) === $secFolder) { $r['section'] = $first; }
+                }
+                unset($r);
+                save_reminders($dataFile, $list);
+            }
+            header('Location: ' . $editBack);
+            exit;
+        }
         // Only this folder's copy of the section goes; other folders keep theirs.
         $list = array_filter($list, fn($it) => !(is_section($it)
             && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
@@ -1143,17 +1162,39 @@ $sectionInput =
           <?php render_rows($grouped[$s['id']] ?? [], $csrf, $view, $today, $sname); ?>
         </div>
       <?php endforeach; ?>
-      <?php // The folder's catch-all: last, undeletable, no drag handle. ?>
+      <?php
+        // The folder's catch-all: last, no drag handle. It's deletable only when the
+        // folder has another section (its loose items move there), and once it has no
+        // loose items *and* there are other sections it stops rendering — so a fully
+        // sectioned folder isn't headed by an empty "Reminders". A folder with no
+        // sections always keeps it, so there's always a "+" to add against.
+        $folderSecs = 0;
+        foreach ($secRows as $s) { if ($folderOf($s) === $sfolder) { $folderSecs++; } }
+        if (!empty($looseByFolder[$sfolder]) || $folderSecs === 0):
+      ?>
       <div class="section-group default-group" data-section="" data-folder="<?= e($sfolder) ?>">
         <div class="section-head">
           <?= section_collapse_button() ?>
           <span class="sec-handle blank" aria-hidden="true"></span>
           <span class="section-title"><?= DEFAULT_SECTION ?></span>
           <?php render_section_add_button('', $sfolder); ?>
+          <?php if ($folderSecs > 0 && !$isShared): ?>
+            <span class="sec-tail">
+              <form method="post" action="" style="display:inline">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="action" value="delete_section">
+                <input type="hidden" name="view" value="<?= e($view) ?>">
+                <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+                <input type="hidden" name="name" value="">
+                <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
+              </form>
+            </span>
+          <?php endif; ?>
         </div>
         <?php render_section_add_row('', $csrf, $view, $sfolder); ?>
         <?php render_rows($looseByFolder[$sfolder] ?? [], $csrf, $view, $today, ''); ?>
       </div>
+      <?php endif; ?>
       <?php if ($showFolders): ?></div><?php endif; ?>
     <?php endforeach; ?>
     <?php // In "All", the partner's shared folders I haven't switched off show here,
