@@ -562,7 +562,10 @@ function folder_modal_script(): string
 {
     return "<script>(function(){var b=document.getElementById('folderMgr'),m=document.getElementById('folderModal'),"
          . "d=document.getElementById('folderDone');if(!b||!m)return;"
-         . "var close=function(){m.classList.remove('open');};"
+         // A reorder only changes the DOM in the modal; reload on close so the picker
+         // dropdown (rendered with the page) shows the new folder order too.
+         . "var fDirty=false;"
+         . "var close=function(){if(fDirty){location.reload();return;}m.classList.remove('open');};"
          . "b.addEventListener('click',function(){m.classList.add('open');"
          . "var i=m.querySelector('.addrow input[type=text]');if(i)i.focus();});"
          // Add/delete/default reload the page with ?fm=1 so the manager reopens rather
@@ -599,7 +602,8 @@ function folder_modal_script(): string
          . "var order=rows().map(function(li){return li.dataset.folder;});"
          . "var body=new URLSearchParams();body.set('csrf',CSRF);body.set('action','reorder_folders');"
          . "body.set('order',order.join('\\u001f'));"
-         . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});};"
+         . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});"
+         . "fDirty=true;};"
          . "list.addEventListener('pointerup',drop);"
          . "list.addEventListener('pointercancel',function(){clr();if(drag){drag.classList.remove('dragging');drag=null;}});}"
          . "document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();</script>";
