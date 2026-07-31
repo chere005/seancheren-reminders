@@ -197,16 +197,19 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
   <div class="setmodal">
     <h2>Settings</h2>
     <p class="setwho">Signed in as <strong>{$u}</strong></p>
-    <form id="pwForm" autocomplete="off">
-      <input type="hidden" name="csrf" value="{$csrf}">
-      <input type="hidden" name="action" value="change_password">
-      <label>Current password<input type="password" name="current" autocomplete="current-password"></label>
-      <label>New password<input type="password" name="new" autocomplete="new-password"></label>
-      <label>Repeat new password<input type="password" name="again" autocomplete="new-password"></label>
-      <p class="setmsg" id="setMsg" hidden></p>
-    </form>
-    <div class="setpwrow">
-      <button type="submit" form="pwForm" class="setsave">Change password</button>
+    <button type="button" class="setpwtoggle" id="pwToggle">Change password</button>
+    <div id="pwSection" hidden>
+      <form id="pwForm" autocomplete="off">
+        <input type="hidden" name="csrf" value="{$csrf}">
+        <input type="hidden" name="action" value="change_password">
+        <label>Current password<input type="password" name="current" autocomplete="current-password"></label>
+        <label>New password<input type="password" name="new" autocomplete="new-password"></label>
+        <label>Repeat new password<input type="password" name="again" autocomplete="new-password"></label>
+        <p class="setmsg" id="setMsg" hidden></p>
+      </form>
+      <div class="setpwrow">
+        <button type="submit" form="pwForm" class="setsave">Save new password</button>
+      </div>
     </div>
     <div class="setthemes">
       <p class="setlabel">Theme</p>
@@ -263,7 +266,17 @@ function settings_modal_styles(): string
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .setmodal .setsave:hover { background: #52e0ac; }
-    /* Change password sits on its own row, above the Theme picker. */
+    /* The password fields stay hidden behind this button until it's pressed, so the
+       settings window opens clean rather than fronting three password boxes. */
+    .setmodal .setpwtoggle {
+      display: block; width: 100%; margin-top: 0.25rem; padding: 0.5rem 0.9rem;
+      background: none; border: 1px solid #444; color: #ccc; border-radius: 999px;
+      font-size: 0.9rem; font-family: inherit; cursor: pointer; text-align: center;
+    }
+    .setmodal .setpwtoggle:hover { border-color: #888; color: #fff; }
+    .setmodal #pwSection[hidden] { display: none; }
+    .setmodal #pwSection { margin-top: 0.6rem; }
+    /* Change password (save) sits on its own row, above the Theme picker. */
     .setmodal .setpwrow { margin-top: 0.9rem; }
     /* Share, Widget and Done: one row of identical round icon buttons, evenly spread and
        vertically centred on each other, so the footer reads the same in every app. */
@@ -303,8 +316,17 @@ function settings_modal_script(): string
   var btn = document.getElementById('setBtn'), back = document.getElementById('setBackdrop');
   if (!btn || !back) { return; }
   var form = document.getElementById('pwForm'), msg = document.getElementById('setMsg');
+  var pwToggle = document.getElementById('pwToggle'), pwSection = document.getElementById('pwSection');
   var show = function (text, ok) { msg.textContent = text; msg.classList.toggle('ok', !!ok); msg.hidden = !text; };
-  var close = function () { back.classList.remove('open'); form.reset(); show(''); };
+  // Fold the password fields away again, so re-opening Settings starts clean.
+  var pwCollapse = function () { if (pwSection) { pwSection.hidden = true; } if (pwToggle) { pwToggle.hidden = false; } };
+  var close = function () { back.classList.remove('open'); form.reset(); show(''); pwCollapse(); };
+  if (pwToggle) {
+    pwToggle.addEventListener('click', function () {
+      pwToggle.hidden = true; pwSection.hidden = false;
+      var f = pwSection.querySelector('input[type=password]'); if (f) { f.focus(); }
+    });
+  }
   // Settings now lives inside the username dropdown, so opening it closes that menu.
   btn.addEventListener('click', function (e) {
     e.stopPropagation();
