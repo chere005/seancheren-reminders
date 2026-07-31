@@ -7,8 +7,12 @@
  * the other one is allowed to see. The reader loads the owner's file directly.
  */
 
-/** Who sees whose stuff. Anyone not listed here has no sharing UI at all. */
-const SHARE_PAIRS = ['sean' => 'aki', 'aki' => 'sean'];
+/**
+ * Who sees whose stuff. Anyone not listed here has no sharing UI at all.
+ * buddy ⇄ example is the demo pair (tools/seed-example.php, tools/seed-buddy.php), so the
+ * sharing half of the suite has something to show without handing out a real account.
+ */
+const SHARE_PAIRS = ['sean' => 'aki', 'aki' => 'sean', 'buddy' => 'example', 'example' => 'buddy'];
 
 /** The other person for $user (default: the signed-in user), or null if they have none. */
 function share_partner(?string $user = null): ?string
