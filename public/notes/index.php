@@ -687,7 +687,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
        than one folder together — bigger and a shade darker than a section header. */
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
-    .folder-label { font-weight: 700; font-size: 1.3rem; color: #b8860b; line-height: 1.2; }
+    /* The folder name is the top heading; near-white and larger so it's clearly distinct
+       from the gold section titles under it (the folder's own colour is on the dot). */
+    .folder-label { font-weight: 700; font-size: 1.35rem; color: #f2f2f2; line-height: 1.2; }
     /* Half a rem off the name — between the section +'s spacing and the old wider gap —
        and centred on the heading's own centre line rather than its text baseline. */
     .folder-head .fdot { margin-left: 0.15rem; align-self: center; }
