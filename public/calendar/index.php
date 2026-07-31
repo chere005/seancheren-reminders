@@ -1739,8 +1739,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
   };
 
+  // Which day you were on, remembered for as long as the app is open. Tapping a note or
+  // a reminder leaves the Calendar entirely, and coming back used to dump you on today;
+  // now it puts you back where you were. The Calendar tab clears it (see tabbar.php) and
+  // so does closing the app, which are the two ways of asking for today back.
+  const DAYKEY = 'calDay';
+  const rememberDay = d => { try { sessionStorage.setItem(DAYKEY, d); } catch (_) {} };
+  const rememberedDay = () => { try { return sessionStorage.getItem(DAYKEY) || ''; } catch (_) { return ''; } };
+
   const selectDay = date => {
     selected = date;
+    rememberDay(date);
     document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
     const cell = document.querySelector('.cell[data-date="' + date + '"]');
     if (cell) cell.classList.add('selected');
@@ -1780,7 +1789,22 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   // Start on the selected day (today, or ?day=).
   const INITIAL_DAY = '<?= e($selDay) ?>';
-  if (INITIAL_DAY) selectDay(INITIAL_DAY);
+  // An explicit ?day= in the URL always wins — that's someone arriving at a named day.
+  // Otherwise pick up where this session left off, reloading only when the day we want
+  // is in a month this page isn't drawing.
+  (function () {
+    const asked = new URLSearchParams(location.search).get('day') || '';
+    const back  = asked ? '' : rememberedDay();
+    if (back && /^\d{4}-\d{2}-\d{2}$/.test(back) && back !== INITIAL_DAY) {
+      if (document.querySelector('.cell[data-date="' + back + '"]')) { selectDay(back); return; }
+      const u = new URL(location.href);
+      u.searchParams.set('ym', back.slice(0, 7));
+      u.searchParams.set('day', back);
+      location.replace(u.toString());
+      return;
+    }
+    if (INITIAL_DAY) selectDay(INITIAL_DAY);
+  })();
 
   document.getElementById('calShowAll').addEventListener('click', () => {
     const on = document.body.classList.toggle('show-done');
