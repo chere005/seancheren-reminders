@@ -889,7 +889,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       if (!$editing) {
           ob_start();
           render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
-                             array_merge($hidFolders, $sharedHidden), $isShared ? '' : $csrf);
+                             array_merge($hidFolders, $sharedHidden), $csrf);
           $titleControls = ob_get_clean();
       }
     ?>

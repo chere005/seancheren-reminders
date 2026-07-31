@@ -1179,7 +1179,7 @@ $sectionInput =
       // row of its dropdown rather than a button of its own.
       ob_start();
       render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
-                         array_merge($hidFolders, $sharedHidden), $isShared ? '' : $csrf);
+                         array_merge($hidFolders, $sharedHidden), $csrf);
       $titleControls = ob_get_clean();
     ?>
     <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
