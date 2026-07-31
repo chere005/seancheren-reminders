@@ -349,7 +349,8 @@ foreach ($habitItems as $h) {
 
     /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
        other apps use. Edit mode only, like every other structural control here. */
-    .secfoot { margin: 1.1rem 0 0; display: flex; }
+    .secfoot { margin: 1.1rem 0 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .secfoot .newsection { margin: 0; }
     body:not(.editing) .secfoot { display: none; }
     /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */
     .secfoot button.newsecbtn {
@@ -377,22 +378,6 @@ foreach ($habitItems as $h) {
     ?>
     <?= render_user_menu(false, 'editBtn', '', false, $titleControls) ?>
   </header>
-
-  <div class="bar">
-    <form method="post" action="" class="addh" onsubmit="return this.name.value.trim()!==''">
-      <input type="hidden" name="csrf" value="<?= $csrf ?>">
-      <input type="hidden" name="action" value="add_habit">
-      <input type="text" name="name" placeholder="+ New habit…" maxlength="40" autocomplete="off">
-      <?php if ($sections): ?>
-        <select name="section" class="hsel" aria-label="Section for new habit">
-          <option value="">No section</option>
-          <?php foreach ($sections as $s): ?>
-            <option value="<?= e($s['id']) ?>"><?= e($s['name']) ?></option>
-          <?php endforeach; ?>
-        </select>
-      <?php endif; ?>
-    </form>
-  </div>
 
   <?php // Week or month, and the arrows that step whichever one is showing. ?>
   <div class="viewbar">
@@ -473,6 +458,14 @@ foreach ($habitItems as $h) {
   <?php // + Section sits under the habits, where you'd add one. ?>
   <?php if ($hView !== 'month'): ?>
     <div class="secfoot">
+      <?php // + Habit and + Section, both buttons-that-become-a-field (edit mode only). ?>
+      <button type="button" class="newsecbtn" id="newHabitBtn">+ Habit</button>
+      <form method="post" action="" class="newsection" id="newHabitForm" hidden
+            onsubmit="return this.name.value.trim()!==''">
+        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+        <input type="hidden" name="action" value="add_habit">
+        <input type="text" name="name" placeholder="+ Habit" maxlength="40" autocomplete="off">
+      </form>
       <button type="button" class="newsecbtn" id="newSecBtn">+ Section</button>
       <form method="post" action="" class="newsection" id="newSecForm" hidden
             onsubmit="return this.name.value.trim()!==''">
@@ -574,21 +567,19 @@ foreach ($habitItems as $h) {
   document.addEventListener('pointerup', clearLp);
   document.addEventListener('pointercancel', clearLp);
 
-  // ----- "+ Section" swaps itself for the name field, as in Reminders and Notes -----
-  const newSecBtn = document.getElementById('newSecBtn');
-  const newSecForm = document.getElementById('newSecForm');
-  if (newSecBtn && newSecForm) {
-    const field = newSecForm.querySelector('input[name=name]');
-    newSecBtn.addEventListener('click', () => {
-      newSecBtn.hidden = true; newSecForm.hidden = false; field.focus();
-    });
+  // ----- "+ Habit" / "+ Section" each swap themselves for a name field, as elsewhere -----
+  const wireAdd = (btnId, formId) => {
+    const btn = document.getElementById(btnId), form = document.getElementById(formId);
+    if (!btn || !form) { return; }
+    const field = form.querySelector('input[name=name]');
+    btn.addEventListener('click', () => { btn.hidden = true; form.hidden = false; field.focus(); });
     field.addEventListener('blur', () => {          // left empty: put the button back
-      if (field.value.trim() === '') { newSecForm.hidden = true; newSecBtn.hidden = false; }
+      if (field.value.trim() === '') { form.hidden = true; btn.hidden = false; }
     });
-    field.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { field.value = ''; field.blur(); }
-    });
-  }
+    field.addEventListener('keydown', e => { if (e.key === 'Escape') { field.value = ''; field.blur(); } });
+  };
+  wireAdd('newHabitBtn', 'newHabitForm');
+  wireAdd('newSecBtn', 'newSecForm');
 
   // ----- Swipe sideways to page -----
   // Left goes forward, right goes back, exactly like the arrows in the bar above (and
