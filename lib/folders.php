@@ -72,6 +72,31 @@ function folders_hidden(string $dir, string $type, ?string $user = null): array
     return array_values(array_intersect($hid, $data[$type] ?? []));
 }
 
+/**
+ * Which of the partner's shared folders I've switched off in my own view. Kept in my
+ * file under `hidden_shared`, keyed by the full "@partner:Folder" view key so it never
+ * touches the owner's data — it's purely which of theirs I want in my "All".
+ */
+function folders_shared_hidden(string $dir, string $type, ?string $user = null): array
+{
+    $data = folders_load($dir, $user);
+    $h    = is_array($data['hidden_shared'][$type] ?? null) ? $data['hidden_shared'][$type] : [];
+    return array_values(array_filter($h, 'is_string'));
+}
+
+/** Show or hide one of the partner's shared folders in my own "All", keyed by its
+ *  "@partner:Folder" view key. This is a view preference of mine, not an edit of theirs. */
+function folder_shared_hidden_set(string $dir, string $type, string $key, bool $hidden): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data = folders_load($dir);
+    $cur  = is_array($data['hidden_shared'][$type] ?? null) ? $data['hidden_shared'][$type] : [];
+    $cur  = array_values(array_filter($cur, fn($k) => $k !== $key));
+    if ($hidden) { $cur[] = $key; }
+    $data['hidden_shared'][$type] = $cur;
+    folders_save($dir, $data);
+}
+
 /** Show or hide one folder in the picker. A fixed folder can be hidden like any other. */
 function folder_hidden_set(string $dir, string $type, string $name, bool $hidden): void
 {
@@ -331,28 +356,26 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
           <?php endif; ?>
           <span class="fdot all"></span><span>All</span>
         </a>
+        <?php // One flat list, mine and the partner's together — no owner headings. A
+              // shared folder wears a small badge instead, since there's no heading to say
+              // whose it is. Every folder (mine or theirs) can be shown or hidden in my
+              // "All"; a shared toggle is my view preference, never an edit of their data. ?>
         <?php foreach ($groups as $g): ?>
-          <?php if (empty($g['options'])) { continue; } ?>
-          <?php if ($g['label'] !== ''): ?><div class="folderpick-group"><?= $e($g['label']) ?></div><?php endif; ?>
           <?php foreach ($g['options'] as [$val, $label, $col]): ?>
-            <?php // Only my own folders can be hidden; a shared one is theirs to show. ?>
-            <?php $own = $boxes && strncmp($val, '@', 1) !== 0; ?>
+            <?php $shared = strncmp($val, '@', 1) === 0;
+                  $pName  = $shared ? explode(':', substr($val, 1), 2)[0] : ''; ?>
             <a class="folderpick-opt" href="?folder=<?= urlencode($val) ?>">
               <?php if ($boxes): ?>
                 <?php // A drawn box rather than a real <input>: the row is a link, so the
                       // click has to be cancelled, and cancelling a checkbox's click also
-                      // undoes the tick the browser already applied. A span has no such
-                      // activation behaviour to fight. ?>
-                <?php if ($own): ?>
-                  <span class="fvis<?= in_array($val, $hidden, true) ? '' : ' on' ?>" role="checkbox"
-                        tabindex="0" aria-checked="<?= in_array($val, $hidden, true) ? 'false' : 'true' ?>"
-                        data-folder="<?= $e($val) ?>"
-                        title="Show in All" aria-label="Show <?= $e($label) ?> in All"></span>
-                <?php else: ?>
-                  <span class="fvis-pad" aria-hidden="true"></span>
-                <?php endif; ?>
+                      // undoes the tick the browser already applied. ?>
+                <span class="fvis<?= in_array($val, $hidden, true) ? '' : ' on' ?>" role="checkbox"
+                      tabindex="0" aria-checked="<?= in_array($val, $hidden, true) ? 'false' : 'true' ?>"
+                      data-folder="<?= $e($val) ?>"
+                      title="Show in All" aria-label="Show <?= $e($label) ?> in All"></span>
               <?php endif; ?>
-              <span class="fdot" style="background:<?= $e($col) ?>"></span><span><?= $e($label) ?></span>
+              <span class="fdot" style="background:<?= $e($col) ?>"></span><span class="fpick-name"><?= $e($label) ?></span>
+              <?php if ($shared): ?><span class="fshared-badge" title="Shared by <?= $e($pName) ?>"><?= $e($pName) ?></span><?php endif; ?>
             </a>
           <?php endforeach; ?>
         <?php endforeach; ?>
@@ -588,6 +611,12 @@ function folder_nav_styles(): string
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
+    .folderpick-opt .fpick-name { flex: 1; min-width: 0; }
+    /* Badge marking a folder as the partner's, in place of an owner heading. */
+    .folderpick-opt .fshared-badge {
+      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
+    }
     .folderpick-opt:hover { background: #262626; color: #fff; }
     /* The show-in-All box, drawn rather than a form control so it doesn't look like a
        stray input in a menu — and a blank of the same width keeps the rows without one
