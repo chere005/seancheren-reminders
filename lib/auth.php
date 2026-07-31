@@ -20,6 +20,11 @@ function app_config(): array
     if ($config === null) {
         $local = __DIR__ . '/config.php';
         $config = require (is_file($local) ? $local : __DIR__ . '/config.sample.php');
+        // tools/test.php points this at a scratch directory so a test run works on real
+        // pages and real storage but can never touch anyone's data. Nothing else sets it,
+        // and the web server never has it in its environment.
+        $dir = getenv('SUITE_DATA_DIR');
+        if (is_string($dir) && $dir !== '') { $config['data_dir'] = $dir; }
     }
     return $config;
 }
