@@ -68,7 +68,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
         if ($name !== '') {
             foreach ($habits as &$h) {
-                if (!is_section($h) && ($h['id'] ?? '') === $id) { $h['name'] = mb_substr($name, 0, 60); break; }
+                if (!is_section($h) && ($h['id'] ?? '') === $id) { $h['name'] = mb_substr($name, 0, 40); break; }
             }
             unset($h);
             save_habits($dataFile, $habits);
@@ -93,7 +93,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $validSection = '';
         foreach ($habits as $it) { if (is_section($it) && ($it['id'] ?? '') === $section) { $validSection = $section; break; } }
         if ($name !== '') {
-            $habits[] = ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr($name, 0, 60), 'done' => new stdClass(), 'section' => $validSection, 'created' => time()];
+            $habits[] = ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr($name, 0, 40), 'done' => new stdClass(), 'section' => $validSection, 'created' => time()];
             save_habits($dataFile, $habits);
         }
     } elseif ($_POST['action'] === 'add_section') {
@@ -273,18 +273,29 @@ foreach ($habitItems as $h) {
     body.editing .hsection .del { display: inline-block; }
     .hsection .del:hover { border-color: #f66; color: #f66; }
 
+    /* The name bubble hugs the text and centres itself in the column rather than filling
+       it, so it reads as a label on a pill, not a big empty input. The name centres, wraps
+       to at most two lines and hyphenates a word too long to fit. */
     .hname {
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
-      padding: 0.35rem 0.5rem; min-height: 28px; display: flex; align-items: center; overflow: hidden;
+      padding: 0.3rem 0.6rem; min-height: 28px; display: flex; align-items: center;
+      gap: 0.35rem; justify-content: center; justify-self: center; width: fit-content; max-width: 100%;
     }
-    .hname .hlabel { color: #d9d2f0; font-size: 1.02rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .hname .del { display: none; margin-left: auto; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    .hname .hlabel {
+      color: #d9d2f0; font-size: 1.02rem; text-align: center; line-height: 1.15;
+      overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .hname .del { display: none; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
     body.editing .hname .del { display: inline-block; }
     .hname .del:hover { border-color: #f66; color: #f66; }
     /* In edit mode the name is a field; a double-tap opens it outside edit mode too. */
     body.editing .hname .hlabel { cursor: text; }
+    /* The edit field is sized to its text (a `size` set in JS), centred, and can wrap to a
+       second line — a box just around the name rather than a full-width input. */
     .hname .hedit-name {
-      flex: 1; min-width: 0; font-size: 1.02rem; font-family: inherit; padding: 0.1rem 0.3rem;
+      flex: 0 1 auto; min-width: 2ch; max-width: 100%; font-size: 1.02rem; font-family: inherit;
+      text-align: center; padding: 0.1rem 0.3rem; line-height: 1.15;
       background: #241f33; border: 1px solid #4a3f6a; border-radius: 4px; color: #d9d2f0;
     }
     .hname .hedit-name:focus { outline: none; border-color: #b9a7f5; }
@@ -370,7 +381,7 @@ foreach ($habitItems as $h) {
     <form method="post" action="" class="addh" onsubmit="return this.name.value.trim()!==''">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
       <input type="hidden" name="action" value="add_habit">
-      <input type="text" name="name" placeholder="+ New habit…" maxlength="60" autocomplete="off">
+      <input type="text" name="name" placeholder="+ New habit…" maxlength="40" autocomplete="off">
       <?php if ($sections): ?>
         <select name="section" class="hsel" aria-label="Section for new habit">
           <option value="">No section</option>
@@ -506,7 +517,10 @@ foreach ($habitItems as $h) {
     if (!span || box.querySelector('.hedit-name')) return;
     const id = box.dataset.id, cur = span.textContent;
     const inp = document.createElement('input');
-    inp.type = 'text'; inp.className = 'hedit-name'; inp.value = cur; inp.maxLength = 60;
+    inp.type = 'text'; inp.className = 'hedit-name'; inp.value = cur; inp.maxLength = 40;
+    // Size the field to its text so it's a box around the name, not a full-width input.
+    const sizeIt = () => { inp.size = Math.max(3, Math.min(24, (inp.value || '').length || 3)); };
+    sizeIt(); inp.addEventListener('input', sizeIt);
     span.replaceWith(inp); inp.focus();
     try { inp.setSelectionRange(cur.length, cur.length); } catch (_) {}
     let done = false;
