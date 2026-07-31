@@ -92,17 +92,22 @@ function save_reminders(string $file, array $list): void { store_write($file, ar
  */
 function sort_by_date(array $rows): array
 {
-    $i = 0;
-    foreach ($rows as &$r) { $r['_seq'] = $i++; }   // usort isn't stable enough on its own
-    unset($r);
-    usort($rows, function ($a, $b) {
-        $ad = ($a['due'] ?? '') ?: '';   // '' (undated) sorts before any real date
-        $bd = ($b['due'] ?? '') ?: '';
-        return $ad !== $bd ? strcmp($ad, $bd) : ($a['_seq'] <=> $b['_seq']);
-    });
-    foreach ($rows as &$r) { unset($r['_seq']); }
-    unset($r);
-    return $rows;
+    // Sort in outline blocks, not row by row: a top-level reminder carries the subtasks
+    // that follow it in stored order. Sorting the flat list instead tore a family apart
+    // the moment the two disagreed — an undated subtask under a dated parent sorted to
+    // the head of the section, where it read as a subtask of whatever now sat above it.
+    $blocks = [];
+    foreach ($rows as $r) {
+        if ($blocks && (int) ($r['indent'] ?? 0) > 0) { $blocks[count($blocks) - 1]['rows'][] = $r; }
+        else { $blocks[] = ['due' => ($r['due'] ?? '') ?: '', 'seq' => count($blocks), 'rows' => [$r]]; }
+    }
+    // '' (undated) sorts before any real date; stored order breaks a tie.
+    usort($blocks, fn($a, $b) => $a['due'] !== $b['due']
+        ? strcmp($a['due'], $b['due'])
+        : ($a['seq'] <=> $b['seq']));
+    $out = [];
+    foreach ($blocks as $b) { foreach ($b['rows'] as $r) { $out[] = $r; } }
+    return $out;
 }
 
 /** Stable DOM id tying a section's "+" button to the row it opens. Keyed by folder and
@@ -171,14 +176,30 @@ function reminders_markdown(array $secRows, array $grouped, array $looseByFolder
     return trim($md);
 }
 
-/** The edit-mode "+" that makes a reminder a subtask of the one above it (or lifts it
- *  back). Reminders only, one level deep — there are no sub-subtasks and sections don't
- *  indent. It lights up when the row is already a subtask. */
-function subtask_toggle(int $ind): string
+/**
+ * The edit-mode control just left of a row's delete ×. One slot, two jobs, decided by
+ * where the row already sits — there is one level of subtask and no more:
+ *
+ *   a task    → "+", which adds a *new* subtask under this one and opens it to type in
+ *   a subtask → "‹", which lifts it back out to being a task of its own
+ *
+ * The + used to indent the row you pressed it on, which is a different act entirely:
+ * it demoted an existing reminder rather than making a child of it, and there was no
+ * way to add a subtask without first adding a reminder somewhere else and dragging it.
+ */
+function subtask_button(int $ind, string $csrf, string $view, string $id): string
 {
-    $on = $ind > 0 ? ' on' : '';
-    return '<button type="button" class="subtask-btn' . $on . '" title="Make subtask"'
-         . ' aria-label="Make subtask">+</button>';
+    if ($ind > 0) {
+        return '<button type="button" class="subtask-btn out" data-id="' . e($id) . '"'
+             . ' title="Make it a task again" aria-label="Make it a task again">&lsaquo;</button>';
+    }
+    return '<form method="post" action="" class="subtask-btn-form">'
+         . '<input type="hidden" name="csrf" value="' . $csrf . '">'
+         . '<input type="hidden" name="action" value="add_subtask">'
+         . '<input type="hidden" name="view" value="' . e($view) . '">'
+         . '<input type="hidden" name="parent" value="' . e($id) . '">'
+         . '<button type="submit" class="subtask-btn" title="Add subtask"'
+         . ' aria-label="Add subtask">' . plus_icon_svg(11) . '</button></form>';
 }
 
 /** Echo a <ul> of reminder rows (nothing if empty). Data attributes drive sort + drag. */
@@ -217,7 +238,7 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $when ?>"><?= e($r['due']) ?></span>
           <?php endif; ?>
-          <?= subtask_toggle(min(1, (int) ($r['indent'] ?? 0))) ?>
+          <?= subtask_button(min(1, (int) ($r['indent'] ?? 0)), $csrf, $view, (string) $r['id']) ?>
           <form method="post" action="" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
@@ -623,6 +644,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $stay = '&edit=1';   // deleting is an edit-mode action; stay in it
             break;
 
+        case 'add_subtask':
+            // A blank subtask directly under its parent, in the parent's folder and
+            // section, opened for typing on the way back (?focus=). It's inserted into
+            // the *stored* order rather than prepended like an ordinary add, because
+            // sort_by_date() carries a block's subtasks along with it — being the row
+            // after its parent is what makes it that parent's child.
+            $pid = (string) ($_POST['parent'] ?? '');
+            foreach ($list as $i => $it) {
+                if (is_section($it) || ($it['id'] ?? '') !== $pid) { continue; }
+                $new = [
+                    'id'      => bin2hex(random_bytes(6)),
+                    'text'    => '',
+                    'due'     => null,
+                    'time'    => null,
+                    'done'    => false,
+                    'folder'  => $it['folder'] ?? folder_fallback('reminders'),
+                    'section' => $it['section'] ?? '',
+                    'indent'  => 1,
+                    'created' => time(),
+                ];
+                // Past the parent and past any subtasks it already has, so a second + on
+                // the same row adds a sibling at the end rather than jumping the queue.
+                $at = $i + 1;
+                while ($at < count($list) && !is_section($list[$at])
+                       && (int) ($list[$at]['indent'] ?? 0) > 0) { $at++; }
+                array_splice($list, $at, 0, [$new]);
+                $stay = '&edit=1&focus=' . $new['id'];
+                break;
+            }
+            break;
+
         case 'clear_done':
             // Clear completed within the folder being viewed (or all when viewing All).
             $list = array_filter($list, function ($r) use ($viewFolder) {
@@ -959,16 +1011,23 @@ $sectionInput =
     /* The right-hand tail of a section header (just the delete now), pushed to the edge. */
     .section-head .sec-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 0.75rem; }
     .section-head .sec-tail form { margin-left: 0; }
-    /* The "+ subtask" toggle: edit mode only, just left of a row's delete ×. It lights up
-       in the accent when the row is already a subtask, so it reads as on/off. */
+    /* The subtask control: edit mode only, just left of a row's delete ×. A "+" on a task
+       (adds a child), a "‹" on a subtask (lifts it back out) — one slot, same box either
+       way, so a row never changes width when it gains or loses its indent. */
     .subtask-btn {
       display: none; flex: 0 0 auto; align-items: center; justify-content: center;
       width: 30px; height: 30px; padding: 0; background: none; border: 1px solid #444;
       color: #999; border-radius: 6px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
+    .subtask-btn svg { display: block; }
+    /* The form is only a wrapper for the POST — it must not take a slot of its own. */
+    .subtask-btn-form { display: none; flex: 0 0 auto; }
+    body.editing .subtask-btn-form { display: inline-flex; }
     body.editing .subtask-btn { display: inline-flex; }
     .subtask-btn:hover { border-color: #888; color: #ccc; }
-    .subtask-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    /* The lift-out "‹" reads as the mirror of the section indent controls, so it stays
+       the quieter of the two — adding is the common act, undoing is not. */
+    .subtask-btn.out { font-size: 1.15rem; }
 
     /* A partner's shared folder shown read-only in my "All": their rows carry no controls,
        just a static tick where the check would be. The badge marks whose it is. */
@@ -1426,7 +1485,9 @@ $sectionInput =
   };
   const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } tapTextLi = null; };
 
-  function startInlineEdit(li) {
+  // isNew marks a row that was created empty (the subtask "+"): leaving it empty means
+  // you changed your mind, so it deletes itself rather than leaving a blank reminder.
+  function startInlineEdit(li, isNew) {
     const span = li.querySelector(':scope > .text'); if (!span || li.querySelector('input.textedit')) return;
     const id = li.dataset.id, cur = span.textContent;
     const inp = document.createElement('input');
@@ -1437,6 +1498,13 @@ $sectionInput =
     const commit = (save) => {
       if (done) return; done = true;
       const val = inp.value.trim();
+      if (isNew && !val) {
+        li.remove();
+        const gone = new URLSearchParams({ csrf: CSRF, action: 'delete', view: VIEW, id, confirm: '1' });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: gone })
+          .catch(() => location.reload());
+        return;
+      }
       const ns = document.createElement('span'); ns.className = 'text';
       ns.textContent = (save && val) ? val : cur;
       inp.replaceWith(ns);
@@ -1654,18 +1722,30 @@ $sectionInput =
     setEdit(false);
   });
 
-  // ----- Make a reminder a subtask of the one above it, or lift it back (edit mode) -----
-  // One level only: the + flips the row between task (0) and subtask (1).
+  // ----- Lift a subtask back out to being a task of its own (edit mode) -----
+  // Adding one goes the other way, through an ordinary POST on the row's "+" form, since
+  // the new row has to come back from the server before there's anything to type into.
   document.addEventListener('click', (e) => {
-    const b = e.target.closest('.subtask-btn'); if (!b) return;
+    const b = e.target.closest('.subtask-btn.out'); if (!b) return;
     e.preventDefault(); e.stopPropagation();
     const host = b.closest('li[data-id]'); if (!host) return;
-    const ind = (parseInt(host.style.getPropertyValue('--ind'), 10) || 0) > 0 ? 0 : 1;
-    host.style.setProperty('--ind', ind);
-    b.classList.toggle('on', ind > 0);
-    const body = new URLSearchParams({ csrf: CSRF, action: 'set_indent', view: VIEW, id: host.dataset.id, indent: ind });
-    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+    host.style.setProperty('--ind', 0);
+    const body = new URLSearchParams({ csrf: CSRF, action: 'set_indent', view: VIEW, id: host.dataset.id, indent: 0 });
+    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body })
+      .then(() => location.reload()).catch(() => location.reload());
   });
+
+  // A new subtask comes back as ?focus=<id>: find that row and open it to type in, so
+  // pressing + reads as "a new line appeared here" rather than "the page reloaded".
+  (function () {
+    const q = new URLSearchParams(location.search), fid = q.get('focus');
+    if (!fid) { return; }
+    const u = new URL(location.href); u.searchParams.delete('focus'); history.replaceState(null, '', u);
+    const li = document.querySelector('li[data-id="' + fid + '"]');
+    if (!li) { return; }
+    li.scrollIntoView({ block: 'center', behavior: 'auto' });
+    startInlineEdit(li, true);
+  })();
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
