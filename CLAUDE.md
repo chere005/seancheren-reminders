@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 php -S 127.0.0.1:8787 -t public          # local server; apps at /reminders/, /calendar/, …
-find public lib -name '*.php' -exec php -l {} \;   # lint everything (no test suite exists)
+php tools/test.php                       # the test run — see TESTING.md
+find public lib tools -name '*.php' -exec php -l {} \;   # lint everything
 ./deploy.sh --dry-run                    # preview the deploy
 ./deploy.sh                              # lint, then rsync to the live site
 php tools/seed-example.php --force       # (re)build the "example" demo account
@@ -108,6 +109,7 @@ The Calendar's day-panel buttons are the reference for button sizing across the 
 ## Working here
 
 - Commit granularly and deploy promptly; committing straight to `main` is fine.
+- **Change a feature, change its test in the same commit; add a feature, add a test with it; fix a bug, add the case that would have caught it.** `php tools/test.php` is the run (about 15 seconds, no framework: it seeds a scratch data dir with the real seeders, boots `php -S` against it and drives the real pages over real HTTP) and `TESTING.md` is the map of what it covers and what still has to be checked by eye. That map is part of the same bargain — keep it in step, or a thing ends up in neither list and nobody is looking at it. Note what the harness *can't* see: it runs no JavaScript, so every gesture, drag and long-press is in the by-eye column, and that is where nearly every bug that has actually reached a phone has come from.
 - Before every deploy, re-check that each `+`/icon button you touched is visually centred (`display: inline-flex; align-items: center; justify-content: center`) — see the icon-button rule under UI conventions.
 - Match the existing style: procedural PHP, short helper functions with one-line docblocks, `e()` for escaping, inline `<style>`/`<script>` in the page.
 - To exercise a page without credentials, drive it from the CLI: start a session, set `$_SESSION['auth']`/`$_SESSION['user']`, set `$_SERVER['REQUEST_URI']`, then `require` the page. That renders (or POSTs to) it exactly as the server would, and it's the fastest way to check a change end-to-end.

@@ -71,6 +71,16 @@ craft that sits under those rules.
 
 ## Before you finish
 
+- Run the tests: `php tools/test.php`. Anything you changed the behaviour of needs its
+  case changed in the same commit; anything you added needs one adding. If you fixed a
+  bug, write the case that would have caught it *before* you fix it, and watch it fail.
+  `TESTING.md` is the map of what the run covers and what only eyes can check — keep it
+  in step, since a feature in neither list has nobody looking at it.
+- Remember what a green run does **not** cover here: the harness drives real HTTP but
+  runs no JavaScript, so gestures, drags, long-presses and anything that only misbehaves
+  inside an installed PWA are checked by hand. That is where most real bugs in this repo
+  have come from — a click that bubbled somewhere it shouldn't, a handler on `document`
+  that fired first, a margin that was symmetric on one axis only.
 - Lint: `find public lib -name '*.php' -exec php -l {} \;` — and add `tools` to that
   list when you've touched anything in it. `deploy.sh` only lints what it deploys
   (`public` and `lib`), so a broken script in `tools/` sails past the deploy and only
