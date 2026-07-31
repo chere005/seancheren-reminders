@@ -310,8 +310,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // so adding, renaming or deleting one only ever touches the folder it's in.
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        // A section lands in the folder you're viewing (the default when you're on All).
-        $secFolder = $viewFolder === 'All' ? $defFolder : $viewFolder;
+        // A section lands in the folder whose "+" was used (each folder head carries one),
+        // falling back to the folder you're viewing, or the default when you're on All.
+        $postFolder = (string) ($_POST['folder'] ?? '');
+        $secFolder  = ($postFolder !== '' && in_array($postFolder, $myFolders, true))
+            ? $postFolder
+            : ($viewFolder === 'All' ? $defFolder : $viewFolder);
         // "Reminders" is the catch-all every folder already ends with, so a section
         // can't be called that — there'd be two of them under one heading.
         if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0) {
@@ -781,6 +785,16 @@ $sectionInput =
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
+    /* The "+" that adds a section to this folder — edit mode only, right of its name. */
+    .fsec-add {
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
+      color: var(--accent); border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; display: none;
+      align-items: center; justify-content: center; padding: 0;
+    }
+    .fsec-add:hover { border-color: var(--accent); background: var(--accent-soft); }
+    body.editing .fsec-add { display: inline-flex; }
+    .fsec-form.newsection { margin: 0; }
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
@@ -977,6 +991,21 @@ $sectionInput =
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <div class="folder-label"><?= e($sfolder) ?></div>
+            <?php // Edit-mode only: a "+" to the right of the folder name that reveals an
+                  // inline section-name field (below), so a folder with no sections of its
+                  // own — like the permanent Reminders/Calendar — can get its first. ?>
+            <?php if (!$isShared): ?>
+              <button type="button" class="fsec-add" data-folder="<?= e($sfolder) ?>" title="Add section">+</button>
+              <form method="post" action="" class="fsec-form newsection" hidden
+                    onsubmit="return this.name.value.trim()!==''">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="action" value="add_section">
+                <input type="hidden" name="view" value="<?= e($view) ?>">
+                <input type="hidden" name="folder" value="<?= e($sfolder) ?>">
+                <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
+                <button type="submit" class="plus" title="Add section">+</button>
+              </form>
+            <?php endif; ?>
             <?php // The folder's own colour, the same dot its entry wears in the picker,
                   // then a short rule trailing off to the right edge on the same line. ?>
             <span class="fdot" style="background:<?= e($folderDotColor($sfolder)) ?>" aria-hidden="true"></span>
@@ -1098,6 +1127,30 @@ $sectionInput =
     secInput.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeSec(); } });
     secInput.addEventListener('blur', () => { if (secInput.value.trim() === '') { closeSec(); } });
   }
+
+  // Each folder head carries its own "+ Section" (edit mode): it reveals an inline name
+  // field for that folder; typing and Enter/blur adds the section there, an empty field
+  // just closes again — same swap as the toolbar's + Section, scoped to one folder.
+  const fsecClose = (form) => {
+    if (!form) { return; }
+    const btn = form.closest('.folder-head')?.querySelector('.fsec-add');
+    form.hidden = true; form.querySelector('input[type=text]').value = ''; if (btn) { btn.hidden = false; }
+  };
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.fsec-add'); if (!btn) { return; }
+    e.preventDefault(); e.stopPropagation();
+    const form = btn.closest('.folder-head')?.querySelector('.fsec-form'); if (!form) { return; }
+    btn.hidden = true; form.hidden = false; form.querySelector('input[type=text]').focus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') { return; }
+    const inp = e.target.closest && e.target.closest('.fsec-form input[type=text]');
+    if (inp) { e.preventDefault(); fsecClose(inp.closest('.fsec-form')); }
+  });
+  document.addEventListener('blur', (e) => {
+    const inp = e.target.closest && e.target.closest('.fsec-form input[type=text]');
+    if (inp && inp.value.trim() === '') { fsecClose(inp.closest('.fsec-form')); }
+  }, true);
   doneBtn.addEventListener('click', () => {
     if (document.body.classList.contains('editing')) {
       editShowDone = !editShowDone;                        // transient toggle while editing
