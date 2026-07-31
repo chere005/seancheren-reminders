@@ -339,11 +339,34 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         }
     }
     $boxes = $csrf !== '';
+    // In the "All" view the button's dot becomes a little pie of the visible folders'
+    // colours (own folders not switched off), so it reflects what's actually on screen.
+    $pieColors = [];
+    if ($cur === '') {
+        foreach ($groups as $g) {
+            foreach ($g['options'] as [$val, $label, $col]) {
+                if (strncmp($val, '@', 1) !== 0 && !in_array($val, $hidden, true)) { $pieColors[] = $col; }
+            }
+        }
+    }
+    $pieCss = '';
+    if (count($pieColors) > 1) {
+        $n = count($pieColors);
+        $stops = [];
+        foreach ($pieColors as $i => $c) {
+            $stops[] = $e($c) . ' ' . round($i * 100 / $n, 2) . '% ' . round(($i + 1) * 100 / $n, 2) . '%';
+        }
+        $pieCss = 'conic-gradient(' . implode(',', $stops) . ')';
+    }
     ?>
     <div class="folderpick">
       <button type="button" class="folderpick-btn" id="folderSelBtn" aria-haspopup="listbox"
               aria-expanded="false" title="<?= $e($activeLabel) ?>" aria-label="<?= $e($activeLabel) ?>">
-        <span class="fdot<?= $cur === '' ? ' all' : '' ?>"<?= $cur === '' ? '' : ' style="background:' . $e($cur) . '"' ?>></span>
+        <?php if ($pieCss !== ''): ?>
+          <span class="fdot" style="background:<?= $pieCss ?>"></span>
+        <?php else: ?>
+          <span class="fdot<?= $cur === '' ? ' all' : '' ?>"<?= $cur === '' ? '' : ' style="background:' . $e($cur) . '"' ?>></span>
+        <?php endif; ?>
       </button>
       <div class="folderpick-menu" id="folderSelMenu" role="listbox" hidden>
         <a class="folderpick-opt" href="?folder=All">
