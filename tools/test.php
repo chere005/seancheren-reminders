@@ -516,6 +516,19 @@ t('the list renders undated first, then oldest date', function () {
     eq('', $m[1][0], 'the first row of the first group is undated');
 });
 
+t('Copy as Markdown shows only for the sean account', function () {
+    // A regular account never sees it…
+    $jar = login('example', 'examplepassword');
+    ok(strpos(req('GET', '/reminders/', [], $jar)['body'], 'id="mdShareBtn"') === false,
+       'example does not get the Copy as Markdown button');
+    // …but Sean's does. (sean is a real config account, so the passwords.json override lets
+    // us log in without knowing the machine's own password — same trick as aki.)
+    ensure_account('sean', 'seanpass');
+    $jar2 = login('sean', 'seanpass');
+    has('id="mdShareBtn"', req('GET', '/reminders/', [], $jar2)['body'],
+        "sean's account keeps the Copy as Markdown button");
+});
+
 // ---------------------------------------------------------------- 5. folders
 area('folders');
 
