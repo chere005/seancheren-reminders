@@ -383,7 +383,14 @@ foreach ($habitItems as $h) {
     /* What is being dragged dims; where it will land is a single accent line, because
        shuffling a CSS grid live made it impossible to see what you were about to get. */
     .hname.hdragging, .hsection.hdragging { opacity: 0.4; }
-    .hdrop { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+    /* The same zero-height accent line the other apps drop against, made a grid child of
+       its own so it spans every column and sits *between* two rows instead of taking a
+       cell. Zero height keeps the grid from jumping as it moves. */
+    .grid .drop-line {
+      grid-column: 1 / -1; height: 0; margin: 0; padding: 0; border: none;
+      border-top: 2px solid var(--accent); box-shadow: 0 0 6px var(--accent-soft);
+      pointer-events: none;
+    }
     /* The section's colour dot, left of its name — the same swatch-opens-a-palette
        control the folder manager uses, shrunk to the size of the folder heading's dot.
        It's the same element in and out of edit mode, so turning editing on shifts
@@ -764,30 +771,51 @@ foreach ($habitItems as $h) {
   wireAdd('newSecBtn', 'newSecForm');
 
   // ----- Drag to reorder habits and sections (edit mode) -----
-  // The grid is one flat CSS grid: a habit is a name cell plus its day cells, and a
-  // section spans the full width. Live-shuffling that is a mess, so nothing moves until
-  // the drop — the target is outlined, and on release the new order is posted and the
-  // page reloads to draw it. Same bargain the Reminders drag makes.
+  // Same bargain as the Reminders drag: nothing moves until the drop, and the only
+  // feedback is one line saying where it will land. The grid is flat — a habit is a name
+  // cell plus its day cells, a section spans the full width — so the line is a grid child
+  // of its own spanning every column, sitting *between* two rows rather than on one.
+  //
+  // A section travels with the habits under it, the way a level-0 block does in
+  // Reminders: moving the header alone would silently re-parent them, since a habit
+  // belongs to whichever header last preceded it.
   (function () {
     const grid = document.getElementById('wGrid');
     if (!grid) { return; }
-    let drag = null, over = null, pid = null;
+    let drag = null, line = null, pid = null;
 
-    const rowsNow = () => [...grid.querySelectorAll('.hname[data-id]')];
-    const secsNow = () => [...grid.querySelectorAll('.hsection[data-section]')];
-    const clearOver = () => { if (over) { over.classList.remove('hdrop'); over = null; } };
+    const HOSTS = '.hname[data-id], .hsection[data-section]';
+    const seq   = () => [...grid.querySelectorAll(HOSTS)];
+    const isSec = el => el.classList.contains('hsection');
 
-    // Where a thing sits in the single top-to-bottom sequence of the grid.
-    const seq = () => [...grid.querySelectorAll('.hname[data-id], .hsection[data-section]')];
+    // A section's block is the header and every habit under it, up to the next header.
+    const blockOf = (host) => {
+      const list = seq(), i = list.indexOf(host);
+      if (!isSec(host)) { return [host]; }
+      const out = [host];
+      for (let k = i + 1; k < list.length && !isSec(list[k]); k++) { out.push(list[k]); }
+      return out;
+    };
+
+    const clearLine = () => { if (line) { line.remove(); line = null; } };
+    // Put the line immediately before `host`, or at the very end when host is null.
+    const putLine = (host) => {
+      if (!line) {
+        line = document.createElement('div');
+        line.className = 'drop-line';
+        line.setAttribute('aria-hidden', 'true');
+      }
+      if (host) { grid.insertBefore(line, host); } else { grid.appendChild(line); }
+    };
 
     grid.addEventListener('pointerdown', (e) => {
       if (!document.body.classList.contains('editing')) { return; }
       if (!e.target.closest('.hdrag')) { return; }
-      const host = e.target.closest('.hname[data-id], .hsection[data-section]');
+      const host = e.target.closest(HOSTS);
       if (!host) { return; }
       e.preventDefault();
       drag = host; pid = e.pointerId;
-      host.classList.add('hdragging');
+      blockOf(host).forEach(el => el.classList.add('hdragging'));
       try { host.setPointerCapture(pid); } catch (_) {}
       if (navigator.vibrate) { navigator.vibrate(12); }
     });
@@ -796,31 +824,62 @@ foreach ($habitItems as $h) {
       if (!drag) { return; }
       e.preventDefault();
       const under = document.elementFromPoint(e.clientX, e.clientY);
-      const host  = under && under.closest('.hname[data-id], .hsection[data-section]');
-      if (!host || host === drag) { clearOver(); return; }
-      // A section only ever lands among sections; a habit lands anywhere.
-      if (drag.classList.contains('hsection') && !host.classList.contains('hsection')) { return; }
-      if (host !== over) { clearOver(); over = host; over.classList.add('hdrop'); }
+      const host  = under && under.closest(HOSTS);
+      const list  = seq();
+      if (!host) { return; }
+
+      // Which gap the pointer is nearest: before this row, or after it.
+      const r      = host.getBoundingClientRect();
+      const after  = e.clientY > r.top + r.height / 2;
+      let idx = list.indexOf(host) + (after ? 1 : 0);
+
+      // A section can only land where another section starts, or at the very end —
+      // anywhere else and it would swallow the rows it landed among.
+      if (isSec(drag)) {
+        const stops = [];
+        list.forEach((el, i) => { if (isSec(el)) { stops.push(i); } });
+        stops.push(list.length);
+        idx = stops.reduce((best, v) => Math.abs(v - idx) < Math.abs(best - idx) ? v : best, stops[0]);
+      }
+
+      // Never draw the line on either edge of what's being dragged — that's a no-op move
+      // and the line sitting there reads as though something will happen.
+      const block = blockOf(drag);
+      const bFrom = list.indexOf(block[0]), bTo = bFrom + block.length;
+      if (idx >= bFrom && idx <= bTo) { clearLine(); return; }
+
+      putLine(idx < list.length ? list[idx] : null);
     }, { passive: false });
 
     const drop = () => {
       if (!drag) { return; }
-      const moved = drag, target = over;
-      drag.classList.remove('hdragging'); clearOver(); drag = null;
-      if (!target) { return; }
+      const moved = drag;
+      const list  = seq();
+      // Read the line's place *before* taking it out, since it is a child of the grid.
+      let to = null;
+      if (line) {
+        const after = [...grid.children].slice([...grid.children].indexOf(line) + 1);
+        const next  = after.find(el => el.matches(HOSTS));
+        to = next ? list.indexOf(next) : list.length;
+      }
+      blockOf(moved).forEach(el => el.classList.remove('hdragging'));
+      clearLine();
+      drag = null;
+      if (to === null) { return; }
 
-      const list = seq();
-      const from = list.indexOf(moved), to = list.indexOf(target);
-      if (from < 0 || to < 0) { return; }
-      list.splice(from, 1);
-      list.splice(to > from ? to : to, 0, moved);      // land where the outline was
+      const block = blockOf(moved);
+      const from  = list.indexOf(block[0]);
+      const rest  = list.filter(el => !block.includes(el));
+      // Landing after the block means the removal has shifted everything left.
+      const at    = to > from ? to - block.length : to;
+      rest.splice(at, 0, ...block);
 
-      // Read the intended order straight back out of that sequence: a section opens a
-      // new group, and every habit after it belongs to it until the next one.
+      // Read the intended grouping back out: a section opens a group, and every habit
+      // after it belongs to that group until the next one.
       const order = [], sections = [];
       let cur = '';
-      list.forEach(el => {
-        if (el.classList.contains('hsection')) { cur = el.dataset.section; sections.push(cur); }
+      rest.forEach(el => {
+        if (isSec(el)) { cur = el.dataset.section; sections.push(cur); }
         else { order.push({ id: el.dataset.id, section: cur }); }
       });
       const body = new URLSearchParams({ csrf: CSRF, action: 'reorder',
@@ -830,7 +889,7 @@ foreach ($habitItems as $h) {
     };
     document.addEventListener('pointerup', drop);
     document.addEventListener('pointercancel', () => {
-      if (drag) { drag.classList.remove('hdragging'); clearOver(); drag = null; }
+      if (drag) { blockOf(drag).forEach(el => el.classList.remove('hdragging')); clearLine(); drag = null; }
     });
   })();
 
