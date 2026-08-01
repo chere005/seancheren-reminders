@@ -51,6 +51,16 @@ struct CalendarView: View {
                     Menu {
                         Toggle("Week view", systemImage: "calendar.day.timeline.left", isOn: $weekMode)
                         Button("Calendars…", systemImage: "calendar") { managing = true }
+                        // Which reminder folders reach the calendar (the web's rf_mode) — a
+                        // folder can show in Reminders yet be switched off here.
+                        Menu("Reminder folders") {
+                            ForEach(store.data.folderList(.reminder)) { f in
+                                Button { store.toggleCalFolder(f.id) } label: {
+                                    Label(f.name, systemImage: store.calFolderShown(f.id)
+                                          ? "checkmark.circle.fill" : "circle")
+                                }
+                            }
+                        }
                         Button("Today", systemImage: "arrow.uturn.backward") { goToday() }
                     } label: {
                         Image(systemName: "ellipsis.circle")
