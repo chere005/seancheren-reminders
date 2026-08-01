@@ -1041,15 +1041,15 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
-    /* The "+" that adds a section to this folder — edit mode only, right of its name. */
+    /* The "+" that adds a section to this folder — right of its name, always shown so a
+       section can be added without first entering edit mode. */
     .fsec-add {
       flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
-      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; display: none;
-      align-items: center; justify-content: center; padding: 0;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .fsec-add:hover { border-color: #888; color: #fff; }
-    body.editing .fsec-add { display: inline-flex; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Reminders' two permanent
@@ -1121,8 +1121,10 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     ul.rlist { display: flex; flex-direction: column; }
     li.done { order: 1; }   /* when shown, completed items sink below the open ones */
     .text { flex: 1; font-size: 1rem; word-break: break-word; }
-    /* Edit mode: no accidental text selection while holding to drag. */
-    body.editing li, body.editing .section-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    /* Holding a row or heading to enter edit mode must not paint the text as a selection —
+       and the highlight starts during the hold, before body.editing is set, so this stays
+       ungated. The edit field (.textedit) opts back in, so you can still select while typing. */
+    li, .section-head, .folder-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     body.editing .text { cursor: text; }
     .textedit {
       flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: #222; border: 1px solid #4a4a4a;

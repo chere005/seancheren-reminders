@@ -938,7 +938,7 @@ t('the manager reorders sections without disturbing the habits', function () {
     eq($before, $habitNames(), 'every habit is still there');
 });
 
-t('the last section is undeletable — at least one always stays', function () {
+t('a fresh habits app starts with a default section; the last one is undeletable', function () {
     // A dedicated throwaway account, so depleting its sections can't disturb example's.
     ensure_account('hsecmgr', 'hsecmgrpass');
     $jar = login('hsecmgr', 'hsecmgrpass');
@@ -949,8 +949,8 @@ t('the last section is undeletable — at least one always stays', function () {
     $del = fn($id) => req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'),
         'action' => 'delete_section', 'id' => $id, 'confirm' => '1', 'mgr' => '1'], $jar);
 
-    $add('Solo');
-    eq(1, count($secs()), 'one section exists');
+    req('GET', '/habits/', [], $jar);   // first open creates the default section (persisted)
+    eq(1, count($secs()), 'a fresh account opens with one default section');
     $del($secs()[0]['id']);
     eq(1, count($secs()), 'the last section refuses to be deleted');
     // With two, either can go — the guard only pins the final one.
@@ -1415,30 +1415,33 @@ t("a habit's row carries its section's colour", function () {
     ok(count($used) > 1, 'two sections should not share one colour by default');
 });
 
-t('a + Habit closes every section, and sections are managed from the dropdown', function () {
+t('each section header carries its own + Habit, shown out of edit mode', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/habits/?v=week', [], $jar)['body'];
-    $adds = preg_match_all('/class="habitadd"/', $b);
+    $adds = preg_match_all('/class="hsec-add addhabit"/', $b);
     $secs = preg_match_all('/<div class="hsection"/', $b);
-    eq($secs + 1, $adds, 'one per section, plus one closing the ungrouped run');
-    // Each posts into its own section, so a habit lands where you were looking.
+    ok($secs >= 1, 'there is at least one section');
+    eq($secs, $adds, 'one + Habit per section header, and no ungrouped run');
+    // Each + targets a real section, never the empty/ungrouped value.
     preg_match_all('/name="section" value="([^"]*)"/', $b, $m);
-    ok(in_array('', $m[1], true), 'the ungrouped one adds with no section');
-    eq(count(array_unique($m[1])), count($m[1]), 'and no two target the same place');
-    // The "+ Section" button and its footer are gone — sections are added, reordered and
-    // recoloured from the "Manage sections" window in the filter dropdown instead.
+    ok(!in_array('', $m[1], true), 'no + Habit adds into "ungrouped"');
+    eq(count(array_unique($m[1])), count($m[1]), 'and no two target the same section');
+    // The + shows without edit mode, and the old "+ Section" button is gone.
+    ok(strpos($b, '.hsection .hsec-add') !== false && strpos($b, 'body.editing .hsec-add') === false,
+       'the + is not gated on edit mode');
     eq(0, substr_count($b, 'id="newSecBtn"'), 'the + Section button is gone');
-    eq(0, substr_count($b, 'class="secfoot'), 'and so is its footer');
     has('id="habitSecMgr"', $b, 'Manage sections rides in the filter dropdown instead');
 });
 
-t('an empty habits list still offers a way to start', function () {
+t('a fresh habits app starts with a default section, ready to add to', function () {
     $jar = login('freshy', 'freshpassword');
     $b = req('GET', '/habits/?v=week', [], $jar)['body'];
-    has('empty-list', $b, 'the grid says it is empty');
-    ok(preg_match('/body:not\(\.editing\) \.grid\.empty-list \.habitadd/', $b) === 1,
-       '+ Habit shows without edit mode — there is nothing to long-press to get into it');
-    has('id="habitSecMgr"', $b, 'and a first section starts from Manage sections in the dropdown');
+    ok(preg_match_all('/<div class="hsection"/', $b) >= 1, 'a default section is there from the start');
+    has('class="hsec-add addhabit"', $b, 'with a + to add a habit to it, shown out of edit mode');
+    // And it really persisted, so the section keeps a stable id across visits.
+    ok(count(array_filter(stored('habits', 'freshy'), fn($x) => ($x['type'] ?? '') === 'section')) >= 1,
+       'the default section was written to disk');
+    has('id="habitSecMgr"', $b, 'sections are managed from the dropdown');
 });
 
 t('wiring: tapping away leaves edit mode in habits', function () {
@@ -1931,20 +1934,31 @@ t('the week grid pages whole weeks', function () {
     eq(7, (int) round((strtotime($seen[0]) - strtotime($seen[-1])) / 86400), 'by a whole week');
 });
 
-t('deleting a section leaves its habits behind, ungrouped', function () {
+t('deleting a section keeps its habits, moved into a remaining section', function () {
     $jar = login('example', 'examplepassword');
-    $sec = null;
-    foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section') { $sec = $x; break; } }
-    $under = array_values(array_filter(stored('habits', 'example'),
-        fn($x) => ($x['type'] ?? '') !== 'section' && ($x['section'] ?? '') === $sec['id']));
+    $onlySecs = fn() => array_values(array_filter(stored('habits', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section'));
+    ok(count($onlySecs()) >= 2, 'at least two sections, so one can be deleted');
+    // A section that actually has habits under it, so we can watch where they go.
+    $target = null; $under = [];
+    foreach ($onlySecs() as $s) {
+        $u = array_values(array_filter(stored('habits', 'example'),
+            fn($x) => ($x['type'] ?? '') !== 'section' && ($x['section'] ?? '') === $s['id']));
+        if ($u) { $target = $s; $under = $u; break; }
+    }
+    ok($target !== null, 'found a section with habits');
     $before = count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section'));
     req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
-        'id' => $sec['id'], 'confirm' => '1'], $jar);
-    eq($before, count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section')),
-       'no habit went with it');
+        'id' => $target['id'], 'confirm' => '1'], $jar);
+    $after   = stored('habits', 'example');
+    $secIds  = array_map(fn($s) => (string) $s['id'], array_filter($after, fn($x) => ($x['type'] ?? '') === 'section'));
+    eq($before, count(array_filter($after, fn($x) => ($x['type'] ?? '') !== 'section')), 'no habit was destroyed');
+    ok(!in_array($target['id'], $secIds, true), 'the section itself is gone');
     foreach ($under as $h) {
-        foreach (stored('habits', 'example') as $x) {
-            if (($x['id'] ?? '') === $h['id']) { eq('', (string) ($x['section'] ?? ''), 'it is ungrouped now'); }
+        foreach ($after as $x) {
+            if (($x['id'] ?? '') === $h['id']) {
+                ok(in_array((string) ($x['section'] ?? ''), $secIds, true), 'its habit moved into a remaining section');
+            }
         }
     }
 });
@@ -1981,19 +1995,23 @@ t('the month view\'s section filter has the suite\'s three gestures', function (
 });
 
 t('the filter changes the pies and nothing else', function () {
-    $jar = login('example', 'examplepassword');
-    $secs = array_values(array_filter(stored('habits', 'example'), fn($h) => ($h['type'] ?? '') === 'section'));
-    $one  = (string) $secs[0]['id'];
+    $jar  = login('example', 'examplepassword');
     $csrf = csrf($jar, '/habits/');
+    // Guarantee two sections that each hold a habit, so filtering to one is strictly fewer
+    // than counting them all (prior tests may have consolidated the seed's distribution).
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'add_section', 'name' => 'FilterSecB', 'mgr' => '1'], $jar);
+    $secB = null;
+    foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'FilterSecB') { $secB = $x; } }
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'add_habit', 'name' => 'FilterHabitB', 'section' => $secB['id']], $jar);
     req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
 
     $before = req('GET', '/habits/?v=month', [], $jar)['body'];
     preg_match('/of (\d+) on \d{4}/', $before, $m);
     $wholeTotal = (int) ($m[1] ?? 0);
-    ok($wholeTotal > 0, 'the month counts every habit to begin with');
+    ok($wholeTotal > 1, 'the month counts every habit to begin with');
     has('id="msecBtn"', $before, 'and the picker sits by the Week/Month switch');
 
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => $one], $jar, true);
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => (string) $secB['id']], $jar, true);
     $after = req('GET', '/habits/?v=month', [], $jar)['body'];
     preg_match('/of (\d+) on \d{4}/', $after, $m2);
     ok((int) ($m2[1] ?? 0) < $wholeTotal, 'filtering to one section counts fewer habits');

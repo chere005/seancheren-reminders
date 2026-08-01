@@ -804,15 +804,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
-    /* The "+" that adds a section to this folder — edit mode only, right of its name. */
+    /* The "+" that adds a section to this folder — right of its name, always shown so a
+       section can be added without first entering edit mode. */
     .fsec-add {
       flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
-      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; display: none;
-      align-items: center; justify-content: center; padding: 0;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .fsec-add:hover { border-color: #888; color: #fff; }
-    body.editing .fsec-add { display: inline-flex; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Every section — named
@@ -884,9 +884,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     body.editing .sec-handle { display: inline-flex; }
     body.editing .section-head .sec-collapse { display: none; }   /* handle takes its slot */
-    /* A section header is a drag target in edit mode: don't let a hold select its text or
-       fire the iOS callout, so a long-press picks the section up cleanly. */
-    body.editing .section-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    /* Holding a heading or row to enter edit mode must not paint the text as a selection —
+       the highlight starts during the hold, before body.editing is set, so this stays
+       ungated. Real inputs (the section rename field) opt back in below. */
+    .section-head, .folder-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .section-head input, #notes-root li input { -webkit-user-select: text; user-select: text; }
     .sec-handle.blank { cursor: default; }
     .sec-handle:active { cursor: grabbing; color: var(--accent); }
     .section-group.dragging { opacity: 0.45; }
@@ -901,8 +903,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     ul.nlist > li.drop-line { display: block; }
     body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
-    /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
-    body.editing #notes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    #notes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;

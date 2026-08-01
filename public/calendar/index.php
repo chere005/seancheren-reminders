@@ -858,6 +858,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem;
       background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: default;
+      /* Holding an item to enter edit mode must not paint its text as a selection. */
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
     }
     body.editing .dp-item { cursor: pointer; }
     body.editing .dp-item:hover { border-color: #444; }
