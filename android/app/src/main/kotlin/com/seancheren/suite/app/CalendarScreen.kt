@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,6 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.seancheren.suite.core.GroupRef
+import com.seancheren.suite.core.ItemKind
+import com.seancheren.suite.core.Reminder
+import com.seancheren.suite.core.parseWhen
 import com.seancheren.suite.core.timeLabel
 import java.time.LocalDate
 import java.time.YearMonth
@@ -45,6 +51,9 @@ fun CalendarScreen(vm: SuiteViewModel) {
     val today = LocalDate.now()
     var month by remember { mutableStateOf(today.withDayOfMonth(1)) }
     var selected by remember { mutableStateOf(today) }
+    var adding by remember { mutableStateOf(false) }
+    var addText by remember { mutableStateOf("") }
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
 
     // Read rev so the grid and panel refresh after any change.
     val revKey = vm.rev
@@ -115,35 +124,65 @@ fun CalendarScreen(vm: SuiteViewModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            Text(
-                selected.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.US)),
-                color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.size(8.dp))
-
             val events = store.events(selected)
             val reminders = store.reminders(selected, today)
             val notes = store.notes(selected)
 
+            // Date, with the add button to its right.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    selected.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.US)),
+                    color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    if (adding) "Cancel" else "+ Add",
+                    color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable { adding = !adding; addText = "" }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            if (adding) {
+                Spacer(Modifier.size(6.dp))
+                AddField(addText, { addText = it }, {
+                    val p = parseWhen(addText)
+                    if (p.text.isNotBlank()) {
+                        store.add(
+                            Reminder(
+                                text = p.text, due = p.date ?: selected, minutes = p.minutes,
+                                folder = store.target(ItemKind.reminder, null), group = GroupRef.Inbox,
+                            )
+                        )
+                    }
+                    addText = ""; adding = false
+                }, "Add to this day…")
+            }
+            Spacer(Modifier.size(8.dp))
+
             if (events.isEmpty() && reminders.isEmpty() && notes.isEmpty()) {
                 Text("Nothing on.", color = Muted, fontSize = 14.sp)
             }
-            for (e in events) {
-                PanelRow(dot = KEvent, text = e.text, meta = e.minutes?.let { timeLabel(it) })
+
+            DayGroup("Events", events.size, collapsed["Events"] == true, { collapsed["Events"] = collapsed["Events"] != true }) {
+                for (e in events) PanelRow(dot = KEvent, text = e.text, meta = e.minutes?.let { timeLabel(it) })
             }
-            for (r in reminders) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(20.dp).clip(CircleShape)
-                            .border(2.dp, KReminder, CircleShape)
-                            .clickable { store.toggle(r) },
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    Text(r.text, color = TextColor, fontSize = 15.sp)
+            DayGroup("Reminders", reminders.size, collapsed["Reminders"] == true, { collapsed["Reminders"] = collapsed["Reminders"] != true }) {
+                for (r in reminders) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(20.dp).clip(CircleShape)
+                                .border(2.dp, KReminder, CircleShape)
+                                .clickable { store.toggle(r) },
+                        )
+                        Spacer(Modifier.size(10.dp))
+                        Text(r.text, color = TextColor, fontSize = 15.sp)
+                    }
                 }
             }
-            for (n in notes) {
-                PanelRow(dot = KNote, text = n.title.ifBlank { "Untitled" }, meta = null)
+            DayGroup("Notes", notes.size, collapsed["Notes"] == true, { collapsed["Notes"] = collapsed["Notes"] != true }) {
+                for (n in notes) PanelRow(dot = KNote, text = n.title.ifBlank { "Untitled" }, meta = null)
             }
             Spacer(Modifier.size(24.dp))
         }
@@ -215,4 +254,24 @@ private fun PanelRow(dot: Color, text: String, meta: String?) {
         Text(text, color = TextColor, fontSize = 15.sp, modifier = Modifier.weight(1f))
         if (meta != null) Text(meta, color = Muted, fontSize = 13.sp)
     }
+}
+
+/** A collapsible kind group in the day panel (Events / Reminders / Notes), like the web's dp-group. */
+@Composable
+private fun DayGroup(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+    if (count == 0) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .clickable { onToggle() }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (collapsed) "▸" else "▾", color = Muted, fontSize = 12.sp, modifier = Modifier.width(18.dp))
+        Text(name, color = Gold, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(6.dp))
+        Text(count.toString(), color = Muted, fontSize = 12.sp)
+    }
+    if (!collapsed) content()
 }
