@@ -256,30 +256,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if (!is_array($order)) { $order = []; }
         $notes = load_notes($dataFile);
 
-        // Sections are per-folder: reorder only the viewed folder's, and re-section notes
-        // against sections that exist in their own folder.
-        $secExists      = [];   // "folder\x1Fname" => true
-        $thisFolderSecs = [];   // name => row (viewed folder)
-        $otherSecs      = [];
-        $byId           = [];
+        // Sections are per-folder. `sections` is a map folder => [name,…] giving the new
+        // order of that folder's sections after a section drag; a folder not in the map
+        // keeps its stored order. Works in "All" (per folder block) as well as one folder.
+        $secExists = [];   // "folder\x1Fname" => true
+        $byFolder  = [];   // folder => [section rows], in stored order
+        $byId      = [];
         foreach ($notes as $it) {
             if (is_section($it)) {
                 $f = $it['folder'] ?? FOLDER_DEFAULT;
                 $secExists[$f . "\x1F" . $it['name']] = true;
-                if ($viewFolder !== 'All' && $f === $viewFolder) { $thisFolderSecs[$it['name']] = $it; }
-                else { $otherSecs[] = $it; }
+                $byFolder[$f][] = $it;
             } else {
                 $byId[$it['id']] = $it;
             }
         }
-        $secOrder = json_decode((string) ($_POST['sections'] ?? '[]'), true);
-        if (!is_array($secOrder)) { $secOrder = []; }
+        $secMap = json_decode((string) ($_POST['sections'] ?? '[]'), true);
+        if (!is_array($secMap)) { $secMap = []; }
         $sectionRows = [];
-        foreach ($secOrder as $nm) {
-            if (isset($thisFolderSecs[$nm])) { $sectionRows[] = $thisFolderSecs[$nm]; unset($thisFolderSecs[$nm]); }
+        foreach ($byFolder as $f => $rows) {
+            $order  = is_array($secMap[$f] ?? null) ? array_map('strval', $secMap[$f]) : [];
+            $byName = [];
+            foreach ($rows as $r) { $byName[(string) $r['name']] = $r; }
+            foreach ($order as $nm) {
+                if (isset($byName[$nm])) { $sectionRows[] = $byName[$nm]; unset($byName[$nm]); }
+            }
+            foreach ($byName as $r) { $sectionRows[] = $r; }   // any not named keep their place
         }
-        foreach ($thisFolderSecs as $e) { $sectionRows[] = $e; }
-        $sectionRows = array_merge($sectionRows, $otherSecs);
 
         $newRows = [];
         $used    = [];
@@ -539,9 +542,13 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
 {
     $sname   = (string) $s['name'];
     $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT);
+    // Wrapped in a .section-group (head + its notes as one element) so a section drags as a
+    // unit, the same shape the shared read-only view and Reminders already use.
     ?>
+    <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>">
     <div class="section-head" data-folder="<?= e($sfolder) ?>">
       <?= section_collapse_button() ?>
+      <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
       <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
             '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
       <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
@@ -556,6 +563,9 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
     </div>
     <?php
     render_note_rows($grouped[$s['id']] ?? [], $view, $csrf, $sname, '');
+    ?>
+    </div>
+    <?php
 }
 
 /** The permanent "Notes" group — the catch-all for notes that aren't in a section.
@@ -564,14 +574,20 @@ function render_note_default_group(array $rows, string $csrf, string $view, stri
 {
     ?>
     <?php // data-folder keys this header's collapse state, so each folder's catch-all
-          // folds on its own rather than all of them together. ?>
+          // folds on its own rather than all of them together. Wrapped like the named
+          // sections; a blank handle (it's permanent and always last, so it doesn't drag). ?>
+    <div class="section-group default-group" data-section="" data-folder="<?= e($folder) ?>">
     <div class="section-head" data-folder="<?= e($folder) ?>">
       <?= section_collapse_button() ?>
+      <span class="sec-handle blank" aria-hidden="true"></span>
       <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
       <?php render_section_add('', $csrf, $view, $folder); ?>
     </div>
     <?php
     render_note_rows($rows, $view, $csrf);
+    ?>
+    </div>
+    <?php
 }
 
 /** Read-only list of the partner's notes (in "All"): title and date only, no link or
@@ -739,11 +755,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
-       so the wash-backed folder name reads as the level above them. The catch-all "Notes"
-       group is a bare .section-head + .nlist (not a .section-group), so it's indented too. */
-    .folder-block > .section-group,
-    .folder-block > .section-head,
-    .folder-block > .nlist { padding-left: 0.85rem; }
+       so the wash-backed folder name reads as the level above them. Every section — named
+       or the catch-all — is a .section-group now, so one selector covers them all. */
+    .folder-block > .section-group { padding-left: 0.85rem; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
@@ -802,6 +816,18 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        where the note titles under it do. */
     .drag-handle.blank { visibility: hidden; cursor: default; margin-right: 0.25rem; }
     .drag-handle:active { cursor: grabbing; color: var(--accent); }
+    /* Drag a whole section by this handle (edit mode only), the way Reminders does. In
+       edit mode it takes the collapse chevron's slot; the catch-all's is blank. */
+    .sec-handle {
+      flex: 0 0 auto; width: 1.1rem; display: none; align-items: center; justify-content: center;
+      color: #666; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; line-height: 1;
+    }
+    body.editing .sec-handle { display: inline-flex; }
+    body.editing .section-head .sec-collapse { display: none; }   /* handle takes its slot */
+    .sec-handle.blank { cursor: default; }
+    .sec-handle:active { cursor: grabbing; color: var(--accent); }
+    .section-group.dragging { opacity: 0.5; }
+    .section-group.dragging .section-head { background: #1b1f1d; border-radius: 6px; }
     ul.nlist li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
     /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
@@ -1184,41 +1210,77 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     const root = document.getElementById('notes-root');
     if (!root) return;
     const CSRF = '<?= $csrf ?>', VIEW = '<?= e($view) ?>';
-    let dragLi = null, pressTimer = null, pid = null, sx = 0, sy = 0, suppressClick = false;
+    let dragLi = null, dragSec = null, pressTimer = null, pid = null, sx = 0, sy = 0, suppressClick = false;
 
     const persist = () => {
+      // Note order (id + section) …
       const order = [];
       root.querySelectorAll('ul.nlist').forEach(ul => {
         const section = ul.dataset.section || '';
         ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
       });
-      const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW, order: JSON.stringify(order) });
+      // … and section order per folder — the named .section-group's within each block.
+      const sections = {};
+      root.querySelectorAll('.folder-block').forEach(blk => {
+        const names = [];
+        blk.querySelectorAll(':scope > .section-group[data-section]').forEach(g => {
+          if (g.dataset.section) names.push(g.dataset.section);
+        });
+        sections[blk.dataset.folder || ''] = names;
+      });
+      const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
+        order: JSON.stringify(order), sections: JSON.stringify(sections) });
       fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
     };
-    const begin = (li) => {
+    const beginRow = (li) => {
       dragLi = li; li.classList.add('dragging');
       try { li.setPointerCapture(pid); } catch (_) {}
+      if (navigator.vibrate) navigator.vibrate(12);
+    };
+    const beginSec = (grp) => {
+      dragSec = grp; grp.classList.add('dragging');
+      try { grp.setPointerCapture(pid); } catch (_) {}
       if (navigator.vibrate) navigator.vibrate(12);
     };
     const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
 
     root.addEventListener('pointerdown', (e) => {
       if (!document.body.classList.contains('editing')) return;
+      pid = e.pointerId; sx = e.clientX; sy = e.clientY;
+      // A whole-section drag starts on its handle; the catch-all's is .blank, so skip it.
+      const sh = e.target.closest('.sec-handle:not(.blank)');
+      if (sh) {
+        const grp = sh.closest('.section-group[data-section]');
+        if (grp && grp.dataset.section) { e.preventDefault(); beginSec(grp); }
+        return;
+      }
       const li = e.target.closest('li[data-id]'); if (!li || !root.contains(li)) return;
       if (e.target.closest('.ndel')) return;            // let the delete button work
-      pid = e.pointerId; sx = e.clientX; sy = e.clientY;
-      if (e.target.closest('.drag-handle')) { e.preventDefault(); begin(li); }
-      else { pressTimer = setTimeout(() => { pressTimer = null; begin(li); }, 280); }
+      if (e.target.closest('.drag-handle')) { e.preventDefault(); beginRow(li); }
+      else { pressTimer = setTimeout(() => { pressTimer = null; beginRow(li); }, 280); }
     });
-    // iOS sits on a touch deciding whether it's a scroll; claiming the handle makes
-    // the grab feel immediate.
+    // iOS sits on a touch deciding whether it's a scroll; claiming a handle makes the grab
+    // feel immediate.
     root.addEventListener('touchstart', (e) => {
       if (!document.body.classList.contains('editing')) return;
-      if (e.target.closest('.drag-handle:not(.blank)')) e.preventDefault();
+      if (e.target.closest('.drag-handle:not(.blank), .sec-handle:not(.blank)')) e.preventDefault();
     }, { passive: false });
     document.addEventListener('pointermove', (e) => {
       if (pressTimer) {                                 // still waiting: a real move = scroll/tap
         if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
+        return;
+      }
+      if (dragSec) {                                    // reorder whole sections within a folder
+        e.preventDefault();
+        const under = document.elementFromPoint(e.clientX, e.clientY); if (!under) return;
+        const over = under.closest('.section-group');
+        const block = dragSec.parentNode;
+        if (over && over !== dragSec && over.parentNode === block) {
+          const r = over.getBoundingClientRect();
+          let before = e.clientY < r.top + r.height / 2;
+          if (over.classList.contains('default-group')) before = true;   // stay above the catch-all
+          block.insertBefore(dragSec, before ? over : over.nextElementSibling);
+        }
         return;
       }
       if (!dragLi) return;
@@ -1235,8 +1297,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }, { passive: false });
     const end = () => {
       cancelPress();
-      if (!dragLi) return;
-      dragLi.classList.remove('dragging'); dragLi = null;
+      const dragged = dragSec || dragLi;
+      if (!dragged) return;
+      dragged.classList.remove('dragging'); dragLi = null; dragSec = null;
       suppressClick = true;                             // swallow the click that follows a drag
       setTimeout(() => { suppressClick = false; }, 350);
       persist();

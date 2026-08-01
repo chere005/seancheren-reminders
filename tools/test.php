@@ -625,12 +625,13 @@ t('adding a note opens it in the editor', function () {
 });
 
 t('a note folder\'s sections nest indented under its heading', function () {
-    // The catch-all "Notes" group is a bare .section-head + .nlist, so the rule has to
-    // indent those too, not only .section-group.
+    // Every section — named or the catch-all — is a .section-group now (so it can drag as
+    // one unit), and the single indent rule covers them all.
     $jar = login('example', 'examplepassword');
     $r = req('GET', '/notes/?folder=All', [], $jar);
     eq(200, $r['status']);
-    has('.folder-block > .nlist { padding-left', $r['body'], 'the indent rule ships');
+    has('.folder-block > .section-group { padding-left', $r['body'], 'the indent rule ships');
+    has('class="sec-handle"', $r['body'], 'and named sections carry a drag handle');
 });
 
 t('a note body is sanitised on the way in', function () {
@@ -1576,6 +1577,28 @@ t('note sections add, rename and delete per folder', function () {
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section',
         'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Afters', 'confirm' => '1'], $jar);
     ok(!in_array('Afters', $names(), true), 'deleted');
+});
+
+t('dragging a note section reorders it within its folder', function () {
+    // The gesture is by-eye (no JS in the harness), but the drag posts a per-folder
+    // section map to the reorder action — that server side is what this locks down.
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+        'view' => 'All', 'name' => 'DragNotes'], $jar);
+    foreach (['Alpha', 'Beta'] as $nm) {
+        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+            'view' => 'DragNotes', 'folder' => 'DragNotes', 'name' => $nm], $jar);
+    }
+    $order = fn() => array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DragNotes')), 'name');
+
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => ['Alpha', 'Beta']])], $jar, true);
+    eq(['Alpha', 'Beta'], $order(), 'the map sets the section order');
+
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => ['Beta', 'Alpha']])], $jar, true);
+    eq(['Beta', 'Alpha'], $order(), 'and dragging the other way flips it');
 });
 
 t('the "Notes" catch-all name is reserved', function () {
