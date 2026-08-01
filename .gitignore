@@ -1,6 +1,9 @@
 # Secrets & credentials — never commit
 lib/config.php
 
+# Internal-only notes (e.g. the suite's internal name) — private, never committed
+INTERNAL.md
+
 # Local reminder data
 data/
 
