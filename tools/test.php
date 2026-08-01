@@ -1426,11 +1426,12 @@ t('every app palette offers six colours and validates its own', function () {
                "$app shared colour $i is clearly lighter than own");
         }
     }
-    // The own sets read as one family (similar shade), so their first blue is close across apps.
-    ok(abs($lum(app_palette('reminders')[0]) - $lum(app_palette('habits')[0])) < 60,
-       'own tiers stay a similar shade across apps');
-    // Habits has its own tier now (it no longer just borrows the reminders one).
-    ok(app_palette('habits') !== app_palette('reminders'), 'habits has its own own-tier');
+    // The palette is fixed across every app now — own is identical everywhere, and so is
+    // shared — so the same hue reads the same way in reminders, calendar, notes and habits.
+    foreach (['calendar', 'notes', 'habits'] as $app) {
+        eq(app_palette('reminders'), app_palette($app), "$app own matches reminders");
+        eq(app_palette('reminders', true), app_palette($app, true), "$app shared matches reminders");
+    }
 });
 
 t('the folder migration is idempotent', function () {
@@ -3019,6 +3020,73 @@ t('aki gets the app itself', function () {
     eq(200, $r['status'], 'it renders');
     hasnt('bookshelf is aki', $r['body'], 'and is not the refusal page');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+});
+
+// The bookshelf has its own themes, which repaint the whole page rather than just the
+// accent the way the suite's five do. They are this app's alone: stored under their own
+// prefs key, and the suite's accent row is hidden here because these set --accent too.
+t('the bookshelf themes are its own, and default to the original look', function () {
+    ensure_account('aki', 'akipassword');
+    $jar = login('aki', 'akipassword');
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('bkthemebtn', $r['body'], 'the picker is in the settings window');
+    has('--bg: #111111', $r['body'], 'an untouched bookshelf is still Midnight');
+    has('class="bkthemebtn on" data-theme="midnight"', $r['body'], 'and Midnight is the marked one');
+    has('.setmodal .setthemes { display: none; }', $r['body'], "the suite's accent-only row is hidden here");
+    // Every theme has to offer a swatch, or one of them is unreachable.
+    foreach (['midnight', 'sage', 'blossom', 'dusk', 'neon', 'plum', 'forest', 'olive'] as $k) {
+        has('data-theme="' . $k . '"', $r['body'], "$k can be picked");
+    }
+});
+
+t('picking a bookshelf theme repaints the page and sticks', function () {
+    ensure_account('aki', 'akipassword');
+    $jar = login('aki', 'akipassword');
+    // The picker posts over AJAX, but a no-JS post has to work too: that one redirects.
+    $csrf = csrf($jar, '/akisbookshelf/');
+    $r = req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'forest'], $jar);
+    eq(302, $r['status'], 'a plain post redirects back, the way every mutation here does');
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('--bg: #040303', $r['body'], 'the page background is the theme, not just an accent');
+    has('--gold: #c9a227', $r['body'], 'the star gold follows the theme too');
+    has('color-scheme: dark', $r['body'], 'native controls are told which way round it is');
+    has('class="bkthemebtn on" data-theme="forest"', $r['body'], 'and the picker shows it as chosen');
+    // A light theme has to flip color-scheme, or a cream page opens black dropdowns.
+    // This one goes the way the picker really does — AJAX, answered with JSON.
+    $csrf = csrf($jar, '/akisbookshelf/');
+    $r = req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'sage'], $jar, true);
+    eq(200, $r['status'], 'the AJAX pick is answered in place');
+    has('"theme":"sage"', $r['body'], 'and echoes back the stored theme');
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('--bg: #fefae0', $r['body'], 'the cream theme applies');
+    has('color-scheme: light', $r['body'], 'and switches the page to light');
+    has('theme-color" content="#fefae0"', $r['body'], 'the PWA status bar follows it');
+});
+
+t('an unknown bookshelf theme is refused, not stored', function () {
+    ensure_account('aki', 'akipassword');
+    $jar = login('aki', 'akipassword');
+    $csrf = csrf($jar, '/akisbookshelf/');
+    req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'midnight'], $jar);
+    $csrf = csrf($jar, '/akisbookshelf/');
+    req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => '../../../etc/passwd'], $jar);
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('--bg: #111111', $r['body'], 'the bogus key changed nothing');
+});
+
+t('the bookshelf theme and the suite theme are separate settings', function () {
+    ensure_account('aki', 'akipassword');
+    $jar = login('aki', 'akipassword');
+    // Set the bookshelf to a theme whose accent is nothing like any suite accent…
+    $csrf = csrf($jar, '/akisbookshelf/');
+    req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'neon'], $jar);
+    // …then set the *suite* theme from another app, and check neither moved the other.
+    $csrf = csrf($jar, '/reminders/');
+    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'rose'], $jar);
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('--accent: #00f5d4', $r['body'], 'the bookshelf still wears its own accent');
+    $r = req('GET', '/reminders/', [], $jar);
+    has('--accent: #fb7185', $r['body'], 'and the suite kept the one set for it');
 });
 
 // ---------------------------------------------------------------- recolouring a share

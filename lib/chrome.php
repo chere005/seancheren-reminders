@@ -599,11 +599,16 @@ function folder_rename_styles(): string
        is the edit surface), so it reads as an input rather than borrowing .foldertitle's
        edit-mode gate. */
     .foldermodal .frename-form { flex: 1; min-width: 0; display: flex; margin: 0; }
+    /* The name reads as plain text until you tap/click it — a transparent border and no
+       background — then it shows as a field on focus. Keeps every manage menu (folders,
+       habit sections) a clean list of names rather than a stack of input boxes. */
     .foldermodal input.fname {
-      flex: 1; min-width: 0; background: #1b1b1b; border: 1px solid #333; color: #eee;
+      flex: 1; min-width: 0; background: none; border: 1px solid transparent; color: #eee;
       border-radius: 6px; padding: 0.3rem 0.5rem; font-family: inherit; font-size: 0.95rem;
+      cursor: pointer;
     }
-    .foldermodal input.fname:focus { outline: none; border-color: #888; }
+    .foldermodal input.fname:hover { border-color: #333; }
+    .foldermodal input.fname:focus { outline: none; background: #1b1b1b; border-color: #888; cursor: text; }
     CSS;
 }
 

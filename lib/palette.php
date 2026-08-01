@@ -14,14 +14,16 @@
 const PAL_BASE = ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'];
 
 /**
- * Per app: [own lighten fraction, shared lighten fraction], 0 = base, 1 = white. Own steps
- * gently between the apps (they stay a family); shared is a big jump lighter for each.
+ * [own lighten fraction, shared lighten fraction], 0 = base, 1 = white. The colours are
+ * **fixed across every app** now: own is the vivid base everywhere, and a partner's shared
+ * items are the same clear pastel everywhere — so a blue folder, a blue calendar and a blue
+ * habit section are the identical blue, and "mine vs theirs" reads the same way in each app.
  */
 const PAL_TIERS = [
     'reminders' => [0.00, 0.60],
-    'calendar'  => [0.07, 0.64],
-    'notes'     => [0.14, 0.68],
-    'habits'    => [0.21, 0.72],
+    'calendar'  => [0.00, 0.60],
+    'notes'     => [0.00, 0.60],
+    'habits'    => [0.00, 0.60],
 ];
 
 /** Mix a #rrggbb colour toward white by fraction $f (0 = unchanged, 1 = white). */
