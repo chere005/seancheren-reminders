@@ -179,6 +179,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1&fm=1');
         exit;
     }
+    // The Manage-folders "Default for new items" picker: sets the default folder and its
+    // section together from a "folder\x1Fsection" value; the section is validated against
+    // the folder's real sections, falling back to the first.
+    if ($_POST['action'] === 'set_default_section') {
+        $v = (string) ($_POST['fs'] ?? '');
+        [$dFolder, $dSection] = strpos($v, "\x1F") !== false ? explode("\x1F", $v, 2) : [$v, ''];
+        if (in_array($dFolder, $myFolders, true)) {
+            $secs = [];
+            foreach (sections_normalize(load_notes($dataFile), $myFolders) as $it) {
+                if (is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $dFolder) { $secs[] = (string) $it['name']; }
+            }
+            if (!in_array($dSection, $secs, true)) { $dSection = $secs[0] ?? SECTION_DEFAULT_NAME; }
+            folder_default_section_set($cfg['data_dir'], 'notes', $dFolder, $dSection);
+        }
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1&fm=1');
+        exit;
+    }
     if ($_POST['action'] === 'set_folder_color') {
         $cname = (string) ($_POST['name'] ?? '');
         if (folder_shared_key_parse($cname)) {
@@ -189,6 +206,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             folder_color_set($cfg['data_dir'], 'notes', $cname, (string) ($_POST['color'] ?? ''));
         }
         header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
+        exit;
+    }
+    if ($_POST['action'] === 'rename_folder') {
+        // Rename one of my own folders and carry every note and section that named it over.
+        // folders_rename() refuses a fixed/duplicate/empty name and reports whether it ran,
+        // so a no-op doesn't rewrite the notes file. A shared or fixed folder never gets a
+        // rename field, so a forged post simply finds nothing to do.
+        $old = (string) ($_POST['name'] ?? '');
+        $new = folder_clean((string) ($_POST['newname'] ?? ''));
+        $done = folders_rename($cfg['data_dir'], 'notes', $old, $new);
+        if ($done) {
+            $notes = load_notes($dataFile);
+            foreach ($notes as &$n) {
+                if (($n['folder'] ?? FOLDER_DEFAULT) === $old) { $n['folder'] = $new; }
+            }
+            unset($n);
+            save_notes($dataFile, $notes);
+        }
+        // If I was viewing the folder I just renamed, follow it to its new name.
+        $vw = (string) ($_POST['view'] ?? 'All');
+        if ($done && $vw === $old) { $vw = $new; }
+        // Stay in edit mode; reopen the manager (fm=1) when the rename came from it.
+        $extra = !empty($_POST['fm']) ? '&fm=1' : '';
+        header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . '&edit=1' . $extra);
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -213,7 +254,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $secFolder  = ($postFolder !== '' && in_array($postFolder, $myFolders, true))
             ? $postFolder
             : ($viewFolder === 'All' ? $defFolder : $viewFolder);   // sections belong to a folder
-        if ($name !== '' && strcasecmp($name, NOTES_DEFAULT_SECTION) !== 0) {   // "Notes" is reserved
+        if ($name !== '') {   // any non-empty name; there's no reserved catch-all name any more
             $notes = load_notes($dataFile);
             $dup   = false;
             foreach ($notes as $it) {
@@ -242,12 +283,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name      = (string) ($_POST['name'] ?? '');
         $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         $notes = load_notes($dataFile);
+        $notes = sections_normalize($notes, $folders);
+        // A folder always keeps at least one section: the last one can't be deleted. When it
+        // isn't the last, its notes move into the folder's first remaining section rather
+        // than being orphaned — there's no nameless catch-all to fall to any more.
+        $folderSecNames = [];
+        foreach ($notes as $it) {
+            if (is_section($it) && ($it['folder'] ?? '') === $secFolder) { $folderSecNames[] = (string) $it['name']; }
+        }
+        if (count($folderSecNames) <= 1) {          // it's the folder's only section
+            header('Location: ' . $listUrl . '&edit=1');
+            exit;
+        }
+        $rest   = array_values(array_filter($folderSecNames, fn($n) => $n !== $name));
+        $moveTo = $rest[0] ?? SECTION_DEFAULT_NAME;
         // Only this folder's copy of the section goes; other folders keep theirs.
         $notes = array_filter($notes, fn($it) => !(is_section($it)
             && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
         foreach ($notes as &$n) {
             if (!is_section($n) && ($n['section'] ?? '') === $name
-                && ($n['folder'] ?? FOLDER_DEFAULT) === $secFolder) { $n['section'] = ''; }
+                && ($n['folder'] ?? FOLDER_DEFAULT) === $secFolder) { $n['section'] = $moveTo; }
         }
         unset($n);
         save_notes($dataFile, $notes);
@@ -336,8 +391,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
 
     $notes       = load_notes($dataFile);
-    $sectionSet  = [];
-    foreach ($notes as $it) { if (is_section($it)) { $sectionSet[$it['name']] = true; } }
+    // Every folder keeps at least one real section and every note sits in one — the model
+    // that replaced the unnamed "Notes" catch-all. My own file is repaired in place; a
+    // partner's structure is theirs, so it's left as-is.
+    if (!$isShared) { $notes = sections_normalize($notes, $folders); }
+    $sectionSet  = [];   // "folder\x1Fname" — sections are per-folder
+    foreach ($notes as $it) {
+        if (is_section($it)) { $sectionSet[($it['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $it['name']] = true; }
+    }
+    $firstSec    = sections_first_by_folder($notes);   // folder => its default (first) section
     $vq          = '?folder=' . urlencode((string) ($_POST['view'] ?? 'All'));
 
     switch ($_POST['action']) {
@@ -345,7 +407,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $folder  = (string) ($_POST['folder'] ?? FOLDER_DEFAULT);
             if (!in_array($folder, $folders, true)) { $folder = FOLDER_DEFAULT; }
             $section = (string) ($_POST['section'] ?? '');
-            if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
+            // Every note sits in a real section now — a blank or unknown one lands in the
+            // folder's first (default) section rather than a nameless catch-all.
+            if ($section === '' || !isset($sectionSet[$folder . "\x1F" . $section])) {
+                $section = $firstSec[$folder] ?? SECTION_DEFAULT_NAME;
+            }
             $id      = bin2hex(random_bytes(6));
             // Prepend so a new note lands at the top of its section.
             array_unshift($notes, [
@@ -370,7 +436,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $folder  = (string) ($_POST['folder'] ?? FOLDER_DEFAULT);
             if (!in_array($folder, $folders, true)) { $folder = FOLDER_DEFAULT; }
             $section = (string) ($_POST['section'] ?? '');
-            if ($section !== '' && !isset($sectionSet[$section])) { $section = ''; }
+            // Land in a real section: the note's folder's first one when blank or unknown.
+            if ($section === '' || !isset($sectionSet[$folder . "\x1F" . $section])) {
+                $section = $firstSec[$folder] ?? SECTION_DEFAULT_NAME;
+            }
             foreach ($notes as &$n) {
                 if (!is_section($n) && $n['id'] === $id) {
                     $n['title']   = $title === '' ? (date('m/d/Y h:i a', (int) ($n['created'] ?? time())) . ' - Note') : mb_substr($title, 0, 200);
@@ -410,6 +479,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
 // --- Load + shape data ---
 $all = load_notes($dataFile);
+// Guarantee the "every folder has a real section, every note sits in one" model, then write
+// the repair back — but only for my own file. A partner's shared folders are theirs to
+// structure, so their list is normalised in memory for the read-only view, never saved.
+$all = sections_normalize($all, $folders, $secChanged);
+if ($secChanged && !$isShared) { save_notes($dataFile, $all); }
 
 // Section rows tagged with their folder. A folder view shows only its own; All shows every folder's.
 $secRows = [];
@@ -634,9 +708,14 @@ function render_note_folder_sections(array $sections, array $grouped, array $cat
 {
     $blocks = [];
     foreach ($sections as $s) { ob_start(); render_note_section($s, $grouped, $csrf, $view); $blocks[] = ob_get_clean(); }
-    ob_start(); render_note_default_group($catchallRows, $csrf, $view, $catchallFolder); $catchall = ob_get_clean();
-    $idx = min(count($blocks), folder_catchall_index($dir, 'notes', $blockFolder, count($blocks)));
-    array_splice($blocks, $idx, 0, [$catchall]);
+    // The unnamed catch-all only appears if there are still loose notes to hold (there won't
+    // be once a list is normalised); every folder otherwise keeps its own real sections. Its
+    // remembered slot still positions it among them while it does show.
+    if ($catchallRows) {
+        ob_start(); render_note_default_group($catchallRows, $csrf, $view, $catchallFolder); $catchall = ob_get_clean();
+        $idx = min(count($blocks), folder_catchall_index($dir, 'notes', $blockFolder, count($blocks)));
+        array_splice($blocks, $idx, 0, [$catchall]);
+    }
     echo implode('', $blocks);
 }
 
@@ -658,7 +737,9 @@ function render_note_rows_ro(array $rows): void
  *  sections and the loose catch-all, all non-interactive. */
 function render_shared_note_folder_ro(string $dir, string $partner, string $folder, string $key, string $color): void
 {
-    $all   = store_read(user_data_file($dir, 'notes', $partner));
+    // Normalise their list in memory (never saved — their data is theirs) so their loose
+    // notes show under a real section rather than a nameless catch-all.
+    $all   = sections_normalize(load_notes(user_data_file($dir, 'notes', $partner)), [$folder]);
     $secs  = array_values(array_filter($all, fn($it) => is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $folder));
     $notes = array_values(array_filter($all, fn($it) => !is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $folder));
     $names = array_map(fn($s) => (string) $s['name'], $secs);
@@ -787,6 +868,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* A slightly thicker rule straight across the page above each folder, capping the run
        before it. Full-width because the block is; the block's top margin+padding sit the
        heading just under the divider, so the heading's own top margin comes off. */
+    /* The collapse-all button sits above the top folder. */
+    .notes-topbar { display: flex; justify-content: flex-start; }
+    .notes-topbar + #notes-root > .folder-block:first-child { margin-top: 0.75rem; }
     .folder-block { border-top: 2px solid #363636; margin-top: 1.5rem; padding-top: 0.55rem; }
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0 0.25rem; }
     /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
@@ -888,7 +972,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        the highlight starts during the hold, before body.editing is set, so this stays
        ungated. Real inputs (the section rename field) opt back in below. */
     .section-head, .folder-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-    .section-head input, #notes-root li input { -webkit-user-select: text; user-select: text; }
+    .section-head input, .folder-head input, #notes-root li input { -webkit-user-select: text; user-select: text; }
     .sec-handle.blank { cursor: default; }
     .sec-handle:active { cursor: grabbing; color: var(--accent); }
     .section-group.dragging { opacity: 0.45; }
@@ -1033,12 +1117,26 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         // and a section from the + beside its folder's name (edit mode). ?>
 
   <?php if (!$isShared) {
+        // The Default Folder/Section picker's list: each of my folders with its real
+        // sections (from the already-normalised $all), plus which one is the current default.
+        $modalSecs = [];
+        foreach ($myFolders as $mf) {
+            $modalSecs[$mf] = [];
+            foreach ($all as $it) {
+                if (is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $mf) { $modalSecs[$mf][] = (string) $it['name']; }
+            }
+        }
+        $defSecRaw = folder_default_section_get($cfg['data_dir'], 'notes');
+        $defSec    = in_array($defSecRaw, $modalSecs[$defFolder] ?? [], true)
+            ? $defSecRaw : ($modalSecs[$defFolder][0] ?? SECTION_DEFAULT_NAME);
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('notes'),
-                            app_palette('notes', true), 'notes');
+                            app_palette('notes', true), 'notes', true, $modalSecs, $defFolder, $defSec);
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
-  <?php // The permanent group always renders, so there's always a + to add against. ?>
+  <?php // A collapse-all button above the top folder — folds every folder block, or expands
+        // them all on a second press (the same control Reminders puts by Completed). ?>
+  <div class="notes-topbar"><?= collapse_all_button() ?></div>
    <div id="notes-root">
     <?php if ($viewFolder === 'All'): ?>
       <?php // "All": one collapsible block per folder, mine and the partner's read-only
@@ -1054,8 +1152,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <?php // The folder's own colour is the wash behind its name, where it used to
-                  // be a dot beside it, then a short rule trailing off to the right edge. ?>
-            <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($sfolder))) ?>"><?= e($sfolder) ?></div>
+                  // be a dot beside it, then a short rule trailing off to the right edge.
+                  // The name is renameable in place in edit mode (fixed "General" is not). ?>
+            <?= folder_title_html($sfolder, $csrf, $view, folder_tint($folderDotColor($sfolder)),
+                                  folder_is_fixed('notes', $sfolder)) ?>
             <?= render_note_folder_add($sfolder, $csrf, $view) ?>
             <span class="folder-rule" aria-hidden="true"></span>
           </div>
@@ -1070,7 +1170,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       <div class="folder-block" data-folder="<?= e($viewFolder) ?>">
         <div class="folder-head">
           <?= folder_collapse_button() ?>
-          <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($viewFolder))) ?>"><?= e($viewFolder) ?></div>
+          <?php // Editable in edit mode, unless it's the fixed "General" or a partner's
+                // shared folder (viewed via @partner:Folder) — neither is mine to rename. ?>
+          <?= folder_title_html($viewFolder, $csrf, $view, folder_tint($folderDotColor($viewFolder)),
+                                $isShared || folder_is_fixed('notes', $viewFolder)) ?>
           <?php if (!$isShared) { echo render_note_folder_add($viewFolder, $csrf, $view); } ?>
           <span class="folder-rule" aria-hidden="true"></span>
         </div>
@@ -1107,8 +1210,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
             foreach ($all as $it) {
                 if (is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $noteFolder) { $editorSecs[] = (string) $it['name']; }
             } ?>
+      <?php // Real sections only — there's no unnamed catch-all any more (the folder always
+            // has at least its default section, and a blank one resolves to it on save). ?>
       <select name="section" class="secsel" title="Section">
-        <option value="">Notes</option>
         <?php foreach ($editorSecs as $sname): ?>
           <option value="<?= e($sname) ?>" <?= ($current['section'] ?? '') === $sname ? 'selected' : '' ?>><?= e($sname) ?></option>
         <?php endforeach; ?>

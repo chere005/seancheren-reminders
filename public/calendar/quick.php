@@ -64,11 +64,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     [$ptext, $pdate, $ptime] = parse_when_from_text($text);
     $when = $pdate ?? $today;
     if ($text !== '' && $act === 'add_reminder') {
-        $f = user_data_file($cfg['data_dir'], 'reminders');
-        $l = store_read($f);
+        $f  = user_data_file($cfg['data_dir'], 'reminders');
+        $fb = folder_fallback('reminders');
+        // Every reminder sits in a real section now — normalise so the fallback folder has
+        // its default section, and drop the new one into it (no unnamed catch-all).
+        $l  = sections_normalize(store_read($f), folders_load($cfg['data_dir'])['reminders']);
+        $section = sections_first_by_folder($l)[$fb] ?? SECTION_DEFAULT_NAME;
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                 'due' => $when, 'time' => $ptime, 'done' => false,
-                'folder' => folder_fallback('reminders'), 'section' => '', 'created' => time()];
+                'folder' => $fb, 'section' => $section, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Reminder added';
     } elseif ($text !== '' && $act === 'add_event') {

@@ -327,15 +327,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $remFolder = folder_default_get($cfg['data_dir'], 'reminders');
         }
         $file = user_data_file($cfg['data_dir'], 'reminders');
-        $list = load_reminder_list($file);
-        // Sections are per-folder, so only that folder's sections are valid here.
-        $secOk = [];
+        // Normalise so the folder has real sections; a blank or unknown group lands in the
+        // folder's first (default) section rather than a nameless catch-all.
+        $list = sections_normalize(load_reminder_list($file), $remFolders);
+        $secOk = []; $firstOfFolder = '';
         foreach ($list as $it) {
             if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $remFolder) {
                 $secOk[(string) $it['name']] = true;
+                if ($firstOfFolder === '') { $firstOfFolder = (string) $it['name']; }
             }
         }
-        if ($section !== '' && !isset($secOk[$section])) { $section = ''; }
+        if ($section === '' || !isset($secOk[$section])) {
+            $section = $firstOfFolder !== '' ? $firstOfFolder : SECTION_DEFAULT_NAME;
+        }
         $list[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
                    'due' => $effDate, 'time' => $timeOk ? $time : $ptime, 'done' => false,
                    'folder' => $remFolder,
@@ -524,6 +528,7 @@ foreach ($onlyFolder === null ? load_reminder_list(user_data_file($cfg['data_dir
         $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                         'done' => $done, 'rolled' => (!$rides && $wasRolled),
                         'due' => $r['due'] ?? null, 'time' => $r['time'] ?? null, 'rep' => $rep,
+                        'folder' => $r['folder'] ?? folder_fallback('reminders'),
                         'color' => $remFolderColor[$r['folder'] ?? ''] ?? app_palette('reminders')[0]];
     }
 }
@@ -560,7 +565,7 @@ if ($partner) {
         foreach ($srides ? [[$todayYmd, false]] : $remDays((string) $r['due'], $rep, $eff) as [$d, $wasRolled]) {
             $byDay[$d][] = ['kind' => 'reminder', 'id' => $r['id'] ?? '', 'text' => $r['text'] ?? '',
                             'done' => $done, 'rolled' => (!$srides && $wasRolled), 'due' => $r['due'] ?? null,
-                            'time' => $r['time'] ?? null, 'rep' => $rep, 'owner' => $partner,
+                            'time' => $r['time'] ?? null, 'rep' => $rep, 'owner' => $partner, 'folder' => $f,
                             'color' => $remFolderTheirs[$f] ?? app_palette('reminders', true)[0]];
         }
     }
@@ -585,7 +590,7 @@ if ($partner) {
 foreach ($onlyFolder === null ? load_json_list(user_data_file($cfg['data_dir'], 'notes')) : [] as $n) {
     if (!empty($n['date']) && $n['date'] >= $monthFrom && $n['date'] <= $monthTo) {
         $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '', 'text' => $n['title'] ?? 'Untitled note',
-                                'done' => false,
+                                'done' => false, 'folder' => $n['folder'] ?? FOLDER_DEFAULT,
                                 'color' => $noteFolderColor[$n['folder'] ?? FOLDER_DEFAULT] ?? app_palette('notes')[0]];
     }
 }
@@ -620,6 +625,68 @@ foreach ($byDay as $d => $list) {
         return 0;
     });
     $byDay[$d] = $list;
+}
+
+// --- Legend: a key to the day dots. One block per owner (mine, then the partner), each
+// grouped events → reminders → notes in the legend's kind order. Within a kind it lists
+// every calendar/folder that actually has an item in the drawn window, with its own dot
+// colour and name, in the picker's order — so a colour in a cell can be read back to what
+// it belongs to. Built straight off $byDay, so it always matches what's on the grid. ---
+$calNameById = [];
+foreach (array_merge($calList, $theirCals) as $c) { $calNameById[(string) ($c['id'] ?? '')] = (string) ($c['name'] ?? ''); }
+$legendSeen = [];   // owner => kind => [name => color], present in the window
+foreach ($byDay as $list) {
+    foreach ($list as $it) {
+        $owner = (string) ($it['owner'] ?? '');
+        $kind  = (string) ($it['kind'] ?? '');
+        $nm = $kind === 'event' ? ($calNameById[(string) ($it['cal'] ?? '')] ?? '') : (string) ($it['folder'] ?? '');
+        if ($nm === '') { continue; }
+        $legendSeen[$owner][$kind][$nm] = (string) ($it['color'] ?? '');
+    }
+}
+// Put one owner+kind's names into the picker's order, dropping any not in the window and
+// keeping stragglers (a name with no canonical position) at the end.
+$legendOrdered = function (array $names, array $canonical): array {
+    $out = [];
+    foreach ($canonical as $n) { if (array_key_exists($n, $names)) { $out[] = [$n, $names[$n]]; unset($names[$n]); } }
+    foreach ($names as $n => $c) { $out[] = [$n, $c]; }
+    return $out;
+};
+$noteFolders = folders_load($cfg['data_dir'])['notes'];
+// [ ['who' => label, 'kinds' => [ ['kind' => …, 'items' => [[name,color],…]], … ] ], … ]
+$legendBlocks = [];
+$ownerBlock = function (string $owner, array $calNames, array $remNames, array $noteNames)
+    use ($legendSeen, $legendOrdered): array {
+    $seen = $legendSeen[$owner] ?? [];
+    $kinds = [];
+    foreach ([['event', $calNames], ['reminder', $remNames], ['note', $noteNames]] as [$kind, $canon]) {
+        if (empty($seen[$kind])) { continue; }
+        $kinds[] = ['kind' => $kind, 'items' => $legendOrdered($seen[$kind], $canon)];
+    }
+    return $kinds;
+};
+$mineKinds = $ownerBlock('', array_column($calList, 'name'), $remFolders, $noteFolders);
+if ($mineKinds) { $legendBlocks[] = ['who' => share_name($me), 'kinds' => $mineKinds]; }
+if ($partner) {
+    // The partner's notes aren't drawn on the calendar, so their block only ever has events
+    // and reminders — pass an empty note-folder list.
+    $theirKinds = $ownerBlock($partner, array_column($sharedCals, 'name'), $sharedFolders, []);
+    if ($theirKinds) { $legendBlocks[] = ['who' => share_name($partner), 'kinds' => $theirKinds]; }
+}
+
+/** The little kind glyph the legend puts before a kind's dots: a calendar for events, a
+ *  checkbox for reminders, a page for notes — matching how each kind reads in the panel. */
+function cal_legend_icon(string $kind): string
+{
+    $svg = fn($paths) => '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"'
+        . ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $paths . '</svg>';
+    if ($kind === 'event') {
+        return $svg('<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/>');
+    }
+    if ($kind === 'note') {
+        return $svg('<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9.5 13h6M9.5 17h4"/>');
+    }
+    return $svg('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7.5 12.5l3 3 6-7"/>');   // reminder
 }
 
 // Which day starts selected? An explicit ?day= wins; otherwise today when the viewed
@@ -811,6 +878,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
     .cell.wk-hide { display: none; }
 
+    /* Legend under the grid — a key to the day dots. One row per owner; within it, kind
+       groups each led by their glyph (calendar / checkbox / page, in the kind's colour),
+       then the calendars or folders in view under their own dot. Wraps on a narrow screen,
+       and shows in both month and week views. */
+    .cal-legend { margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; }
+    .cleg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.75rem; }
+    .cleg-who {
+      flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .cleg-kind { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; }
+    .cleg-ico { display: inline-flex; align-items: center; justify-content: center; }
+    .cleg-ico.cleg-event { color: var(--k-event); }
+    .cleg-ico.cleg-reminder { color: var(--k-reminder); }
+    .cleg-ico.cleg-note { color: var(--k-note); }
+    .cleg-item { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; color: #cbcbcb; white-space: nowrap; }
+    .cleg-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
+
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
     .dp-head .dp-date { font-size: 1.05rem; font-weight: 600; min-width: 0; }
@@ -951,6 +1036,18 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     /* [hidden] has to win over the flex above, or every row shows on every kind. */
     .modal .calrow[hidden], .modal .timerow[hidden], .modal .repevery[hidden] { display: none; }
+    /* Repeat row: "every [N]" then the unit selector, the count aligned right before it so
+       the two read as one control. The count is a narrow centred box; the unit fills the rest. */
+    .modal .reprow .repevery { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: #aaa; }
+    .modal .reprow .repn {
+      width: 3rem; padding: 0.5rem 0.35rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; text-align: center; color-scheme: dark;
+    }
+    .modal .reprow .repunit { flex: 1; min-width: 0; }
+    /* Each optional row and the "+" that reveals it share one wrapper; the button and the
+       revealed field never both show (the JS toggles them), so the wrapper just spaces them. */
+    .modal .addrow-wrap { margin-bottom: 1rem; }
+    .modal .addrow-wrap .timerow, .modal .addrow-wrap .reprow { margin-bottom: 0; }
     .modal .calrow select {
       flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
@@ -1246,6 +1343,26 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       <?= $cell($ymd, $day, true, $weekOf()) ?>
     <?php endfor; ?>
   </div>
+
+  <?php // A key to the dots: one row per owner, each grouped events → reminders → notes,
+        // with the calendars/folders in view under their own colour. Shown in both views. ?>
+  <?php if ($legendBlocks): ?>
+    <div class="cal-legend" aria-label="Legend">
+      <?php foreach ($legendBlocks as $blk): ?>
+        <div class="cleg-row">
+          <span class="cleg-who"><?= e($blk['who']) ?></span>
+          <?php foreach ($blk['kinds'] as $g): ?>
+            <div class="cleg-kind">
+              <span class="cleg-ico cleg-<?= e($g['kind']) ?>"><?= cal_legend_icon($g['kind']) ?></span>
+              <?php foreach ($g['items'] as [$nm, $col]): ?>
+                <span class="cleg-item"><span class="cleg-dot" style="background:<?= e($col) ?>"></span><?= e($nm) ?></span>
+              <?php endforeach; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
  </div>
 </div>
 
@@ -1285,28 +1402,36 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <button type="button" class="cleardate" id="mClearDate" title="Remove date">&times;</button>
       </div>
     </div>
-    <div class="timerow" id="mTimeRow" hidden>
-      <span class="tlabel">Time</span>
-      <input type="time" name="time" id="mTime" value="">
-      <button type="button" class="cleardate" id="mClearTime" title="Remove time">&times;</button>
+    <?php // Time is optional and hidden behind "+ Time"; pressing it reveals the field. ?>
+    <div class="addrow-wrap">
+      <button type="button" class="adddate" id="mAddTime">+ Time</button>
+      <div class="timerow" id="mTimeRow" hidden>
+        <span class="tlabel">Time</span>
+        <input type="time" name="time" id="mTime" value="">
+        <button type="button" class="cleardate" id="mClearTime" title="Remove time">&times;</button>
+      </div>
     </div>
-    <?php // "Repeat every 2 weeks". Never is the default; picking a unit reveals the
-          // count, which starts at 1 — so choosing "week(s)" alone means every week. ?>
-    <div class="calrow reprow" id="mRepRow" hidden>
-      <span class="tlabel">Repeat</span>
-      <select name="rep_unit" id="mRepUnit">
-        <option value="">Never</option>
-        <option value="day">day(s)</option>
-        <option value="week">week(s)</option>
-        <option value="month">month(s)</option>
-        <option value="year">year(s)</option>
-      </select>
-      <span class="repevery" id="mRepEvery" hidden>every
-        <?php // Plain text, not a number spinner: the little arrows were only ever in the
-              // way, and repeat_clean() already turns anything unparseable into 1. ?>
-        <input type="text" name="rep_n" id="mRepN" value="1" maxlength="3"
-               inputmode="numeric" autocomplete="off">
-      </span>
+    <?php // Repeat is optional and hidden behind "+ Repeat". Once revealed, the count sits
+          // right before the unit selector — both on one line — so "every 2 weeks" reads as
+          // a single control; the × removes the repeat again. ?>
+    <div class="addrow-wrap" id="mRepWrap">
+      <button type="button" class="adddate" id="mAddRepeat">+ Repeat</button>
+      <div class="calrow reprow" id="mRepRow" hidden>
+        <span class="tlabel">Repeat</span>
+        <span class="repevery">every
+          <?php // Plain text, not a number spinner: the little arrows were only ever in the
+                // way, and repeat_clean() already turns anything unparseable into 1. ?>
+          <input type="text" name="rep_n" id="mRepN" value="1" maxlength="3" class="repn"
+                 inputmode="numeric" autocomplete="off"></span>
+        <select name="rep_unit" id="mRepUnit" class="repunit">
+          <option value="">Never</option>
+          <option value="day">days</option>
+          <option value="week">weeks</option>
+          <option value="month">months</option>
+          <option value="year">years</option>
+        </select>
+        <button type="button" class="cleardate" id="mClearRep" title="Remove repeat">&times;</button>
+      </div>
     </div>
     <?php // Mine and the partner's stay in separate pickers rather than one merged list,
           // so it's always obvious whose file a new item is about to land in. Picking from
@@ -1328,9 +1453,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       // the value carrying "folder\x1Fgroup" (\x1F can't survive folder_clean()).
       $remDefFolder = folder_default_get($cfg['data_dir'], 'reminders');
       $myRemGroups  = [];
-      $myRem        = load_reminder_list(user_data_file($cfg['data_dir'], 'reminders'));
+      // Normalise in so every folder lists its real sections (and no unnamed catch-all);
+      // a folder always has at least its default "General".
+      $myRem        = sections_normalize(load_reminder_list(user_data_file($cfg['data_dir'], 'reminders')), $remFolders);
+      $remDefFirst  = sections_first_by_folder($myRem)[$remDefFolder] ?? '';   // pre-select this group
       foreach ($remFolders as $mf) {
-          $myRemGroups[$mf] = [[$mf . "\x1F", 'Reminders']];   // the folder's catch-all
+          $myRemGroups[$mf] = [];
           foreach ($myRem as $it) {
               if (($it['type'] ?? '') !== 'section' || ($it['folder'] ?? '') !== $mf) { continue; }
               $nm = (string) ($it['name'] ?? '');
@@ -1345,8 +1473,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       $sharedRemGroups = [];
       if ($sharedFolders) {
           $theirRem = load_reminder_list(user_data_file($cfg['data_dir'], 'reminders', $partner));
+          $theirRem = sections_normalize($theirRem, $sharedFolders);
           foreach ($sharedFolders as $sf) {
-              $sharedRemGroups[$sf] = [[$sf . "\x1F", 'Reminders']];   // the folder's catch-all
+              $sharedRemGroups[$sf] = [];
               foreach ($theirRem as $it) {
                   if (($it['type'] ?? '') !== 'section') { continue; }
                   if (($it['folder'] ?? '') !== $sf) { continue; }
@@ -1363,7 +1492,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         <?php foreach ($myRemGroups as $mf => $opts): ?>
           <optgroup label="<?= e($mf) ?>">
             <?php foreach ($opts as [$val, $label]): ?>
-              <option value="<?= e($val) ?>"<?= $mf === $remDefFolder && substr($val, -1) === "\x1F" ? ' selected' : '' ?>><?= e($label) ?></option>
+              <?php // Pre-select the default folder's first (default) section. ?>
+              <option value="<?= e($val) ?>"<?= $val === $remDefFolder . "\x1F" . $remDefFirst ? ' selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
           </optgroup>
         <?php endforeach; ?>
@@ -1475,38 +1605,45 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   // Time and calendar are event-only fields, so they show and hide together. A
   // reminder gets the group picker in their place — it belongs to a folder, not a calendar.
   const mRepRow  = document.getElementById('mRepRow');
+  const mRepWrap = document.getElementById('mRepWrap');
   const mRepUnit = document.getElementById('mRepUnit');
   const mRepN    = document.getElementById('mRepN');
-  const mRepEvery = document.getElementById('mRepEvery');
+  const mAddTime   = document.getElementById('mAddTime');
+  const mAddRepeat = document.getElementById('mAddRepeat');
+
+  // Time and Repeat are both hidden behind a "+" until asked for; each has a matching ×
+  // that puts it away again. Time is offered on every kind; Repeat isn't (a note doesn't
+  // repeat), so its whole wrapper hides for a note.
+  const revealTime = (on) => { mTimeRow.hidden = !on; mAddTime.hidden = on; };
+  const revealRep  = (on) => {
+    mRepRow.hidden = !on; mAddRepeat.hidden = on;
+    if (on && mRepUnit.value === '') { mRepUnit.value = 'week'; }   // revealing means "repeats"
+    if (on && !(parseInt(mRepN.value, 10) > 0)) { mRepN.value = 1; }
+  };
   // Notes don't repeat — they're a page, not something that happens again.
   const showRep = (kind, rep) => {
-    mRepRow.hidden = (kind === 'note');
-    mRepUnit.value = (rep && rep.unit) || '';
-    mRepN.value    = (rep && rep.n) || 1;
-    mRepEvery.hidden = mRepUnit.value === '';
+    mRepWrap.hidden = (kind === 'note');
+    mRepUnit.value  = (rep && rep.unit) || '';
+    mRepN.value     = (rep && rep.n) || 1;
+    revealRep(!!(rep && rep.unit));          // open only when the item actually repeats
   };
+  mAddRepeat.addEventListener('click', () => { revealRep(true); mRepN.focus(); });
+  document.getElementById('mClearRep').addEventListener('click', () => { mRepUnit.value = ''; revealRep(false); });
   mRepUnit.addEventListener('change', () => {
-    mRepEvery.hidden = mRepUnit.value === '';
-    // Anything that isn't a number (or is empty) means "every 1", same as the server.
-    if (!mRepEvery.hidden && !(parseInt(mRepN.value, 10) > 0)) { mRepN.value = 1; }
+    if (mRepUnit.value === '') { revealRep(false); return; }   // "Never" folds it away
+    if (!(parseInt(mRepN.value, 10) > 0)) { mRepN.value = 1; }
   });
-  // Time applies to every kind now; only the calendar (events) and group (reminders)
-  // rows are kind-specific.
-  // New items are always mine, so the window offers only my calendar / my folder — there
-  // are no partner pickers to keep in sync any more.
+
+  // Only the calendar (events) and group (reminders) rows are kind-specific; time is offered
+  // on every kind. New items are always mine, so there are no partner pickers to keep in sync.
   const mSec = document.getElementById('mSec');
-  const showTime = (val) => {
-    mTime.value = val || ''; mTimeRow.hidden = false;
-    mCalRow.hidden = false; mSecRow.hidden = true;
-  };
-  const hideTime = (kind) => {
-    mTimeRow.hidden = false; mCalRow.hidden = true; mSecRow.hidden = kind !== 'reminder';
-  };
-  document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; });
+  const paintKind = (kind) => { mCalRow.hidden = kind !== 'event'; mSecRow.hidden = kind !== 'reminder'; };
+  mAddTime.addEventListener('click', () => { revealTime(true); mTime.focus(); if (mTime.showPicker) { try { mTime.showPicker(); } catch (_) {} } });
+  document.getElementById('mClearTime').addEventListener('click', () => { mTime.value = ''; revealTime(false); });
   document.querySelectorAll('input[name=kindchoice]').forEach(r => {
     r.addEventListener('change', () => {
       if (!r.checked) { return; }
-      r.value === 'event' ? showTime(mTime.value) : hideTime(r.value);
+      paintKind(r.value);
       showRep(r.value, { unit: mRepUnit.value, n: mRepN.value });
     });
   });
@@ -1529,8 +1666,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mText.value = '';
     document.querySelector('input[name=kindchoice][value=event]').checked = true;
     mCal.value = newEventCal();            // the calendar you're looking at, else the default
-    showTime('');
-    showRep('event', null);
+    mTime.value = ''; revealTime(false);   // time hidden behind "+ Time" until asked for
+    paintKind('event');
+    showRep('event', null);                // repeat hidden behind "+ Repeat"
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);
@@ -1547,9 +1685,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
-    if (kind === 'event') { mCal.value = cal || newEventCal(); showTime(time); }
-    else { mTime.value = time || ''; hideTime(kind); }
-    showRep(kind, rep);
+    if (kind === 'event') { mCal.value = cal || newEventCal(); }
+    mTime.value = time || '';
+    paintKind(kind);
+    revealTime(!!time);                    // open the time row only if it already has one
+    showRep(kind, rep);                    // and the repeat row only if it already repeats
     if (date) showDate(date); else hideDate();
     modal.classList.add('open');
     setTimeout(() => mText.focus(), 30);

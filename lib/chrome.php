@@ -118,7 +118,9 @@ function chrome_styles(): string
     . settings_modal_styles()
     . confirm_delete_styles()
     . swipe_delete_styles()
-    . section_rename_styles();
+    . section_rename_styles()
+    . folder_rename_styles()
+    . collapse_all_styles();
 }
 
 /**
@@ -402,6 +404,71 @@ function folder_collapse_button(): string
          . '</button>';
 }
 
+/**
+ * A "collapse all" icon button — a double chevron. Reminders puts it left of Completed,
+ * Notes above the top folder, Habits above the top section. What it folds depends on the
+ * page: folder_collapse_all_script() folds every `.folder-block`; Habits wires its own to
+ * fold sections. It toggles — a second press expands everything again.
+ */
+function collapse_all_button(string $extraClass = '', string $id = 'collapseAllBtn'): string
+{
+    return '<button type="button" class="collapse-all ' . htmlspecialchars($extraClass, ENT_QUOTES) . '" id="'
+         . htmlspecialchars($id, ENT_QUOTES) . '" title="Collapse all" aria-label="Collapse all">'
+         . '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"'
+         . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+         . '<path d="M6 13.5l6-6 6 6"/><path d="M6 18.5l6-6 6 6"/></svg></button>';
+}
+
+/** Collapse-all styles: a 32px round icon button matching the other row buttons. */
+function collapse_all_styles(): string
+{
+    return <<<CSS
+    .collapse-all {
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; padding: 0; background: none; color: #ccc;
+      border: 1px solid #333; border-radius: 999px; cursor: pointer; font-family: inherit;
+    }
+    .collapse-all:hover { border-color: #888; color: #fff; }
+    /* Flip the double chevron once everything is folded, so it reads as "expand all". */
+    .collapse-all.all-collapsed svg { transform: rotate(180deg); }
+    CSS;
+}
+
+/**
+ * Wire a "collapse all" button (#collapseAllBtn) to fold every `.folder-block` on the page
+ * — and to expand them all on a second press. It writes the same `foldercollapsed:<path>`
+ * localStorage set folder_collapse_script() reads, so the state survives a reload and the
+ * per-folder chevrons stay in step. Used by Reminders and Notes; a no-op with no folders.
+ */
+function folder_collapse_all_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var btn = document.getElementById('collapseAllBtn');
+  if (!btn) { return; }
+  var SK = 'foldercollapsed:' + location.pathname;
+  function sync() {
+    var blocks = document.querySelectorAll('.folder-block');
+    var anyOpen = [].some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
+    btn.classList.toggle('all-collapsed', blocks.length > 0 && !anyOpen);
+  }
+  btn.addEventListener('click', function () {
+    var blocks = document.querySelectorAll('.folder-block');
+    if (!blocks.length) { return; }
+    var collapse = [].some.call(blocks, function (b) { return !b.classList.contains('collapsed'); });
+    var set = [];
+    blocks.forEach(function (b) {
+      b.classList.toggle('collapsed', collapse);
+      if (collapse && b.dataset.folder != null) { set.push(b.dataset.folder); }
+    });
+    try { localStorage.setItem(SK, JSON.stringify(set)); } catch (_) {}
+    btn.classList.toggle('all-collapsed', collapse);
+  });
+  sync();
+})();</script>
+JS;
+}
+
 /** Collapse/expand a folder block by tapping its chevron; remembered per page in
  *  localStorage, keyed by folder name. Pairs with a `.folder-block[data-folder]`
  *  wrapper around that folder's sections (Reminders and Notes both build one). */
@@ -489,6 +556,57 @@ function section_title_html(string $name, string $csrf, string $view = '', bool 
          . ' aria-label="Section name"></form>';
 }
 
+/**
+ * A folder's name in its list heading, editable in place — the folder equivalent of
+ * section_title_html(). Out of edit mode it reads as the plain wash-backed label; in edit
+ * mode it becomes a field posting `rename_folder` on Enter or on leaving it. A permanent
+ * folder (Notes' "General") or a partner's shared folder passes $fixed and stays plain
+ * text, since neither is mine to rename. The colour wash rides on both forms via $tint.
+ */
+function folder_title_html(string $name, string $csrf, string $view, string $tint,
+                           bool $fixed = false): string
+{
+    $e  = fn($x) => htmlspecialchars((string) $x, ENT_QUOTES);
+    $bg = 'background:' . $e($tint);
+    if ($fixed) {
+        return '<div class="folder-label" style="' . $bg . '">' . $e($name) . '</div>';
+    }
+    return '<form method="post" action="" class="folderrename">'
+         . '<input type="hidden" name="csrf" value="' . $e($csrf) . '">'
+         . '<input type="hidden" name="action" value="rename_folder">'
+         . '<input type="hidden" name="view" value="' . $e($view) . '">'
+         . '<input type="hidden" name="name" value="' . $e($name) . '">'
+         . '<input class="folder-label foldertitle frename" name="newname" value="' . $e($name) . '"'
+         . ' style="' . $bg . '" size="' . max(4, min(30, mb_strlen($name))) . '"'
+         . ' maxlength="40" autocomplete="off" aria-label="Folder name"></form>';
+}
+
+function folder_rename_styles(): string
+{
+    return <<<CSS
+    /* The folder name as an editable field. It wears .folder-label for the wash and
+       metrics, so this only resets the input chrome and — for the inline list heading —
+       gates editing to edit mode. A transparent border on both edges keeps the focus
+       underline from shifting the name off the centre line the chevron and "+" sit on. */
+    .folderrename { display: inline-flex; align-items: center; min-width: 0; margin: 0; }
+    input.foldertitle {
+      font-family: inherit; border: 1px solid transparent; min-width: 0; max-width: 100%;
+    }
+    input.foldertitle:focus { outline: none; border-color: rgba(255,255,255,0.4); }
+    /* Only a field once you're editing — otherwise it's just the folder's name. */
+    body:not(.editing) input.foldertitle { pointer-events: none; }
+    /* In the Manage-folders window the row's name is always an editable field (the manager
+       is the edit surface), so it reads as an input rather than borrowing .foldertitle's
+       edit-mode gate. */
+    .foldermodal .frename-form { flex: 1; min-width: 0; display: flex; margin: 0; }
+    .foldermodal input.fname {
+      flex: 1; min-width: 0; background: #1b1b1b; border: 1px solid #333; color: #eee;
+      border-radius: 6px; padding: 0.3rem 0.5rem; font-family: inherit; font-size: 0.95rem;
+    }
+    .foldermodal input.fname:focus { outline: none; border-color: #888; }
+    CSS;
+}
+
 function section_rename_styles(): string
 {
     return <<<CSS
@@ -509,6 +627,54 @@ function section_rename_styles(): string
     body.editing .sectitle { border-bottom-color: #3a3a3a; }
     .sectitle:focus { outline: none; border-bottom-color: #f0b429; }
     CSS;
+}
+
+/**
+ * Commit/revert a folder-name field (.frename — the inline list heading and the
+ * Manage-folders row both carry it). Enter or leaving it posts `rename_folder` when the
+ * name actually changed; Escape or an empty/unchanged value puts it back. The inline
+ * heading field also carries .foldertitle, which is fitted to its text like a section
+ * name so it sits the right distance from the "+" beside it.
+ */
+function folder_rename_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var ruler = null;
+  function fit(i) {
+    if (!ruler) {
+      ruler = document.createElement('span');
+      ruler.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0';
+      document.body.appendChild(ruler);
+    }
+    var cs = getComputedStyle(i);
+    ruler.style.font = cs.font; ruler.style.letterSpacing = cs.letterSpacing;
+    ruler.textContent = i.value || ' ';
+    i.style.width = (ruler.offsetWidth + 4) + 'px';
+  }
+  function fitAll() { document.querySelectorAll('input.foldertitle').forEach(fit); }
+  document.addEventListener('input', function (e) {
+    if (e.target.classList && e.target.classList.contains('foldertitle')) { fit(e.target); }
+  });
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', fitAll); }
+  else { fitAll(); }
+  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitAll); }
+
+  document.addEventListener('focusout', function (e) {
+    var i = e.target;
+    if (!i.classList || !i.classList.contains('frename')) { return; }
+    var was = i.form.querySelector('input[name="name"]').value;
+    if (i.value.trim() !== '' && i.value.trim() !== was) { i.form.submit(); }
+    else { i.value = was; }
+  });
+  document.addEventListener('keydown', function (e) {
+    var i = e.target;
+    if (!i.classList || !i.classList.contains('frename')) { return; }
+    if (e.key === 'Enter') { e.preventDefault(); i.blur(); }
+    if (e.key === 'Escape') { i.value = i.form.querySelector('input[name="name"]').value; i.blur(); }
+  });
+})();</script>
+JS;
 }
 
 function section_rename_script(): string
@@ -756,8 +922,10 @@ function chrome_script(): string
          . confirm_delete_script()
          . swipe_delete_script()
          . section_rename_script()
+         . folder_rename_script()
          . section_collapse_script()
          . folder_collapse_script()
+         . folder_collapse_all_script()
          . keep_scroll_script()
          . keep_edit_script();
 }

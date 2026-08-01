@@ -283,7 +283,9 @@ function render_ro_rows(array $rows, string $today): void
 function render_shared_folder_ro(string $dir, string $partner, string $folder, string $key,
                                  string $color, string $today): void
 {
-    $all   = load_reminders(user_data_file($dir, 'reminders', $partner));
+    // Normalise their list in memory (never saved — their data is theirs) so their loose
+    // reminders show under a real section rather than a nameless catch-all.
+    $all   = sections_normalize(load_reminders(user_data_file($dir, 'reminders', $partner)), [$folder]);
     $secs  = array_values(array_filter($all, fn($it) => is_section($it) && ($it['folder'] ?? '') === $folder));
     $items = array_values(array_filter($all, fn($it) => !is_section($it)
         && ($it['folder'] ?? folder_fallback('reminders')) === $folder));
@@ -372,6 +374,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $editBack . '&fm=1');
         exit;
     }
+    // The Manage-folders "Default for new items" picker sets the default folder and its
+    // section together, from a "folder\x1Fsection" value. The section is validated against
+    // the folder's real sections, falling back to the first.
+    if ($_POST['action'] === 'set_default_section') {
+        $v = (string) ($_POST['fs'] ?? '');
+        [$dFolder, $dSection] = strpos($v, "\x1F") !== false ? explode("\x1F", $v, 2) : [$v, ''];
+        if (in_array($dFolder, $myFolders, true)) {
+            $secs = [];
+            foreach (sections_normalize(load_reminders($dataFile), $myFolders) as $it) {
+                if (is_section($it) && ($it['folder'] ?? '') === $dFolder) { $secs[] = (string) $it['name']; }
+            }
+            if (!in_array($dSection, $secs, true)) { $dSection = $secs[0] ?? SECTION_DEFAULT_NAME; }
+            folder_default_section_set($cfg['data_dir'], 'reminders', $dFolder, $dSection);
+        }
+        header('Location: ' . $editBack . '&fm=1');
+        exit;
+    }
     // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
     if ($_POST['action'] === 'folder_vis') {
         $vname = (string) ($_POST['name'] ?? '');
@@ -448,9 +467,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $secFolder  = ($postFolder !== '' && in_array($postFolder, $myFolders, true))
             ? $postFolder
             : ($viewFolder === 'All' ? $defFolder : $viewFolder);
-        // "Reminders" is the catch-all every folder already ends with, so a section
-        // can't be called that — there'd be two of them under one heading.
-        if ($name !== '' && strcasecmp($name, DEFAULT_SECTION) !== 0) {
+        // Any non-empty name is fine now (the duplicate check below keeps a folder from
+        // holding two same-named sections); there's no reserved catch-all name any more.
+        if ($name !== '') {
             $list = load_reminders($dataFile);
             $dup  = false;
             foreach ($list as $it) {
@@ -481,31 +500,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $name      = (string) ($_POST['name'] ?? '');
         $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         $list = load_reminders($dataFile);
-        // Deleting the permanent "Reminders" catch-all: allowed only when the folder has
-        // another section — its loose reminders move into that folder's first section, and
-        // the empty catch-all then stops rendering (it comes back if a loose item lands).
-        if ($name === '') {
-            $first = '';
-            foreach ($list as $it) {
-                if (is_section($it) && ($it['folder'] ?? '') === $secFolder) { $first = (string) $it['name']; break; }
-            }
-            if ($first !== '') {
-                foreach ($list as &$r) {
-                    if (!is_section($r) && ($r['section'] ?? '') === ''
-                        && ($r['folder'] ?? folder_fallback('reminders')) === $secFolder) { $r['section'] = $first; }
-                }
-                unset($r);
-                save_reminders($dataFile, $list);
-            }
+        if (!$isShared) { $list = sections_normalize($list, $folders); }
+        // A folder always keeps at least one section: the last one can't be deleted. When
+        // it isn't the last, its reminders move into the folder's first remaining section
+        // rather than being orphaned — there's no nameless catch-all to fall to any more.
+        $folderSecNames = [];
+        foreach ($list as $it) {
+            if (is_section($it) && ($it['folder'] ?? '') === $secFolder) { $folderSecNames[] = (string) $it['name']; }
+        }
+        if (count($folderSecNames) <= 1) {          // it's the folder's only section
             header('Location: ' . $editBack);
             exit;
         }
+        $rest  = array_values(array_filter($folderSecNames, fn($n) => $n !== $name));
+        $moveTo = $rest[0] ?? SECTION_DEFAULT_NAME;
         // Only this folder's copy of the section goes; other folders keep theirs.
         $list = array_filter($list, fn($it) => !(is_section($it)
             && ($it['name'] ?? '') === $name && ($it['folder'] ?? '') === $secFolder));
         foreach ($list as &$r) {
             if (!is_section($r) && ($r['section'] ?? '') === $name
-                && ($r['folder'] ?? folder_fallback('reminders')) === $secFolder) { $r['section'] = ''; }
+                && ($r['folder'] ?? folder_fallback('reminders')) === $secFolder) { $r['section'] = $moveTo; }
         }
         unset($r);
         save_reminders($dataFile, $list);
@@ -643,7 +657,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
 
     $list        = load_reminders($dataFile);
+    // Every folder keeps at least one real section and every reminder sits in one — the
+    // model that replaced the unnamed catch-all. My own file is repaired in place; a
+    // partner's structure is theirs, so it's left as-is (they normalise their own).
+    if (!$isShared) { $list = sections_normalize($list, $folders); }
     $sectionSet  = [];   // "folder\x1Fname" — sections are per-folder
+    $firstSec    = sections_first_by_folder($list);   // folder => its default (first) section
     // Edit mode rides along on the POST, so anything done from within it lands back
     // in it. The forms only carry this field while editing (see the submit hook).
     $stay        = !empty($_POST['edit']) ? '&edit=1' : '';
@@ -658,8 +677,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $folder  = (string) ($_POST['folder'] ?? $addTarget);
             if (!in_array($folder, $folders, true)) { $folder = $addTarget; }
             $section = (string) ($_POST['section'] ?? '');
-            // '' is the folder's catch-all; anything else has to be a real section there.
-            if ($section !== '' && !isset($sectionSet[$folder . "\x1F" . $section])) { $section = ''; }
+            // Every reminder sits in a real section now — a blank or unknown one lands in
+            // the folder's first (default) section rather than a nameless catch-all.
+            if ($section === '' || !isset($sectionSet[$folder . "\x1F" . $section])) {
+                $section = $firstSec[$folder] ?? SECTION_DEFAULT_NAME;
+            }
 
             // A dated field from the window wins; otherwise read the date and time
             // out of what was typed ("Vet 8/3 2pm").
@@ -756,6 +778,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
 // --- Render ---
 $all = load_reminders($dataFile);
+// Guarantee the "every folder has a real section, every reminder sits in one" model, then
+// write the repair back — but only for my own file. A partner's shared folders are theirs
+// to structure, so their list is normalised in memory for the read-only view, never saved.
+$all = sections_normalize($all, $folders, $secChanged);
+if ($secChanged && !$isShared) { save_reminders($dataFile, $all); }
 
 // Which folders are on screen. A folder view is just that one; "All" is every folder
 // that isn't switched off in the picker (a partner's list is theirs, so nothing of mine
@@ -1217,6 +1244,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 <?= share_modal_styles() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
+    /* The Completed/Share toolbar sits the same small gap below its row as the header sits
+       above it (header's 0.5rem), so the first folder divider isn't a wide gulf under the
+       buttons. Overrides folder_nav_styles' 1.25rem, which is emitted earlier. */
+    .foldernav { margin-bottom: 0.5rem; }
+    #rlist-root > .folder-block:first-child { margin-top: 0; }
   </style>
 </head>
 <body>
@@ -1244,6 +1276,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   <?php // Completed and Section keep the row under the header; the folder picker
         // itself has moved up beside the +. ?>
   <div class="foldernav">
+    <?= collapse_all_button() ?>
     <button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
     <?php // Copy-as-Markdown is a personal tool — only Sean's account shows it. ?>
     <?php if ($me === 'sean'): ?>
@@ -1260,8 +1293,20 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   </div>
 
   <?php if (!$isShared) {
+        // The Default Folder/Section picker's list: each of my folders with its real
+        // sections (from the already-normalised $all), plus which one is the current default.
+        $modalSecs = [];
+        foreach ($myFolders as $mf) {
+            $modalSecs[$mf] = [];
+            foreach ($all as $it) {
+                if (is_section($it) && ($it['folder'] ?? '') === $mf) { $modalSecs[$mf][] = (string) $it['name']; }
+            }
+        }
+        $defSecRaw = folder_default_section_get($cfg['data_dir'], 'reminders');
+        $defSec    = in_array($defSecRaw, $modalSecs[$defFolder] ?? [], true)
+            ? $defSecRaw : ($modalSecs[$defFolder][0] ?? SECTION_DEFAULT_NAME);
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('reminders'),
-                            app_palette('reminders', true), 'reminders');
+                            app_palette('reminders', true), 'reminders', false, $modalSecs, $defFolder, $defSec);
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
@@ -1383,7 +1428,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
         $at = ($hasCatch && !$isShared)
             ? folder_catchall_index($cfg['data_dir'], 'reminders', $sfolder, $folderSecs)
             : $folderSecs;
-        array_pop($blocks);                       // the placeholder pushed above
+        if ($hasCatch) { array_pop($blocks); }    // drop the placeholder pushed above (only then)
         foreach ($blocks as $bi => $bhtml) {
             if ($hasCatch && $bi === $at) { echo $catch; }
             echo $bhtml;

@@ -270,6 +270,79 @@ function section_rename(array $list, string $old, string $new, ?string $folder =
 /** Default folder a section falls back to when a row or item doesn't name one. */
 const SECTION_DEFAULT_FOLDER = 'General';
 
+/** The section a folder is given when it has none — the first, renameable section every
+ *  folder always keeps. There is no unnamed catch-all any more: every reminder and note
+ *  lives in a real section, and this is the one a fresh folder (or a migrated loose item)
+ *  starts in. Renameable and, while it's a folder's only section, undeletable. */
+const SECTION_DEFAULT_NAME = 'General';
+
+/**
+ * Enforce "every folder has at least one real section, and every item sits in one" — the
+ * model that replaced the unnamed catch-all. For each folder in $folders (plus any a row
+ * names), if it has no section row one named SECTION_DEFAULT_NAME is created and led to the
+ * front of that folder's run; any non-section item whose `section` is blank or names a
+ * section its folder doesn't have is moved into that folder's first section. Idempotent:
+ * a list already satisfying the rule comes back untouched with $changed false, so a reader
+ * only writes when it actually repaired something. Works for reminders and notes alike —
+ * both store section header rows plus a `section` name on each item.
+ */
+function sections_normalize(array $list, array $folders, &$changed = false,
+                            string $default = SECTION_DEFAULT_NAME): array
+{
+    $changed = false;
+    // Sections that exist per folder, in stored order.
+    $secByFolder = [];
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section') {
+            $secByFolder[(string) ($it['folder'] ?? SECTION_DEFAULT_FOLDER)][] = (string) ($it['name'] ?? '');
+        }
+    }
+    // Every folder that should carry a section: the ones passed in, plus any a row names.
+    $allFolders = array_values($folders);
+    foreach ($list as $it) {
+        $f = (string) ($it['folder'] ?? SECTION_DEFAULT_FOLDER);
+        if ($f !== '' && !in_array($f, $allFolders, true)) { $allFolders[] = $f; }
+    }
+    // A default section for any folder that has none, prepended so it leads that folder.
+    $prepend = [];
+    foreach ($allFolders as $f) {
+        if (empty($secByFolder[$f])) {
+            $prepend[] = ['id' => bin2hex(random_bytes(6)), 'type' => 'section',
+                          'name' => $default, 'folder' => $f, 'created' => time()];
+            $secByFolder[$f] = [$default];
+            $changed = true;
+        }
+    }
+    if ($prepend) { $list = array_merge($prepend, $list); }
+    // Re-home any item whose section is blank or unknown in its folder into its first one.
+    foreach ($list as &$it) {
+        if (($it['type'] ?? '') === 'section') { continue; }
+        $f    = (string) ($it['folder'] ?? SECTION_DEFAULT_FOLDER);
+        $sec  = (string) ($it['section'] ?? '');
+        $have = $secByFolder[$f] ?? [];
+        if ($sec === '' || !in_array($sec, $have, true)) {
+            $it['section'] = $have[0] ?? $default;
+            $changed = true;
+        }
+    }
+    unset($it);
+    return $list;
+}
+
+/** The first (default) section name in each folder, keyed by folder — the section a new
+ *  item lands in when none is chosen. Assumes the list is already normalised. */
+function sections_first_by_folder(array $list): array
+{
+    $first = [];
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section') {
+            $f = (string) ($it['folder'] ?? SECTION_DEFAULT_FOLDER);
+            if (!isset($first[$f])) { $first[$f] = (string) ($it['name'] ?? ''); }
+        }
+    }
+    return $first;
+}
+
 /**
  * Bring an old list up to per-folder sections. Legacy section rows carried no `folder`
  * and were shown in every folder; here each is replaced by one row per folder that
