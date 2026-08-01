@@ -1601,6 +1601,31 @@ t('dragging a note section reorders it within its folder', function () {
     eq(['Beta', 'Alpha'], $order(), 'and dragging the other way flips it');
 });
 
+t('dragging a note into another folder re-files it', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FromF'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ToF'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add',
+        'view' => 'All', 'folder' => 'FromF', 'section' => ''], $jar);
+    $id = null;
+    foreach (stored('notes', 'example') as $n) {
+        if (($n['type'] ?? '') !== 'section' && ($n['folder'] ?? '') === 'FromF') { $id = $n['id']; break; }
+    }
+    ok($id !== null, 'a note exists in FromF');
+    $folderOf = function () use ($id) {
+        foreach (stored('notes', 'example') as $n) { if (($n['id'] ?? '') === $id) { return $n['folder'] ?? null; } }
+        return null;
+    };
+    // The drag posts each note with the folder of the block it landed in.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $id, 'section' => '', 'folder' => 'ToF']]), 'sections' => '{}'], $jar, true);
+    eq('ToF', $folderOf(), 'the note re-files to ToF');
+    // A folder that isn't mine (e.g. a partner's shared block) is refused.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $id, 'section' => '', 'folder' => '@someone:Nope']]), 'sections' => '{}'], $jar, true);
+    eq('ToF', $folderOf(), 'a folder that is not mine is ignored');
+});
+
 t('the "Notes" catch-all name is reserved', function () {
     $jar = login('example', 'examplepassword');
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',

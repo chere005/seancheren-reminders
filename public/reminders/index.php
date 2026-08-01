@@ -1051,7 +1051,7 @@ $sectionInput =
     /* A short rule on the heading's own line, trailing off to the right edge. It rides
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
-    .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
+    .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
     /* The "+" that adds a section to this folder — edit mode only, right of its name. */
     .fsec-add {
       flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
