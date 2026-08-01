@@ -1272,14 +1272,20 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       }
       if (dragSec) {                                    // reorder whole sections within a folder
         e.preventDefault();
-        const under = document.elementFromPoint(e.clientX, e.clientY); if (!under) return;
-        const over = under.closest('.section-group');
         const block = dragSec.parentNode;
-        if (over && over !== dragSec && over.parentNode === block) {
-          const r = over.getBoundingClientRect();
-          let before = e.clientY < r.top + r.height / 2;
-          if (over.classList.contains('default-group')) before = true;   // stay above the catch-all
-          block.insertBefore(dragSec, before ? over : over.nextElementSibling);
+        // Pick the drop slot from the cursor's Y against each section's midpoint, not from
+        // what's under the pointer: a tall section sits under the cursor the whole drag, so
+        // hit-testing never found a target and nothing moved.
+        let target = null;
+        block.querySelectorAll(':scope > .section-group').forEach(g => {
+          if (target || g === dragSec) return;
+          const r = g.getBoundingClientRect();
+          if (e.clientY < r.top + r.height / 2) { target = g; }
+        });
+        // A named section never falls below the permanent catch-all.
+        if (!target) { target = block.querySelector(':scope > .section-group.default-group'); }
+        if (target !== dragSec && target !== dragSec.nextElementSibling) {
+          block.insertBefore(dragSec, target);          // target null => to the end
         }
         return;
       }
