@@ -276,7 +276,9 @@ rolls it instead. A POST with no token or a wrong one is a 400 and changes nothi
 Static checks on `deploy.sh`, because a deploy is the one thing here that can destroy data
 and the one thing a test run may never actually perform. It parses; no `rsync` line uses
 `--delete`; every `lib` push excludes `config.php`; nothing names a live data directory; a
-bare deploy is the test instance and production needs saying out loud.
+bare deploy is the test instance and production needs saying out loud. Also
+`tools/seed-http.php`: the committed copy carries no key, compares in constant time, has
+no default data directory, and is never deployed.
 
 ## What only eyes can check
 

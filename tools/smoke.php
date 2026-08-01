@@ -35,7 +35,7 @@ if ($base === '') {
 // ---------------------------------------------------------------- http
 
 /** One request. Redirects are not followed — where a page sends you is part of the check. */
-function get(string $url, array &$jar = null, string $method = 'GET', array $post = []): array
+function get(string $url, ?array &$jar = null, string $method = 'GET', array $post = []): array
 {
     $headers = ['User-Agent: seancheren-smoke/1', 'Connection: close'];
     if ($jar) {
@@ -216,7 +216,12 @@ function run_private(string $base, string $user, string $pass): array
     $jar = [];
     get($base . '/reminders/', $jar);
     $r = get($base . '/reminders/', $jar, 'POST', ['username' => $user, 'password' => $pass]);
-    if (!check('the password is accepted', $r['status'] === 302, "status {$r['status']}")) {
+    if (!check('the password is accepted', $r['status'] === 302,
+               "status {$r['status']} — if this instance has its own data dir, it may simply "
+               . 'never have been seeded (see the seeding note in CLAUDE.md); an unseeded '
+               . 'instance has no accounts and every signed-in check below is skipped')) {
+        note("$base could not sign in as $user, so nothing behind the login was checked"
+             . ' — and a --compare against it will read as a code difference when it isn\'t one.');
         return $seen;
     }
     check('and lands on the Calendar', $r['location'] === '/calendar/'
