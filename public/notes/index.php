@@ -256,53 +256,54 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if (!is_array($order)) { $order = []; }
         $notes = load_notes($dataFile);
 
-        // Sections are per-folder. `sections` is a map folder => [name,…] giving the new
-        // order of that folder's sections after a section drag; a folder not in the map
-        // keeps its stored order. Works in "All" (per folder block) as well as one folder.
-        $secExists = [];   // "folder\x1Fname" => true
-        $byFolder  = [];   // folder => [section rows], in stored order
-        $byId      = [];
+        // Sections can move between folders, so `sections` is a map folder => [id,…]
+        // (section ids in order, the catch-all as ''). A section listed under a folder is
+        // re-filed to it — by id, since names collide across folders — and its notes follow
+        // via the row order below. A folder not in the map keeps its stored order.
+        $secById = [];   // id => section row
+        $byId    = [];   // note id => note row
         foreach ($notes as $it) {
-            if (is_section($it)) {
-                $f = $it['folder'] ?? FOLDER_DEFAULT;
-                $secExists[$f . "\x1F" . $it['name']] = true;
-                $byFolder[$f][] = $it;
-            } else {
-                $byId[$it['id']] = $it;
-            }
+            if (is_section($it)) { $secById[$it['id']] = $it; }
+            else { $byId[$it['id']] = $it; }
         }
         $secMap = json_decode((string) ($_POST['sections'] ?? '[]'), true);
         if (!is_array($secMap)) { $secMap = []; }
-        $sectionRows = [];
-        foreach ($byFolder as $f => $rows) {
-            // NB: a distinct name from the row-`$order` decoded above — reusing it clobbered
-            // the note order and quietly broke row dragging (and cross-folder re-filing).
-            $names  = is_array($secMap[$f] ?? null) ? array_map('strval', $secMap[$f]) : [];
-            $byName = [];
-            foreach ($rows as $r) { $byName[(string) $r['name']] = $r; }
-            foreach ($names as $nm) {
-                if (isset($byName[$nm])) { $sectionRows[] = $byName[$nm]; unset($byName[$nm]); }
-            }
-            foreach ($byName as $r) { $sectionRows[] = $r; }   // any not named keep their place
-        }
-        // The catch-all rides in the section order as '' — remember where it landed per
-        // folder (secMap is keyed by folder, so this is unambiguous even in the All view),
-        // so it renders at that slot instead of always trailing.
-        foreach ($secMap as $sf => $snames) {
-            if (!is_array($snames) || !in_array('', $snames, true)) { continue; }
-            $idx = 0;
-            foreach ($snames as $nm) {
-                if ($nm === '') { break; }
-                if (isset($secExists[$sf . "\x1F" . $nm])) { $idx++; }
-            }
-            folder_catchall_index_set($cfg['data_dir'], 'notes', $sf, $idx);
-        }
-
-        // A drag can carry a note into another of MY folders — the item posts the folder
-        // of the block it was dropped in. Re-file it only if that's one of my own note
-        // folders (never a partner's shared block); the section is then re-validated
-        // against the folder it ends up in.
         $myNoteFolders = folders_load($cfg['data_dir'])['notes'];
+
+        $sectionRows = [];
+        $placed      = [];   // section id => true
+        $namesIn     = [];   // folder => [name => true], so a move can't create a duplicate
+        foreach ($secMap as $f => $ids) {
+            if (!is_array($ids)) { continue; }
+            $folderOk = in_array($f, $myNoteFolders, true);
+            foreach ($ids as $sid) {
+                $sid = (string) $sid;
+                if ($sid === '' || !isset($secById[$sid]) || isset($placed[$sid])) { continue; }
+                $srow = $secById[$sid];
+                $name = (string) $srow['name'];
+                // Re-file to $f if it's one of mine and doesn't already hold that name;
+                // otherwise the section stays where it was.
+                $dest = ($folderOk && !isset($namesIn[$f][$name])) ? $f : (string) ($srow['folder'] ?? FOLDER_DEFAULT);
+                $srow['folder'] = $dest;
+                $namesIn[$dest][$name] = true;
+                $sectionRows[] = $srow;
+                $placed[$sid]  = true;
+            }
+            // The catch-all's slot in $f: how many real sections precede its '' marker.
+            if ($folderOk && in_array('', $ids, true)) {
+                $idx = 0;
+                foreach ($ids as $sid) { if ((string) $sid === '') { break; } if (isset($secById[(string) $sid])) { $idx++; } }
+                folder_catchall_index_set($cfg['data_dir'], 'notes', $f, $idx);
+            }
+        }
+        // Sections the drag never touched keep their place, after the reordered ones.
+        foreach ($notes as $it) {
+            if (is_section($it) && !isset($placed[$it['id']])) { $sectionRows[] = $it; }
+        }
+        // secExists reflects the re-filed sections — the note re-section below validates
+        // against where each section ended up.
+        $secExists = [];
+        foreach ($sectionRows as $s) { $secExists[($s['folder'] ?? FOLDER_DEFAULT) . "\x1F" . $s['name']] = true; }
         $newRows = [];
         $used    = [];
         foreach ($order as $o) {
@@ -566,7 +567,7 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
     // Wrapped in a .section-group (head + its notes as one element) so a section drags as a
     // unit, the same shape the shared read-only view and Reminders already use.
     ?>
-    <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>">
+    <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>" data-id="<?= e($s['id']) ?>">
     <div class="section-head" data-folder="<?= e($sfolder) ?>">
       <?= section_collapse_button() ?>
       <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
@@ -1278,14 +1279,15 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         const folder = block ? (block.dataset.folder || '') : '';
         ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section, folder }));
       });
-      // Section order per folder — every section, the catch-all included as '' so its slot
-      // moves too.
+      // Section order per folder, by section id — a section can move to another folder, so
+      // its id is what re-files it (names collide across folders). The catch-all has no id;
+      // it rides as '' so its slot moves too.
       const sections = {};
       root.querySelectorAll('.folder-block').forEach(blk => {
         if (blk.classList.contains('shared-block')) return;
-        const names = [];
-        blk.querySelectorAll(':scope > .section-group').forEach(g => names.push(g.dataset.section || ''));
-        sections[blk.dataset.folder || ''] = names;
+        const ids = [];
+        blk.querySelectorAll(':scope > .section-group').forEach(g => ids.push(g.dataset.id || ''));
+        sections[blk.dataset.folder || ''] = ids;
       });
       const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
         order: JSON.stringify(order), sections: JSON.stringify(sections) });
@@ -1335,17 +1337,20 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) cancelPress();
         return;
       }
-      if (dragSec) {                                    // a line between the sections of this block
+      if (dragSec) {                                    // a line among sections — any folder block
         e.preventDefault();
-        const block = dragSec.parentNode;
+        // The block under the cursor, so a section can move to another folder. The slot in
+        // it is chosen by the cursor's Y against each section's midpoint (a tall section
+        // otherwise sits under the cursor the whole drag).
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const block = under && under.closest('.folder-block:not(.shared-block)');
+        if (!block) { clearLine(); return; }
         const groups = [...block.querySelectorAll(':scope > .section-group')].filter(g => g !== dragSec);
-        // The slot is chosen by the cursor's Y against each section's midpoint — a tall
-        // section otherwise sits under the cursor the whole drag.
         let target = null;
         for (const g of groups) { const r = g.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { target = g; break; } }
         if (target) { lineBefore(target, false, 'div'); }
         else if (groups.length) { lineBefore(groups[groups.length - 1], true, 'div'); }
-        else { clearLine(); }
+        else { const head = block.querySelector(':scope > .folder-head'); head ? lineBefore(head, true, 'div') : clearLine(); }
         return;
       }
       if (!dragLi) return;                              // a line among the rows, in any folder

@@ -1579,9 +1579,20 @@ t('note sections add, rename and delete per folder', function () {
     ok(!in_array('Afters', $names(), true), 'deleted');
 });
 
+/** The id of a note section by folder + name, or null. */
+function note_sec_id(string $folder, string $name): ?string
+{
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $folder && ($x['name'] ?? '') === $name) {
+            return (string) $x['id'];
+        }
+    }
+    return null;
+}
+
 t('dragging a note section reorders it within its folder', function () {
-    // The gesture is by-eye (no JS in the harness), but the drag posts a per-folder
-    // section map to the reorder action — that server side is what this locks down.
+    // The gesture is by-eye (no JS in the harness), but the drag posts a per-folder map of
+    // section *ids* to the reorder action — that server side is what this locks down.
     $jar = login('example', 'examplepassword');
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'DragNotes'], $jar);
@@ -1589,16 +1600,39 @@ t('dragging a note section reorders it within its folder', function () {
         req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
             'view' => 'DragNotes', 'folder' => 'DragNotes', 'name' => $nm], $jar);
     }
+    $a = note_sec_id('DragNotes', 'Alpha'); $b = note_sec_id('DragNotes', 'Beta');
     $order = fn() => array_column(array_values(array_filter(stored('notes', 'example'),
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DragNotes')), 'name');
 
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
-        'order' => '[]', 'sections' => json_encode(['DragNotes' => ['Alpha', 'Beta']])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$a, $b]])], $jar, true);
     eq(['Alpha', 'Beta'], $order(), 'the map sets the section order');
 
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
-        'order' => '[]', 'sections' => json_encode(['DragNotes' => ['Beta', 'Alpha']])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$b, $a]])], $jar, true);
     eq(['Beta', 'Alpha'], $order(), 'and dragging the other way flips it');
+});
+
+t('dragging a note section into another folder re-files it, and its notes follow', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'SFrom'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'STo'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section', 'view' => 'SFrom', 'folder' => 'SFrom', 'name' => 'Mains'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'SFrom', 'folder' => 'SFrom', 'section' => 'Mains'], $jar);
+    $sid = note_sec_id('SFrom', 'Mains'); $nid = null;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['folder'] ?? '') === 'SFrom') { $nid = $x['id']; }
+    }
+    ok($sid && $nid, 'a section and a note in SFrom');
+    $find = function ($id) { foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+
+    // Drag the Mains section into STo: it's now listed under STo, and its note posts folder=STo.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $nid, 'section' => 'Mains', 'folder' => 'STo']]),
+        'sections' => json_encode(['SFrom' => [''], 'STo' => [$sid, '']])], $jar, true);
+    eq('STo', $find($sid)['folder'] ?? null, 'the section moved to STo');
+    eq('STo', $find($nid)['folder'] ?? null, 'its note followed');
+    eq('Mains', $find($nid)['section'] ?? null, 'keeping its section');
 });
 
 t('dragging a note into another folder re-files it', function () {
@@ -1631,17 +1665,18 @@ t('the catch-all "Notes" group remembers where it was dragged', function () {
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'CatF'], $jar);
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
         'view' => 'CatF', 'folder' => 'CatF', 'name' => 'Sec1'], $jar);
+    $sid = note_sec_id('CatF', 'Sec1');
     $catchBeforeSec1 = function () use ($jar) {
         $b = req('GET', '/notes/?folder=CatF', [], $jar)['body'];
         return strpos($b, 'section-group default-group') < strpos($b, 'data-section="Sec1"');
     };
     // Drag the catch-all above Sec1 (its '' comes first in the posted section order).
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
-        'order' => '[]', 'sections' => json_encode(['CatF' => ['', 'Sec1']])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['CatF' => ['', $sid]])], $jar, true);
     ok($catchBeforeSec1(), 'the catch-all renders before the section');
     // And back below it.
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
-        'order' => '[]', 'sections' => json_encode(['CatF' => ['Sec1', '']])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['CatF' => [$sid, '']])], $jar, true);
     ok(!$catchBeforeSec1(), 'and back below it');
 });
 
