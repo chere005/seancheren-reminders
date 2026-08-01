@@ -32,9 +32,16 @@ Everything the site suite does that makes sense on a phone is reimplemented nati
 folders and groups, repeats (with month/year day-clamping), the undated-first ordering,
 the slash-only US-order text parser (`Shared/Parse.swift`), the two-press delete, plus
 **subtasks** (one level, swipe a task left to add one, a subtask left to lift it out),
-**per-section colours**, the Habits **week and month views** — the month drawn as a pie
-per day, sliced in the sections' own colours, behind a section filter — and Reminders'
-**Copy as Markdown**.
+**per-section colours** (picked from a shared swatch popover, `ColorDot` — real colours,
+not an SF Symbol tinted the same in a menu), the Habits **week and month views** — the
+month drawn as a pie per day, sliced in the sections' own colours, behind a section filter
+— Reminders' **Copy as Markdown** and **Clear completed**. The Calendar's day panel has one
+**+ Add** (Reminder / Event / Note, landing on the selected day), the web's single Add; a
+day's reminders sort undated-first, then by date, then by time.
+
+`PARITY.md` walks every section of the website's test suite and records the iOS status
+(covered / covered-differently / by-eye / out-of-scope / open gap), so the two apps can be
+kept in feature parity deliberately rather than by memory.
 
 ## Tests
 
@@ -66,9 +73,13 @@ A watch can't hold the database, so the phone hands it a ready-made list. Whenev
 store changes, `PhoneConnectivity` (`App/PhoneConnectivity.swift`) builds a `WatchList`
 (`Store.watchList()`) — the same groups in the same order as the Reminders screen, open
 items only, dates already turned into short strings — and ships it as the
-WatchConnectivity *application context*. `WatchLinkReceiver` on the watch decodes it,
-keeps a copy in `UserDefaults`, and draws it. The context is redelivered whenever the
-watch next wakes, so it keeps working with the phone out of range.
+WatchConnectivity *application context*, plus a queued `transferUserInfo` backstop —
+application-context delivery is unreliable in the simulator (the classic "application
+context is nil" on the watch), so a user-info transfer is sent alongside it and stale ones
+are cancelled so only the latest is queued. `WatchLinkReceiver` on the watch decodes either
+one, keeps a copy in `UserDefaults`, and draws it; the context is redelivered whenever the
+watch next wakes, so it keeps working with the phone out of range. The empty view tells
+"nothing on the list" apart from "not synced yet" (`synced`), which read identically before.
 
 **It is read-only.** The watch shows what's on; the phone owns the data. Ticking things
 off from the wrist is a future job (it needs a message back to the phone, since the

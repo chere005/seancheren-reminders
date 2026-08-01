@@ -46,6 +46,8 @@ struct RemindersView: View {
         }
     }
 
+    /// Shown when the list has no sections: "nothing on the list" once the phone has synced,
+    /// otherwise a nudge to open the phone app (the two read identically without `synced`).
     private func empty(synced: Bool) -> some View {
         VStack(spacing: 8) {
             Image(systemName: synced ? "checklist" : "iphone.and.arrow.forward")
