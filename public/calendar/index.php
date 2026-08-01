@@ -1715,8 +1715,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
         };
         row.addEventListener('click', () => {
-          // A plain tap only opens the row while already editing; otherwise the panel is
-          // read-only and the checkboxes are the only thing you can hit by accident.
+          // A note opens on a single tap — that's just navigating to read it, the same as
+          // tapping it in the Notes list. Events and reminders only open on a tap while
+          // editing, since the panel is otherwise read-only and the checkboxes are the
+          // only thing you'd want to hit by accident.
+          if (it.kind === 'note') { openRow(); return; }
           if (document.body.classList.contains('editing')) openRow();
         });
         row.addEventListener('dblclick', (e) => { e.preventDefault(); openRow(); });
