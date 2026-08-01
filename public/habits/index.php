@@ -716,11 +716,11 @@ function render_habit_section_modal(array $sections, string $csrf): void
     /* Grid: name column + day columns. The name column takes at least half the width
        and absorbs the rest; the day squares are capped small so the habit name has
        room to read rather than being squeezed by the grid. */
-    .grid { display: grid; grid-template-columns: minmax(120px, 1fr) repeat(8, minmax(0, 50px)); gap: 6px; align-items: center; width: 100%; }
+    .grid { display: grid; grid-template-columns: minmax(120px, 1fr) repeat(8, minmax(0, 46px)); gap: 9px; align-items: center; width: 100%; }
     /* Five days is all a phone has room for; the three oldest columns are in the
        DOM either way, so this is one grid with a different column count. */
     @media (max-width: 640px) {
-      .grid { grid-template-columns: minmax(96px, 1fr) repeat(5, minmax(0, 44px)); }
+      .grid { grid-template-columns: minmax(96px, 1fr) repeat(5, minmax(0, 40px)); }
       .wide-only { display: none; }
     }
     .colhead {
@@ -728,7 +728,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
     }
     /* Today's column has to be findable at a glance on a phone, where five columns of
-       small squares look much alike. The 6px grid gap means a background tint can't
+       small squares look much alike. The grid gap means a background tint can't
        actually join the column up — it draws as one faint patch behind the head and
        nothing under it — so today is marked twice instead: a filled pill on the head,
        and an accent ring on every cell below it (see .cell.today). */
