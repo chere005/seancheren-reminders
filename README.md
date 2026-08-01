@@ -1,177 +1,66 @@
-# websitetest — seancheren.com
+# seancheren.com
 
-A small **multi-user app suite** (Reminders · Calendar · Notes · Habits · Chat ·
-Aki's Bookshelf) written in plain PHP, hosted on
-[NearlyFreeSpeech.NET](https://nearlyfreespeech.net), and edited/tested locally on
-the Mac. No framework, no build step, no database — just PHP files and encrypted
-JSON on disk.
+A small multi-user app suite in plain PHP on [NearlyFreeSpeech.NET](https://nearlyfreespeech.net) —
+no framework, no build step, no database. Each app is one `index.php` that renders its own
+HTML/CSS/JS and posts back to itself; data is encrypted JSON on disk. A matching **native
+iOS + Apple Watch** app lives in `ios/` (SwiftUI, local-only, shares no code with the web).
 
----
+## Features
 
-## Structure
+- **Reminders** — folders + sections, subtasks, dates/times parsed from what you type, repeats, drag-reorder, Copy-as-Markdown.
+- **Calendar** — month/week views, several calendars, a per-day panel of events + reminders + notes.
+- **Notes** — folders + sections, rich-text bodies.
+- **Habits** — a week tick-grid and a month of per-day pie charts, behind a section filter.
+- **Chat** (public, no login) and **Aki's Bookshelf** (aki only).
+- One login covers the suite; each user has their own encrypted data; sharing is opt-in between paired accounts.
 
-```
-public/                → the web root   (maps to NFSN /home/public)
-  index.php              homepage
-  dev/                   login-gated p5.js sketch (its own legacy login)
-  reminders/index.php    Reminders app   (folders, sections, due dates, drag order)
-  notes/index.php        Notes app       (list -> editor, folders, sections)
-  calendar/index.php     Calendar        (multiple calendars, sets, day panel)
-  calendar/feed.php      token JSON feed + iOS widget setup page
-                         (the script it hands you is pinned to the calendars
-                          you had selected — copy it again to re-point it)
-  calendar/quick.php     one-field quick add, opened by the widget
-  habits/index.php       Habits          (7-day grid, sections)
-  akisbookshelf/         private bookshelf — only the user "aki" may open it
-  chat/index.php         public chat     (NO login — anyone can post)
-  */icon-*.png, */manifest.webmanifest   home-screen (PWA) assets
-
-lib/                   → shared code, NOT web-served  (maps to /home/protected/lib)
-  auth.php               session login + per-user data-file helpers
-  store.php              encrypted-at-rest JSON read/write
-  folders.php            per-user folders, the folder nav + folder-manager window
-  sharing.php            what sean and aki let each other see
-  chrome.php             back button, username menu, Edit toggle
-  tabbar.php             bottom tab bar (Reminders / Calendar / Notes / Habits)
-  util.php               small shared helpers (time parsing, the shared palette, …)
-  richtext.php           the note-body formatting toolbar + its sanitiser
-  config.php             credentials + secrets   ← gitignored, never deployed
-  config.sample.php      template for config.php
-
-data/                  → JSON storage, NOT web-served  (maps to /home/protected/data)
-  reminders-<user>.json  notes-<user>.json   events-<user>.json
-  calendars-<user>.json  calprefs-<user>.json folders-<user>.json
-  habits-<user>.json     books-<user>.json    booknotes-<user>.json
-  shares-<user>.json     token-<user>.json    chat.json (shared)
-                         ← gitignored; the SERVER copy is the real live data
-
-deploy.sh              → one-command deploy (Mac -> server)
-CLAUDE.md              → orientation notes for Claude Code
-CONNECT.md             → how to resume the Claude Code session from your phone
-```
-
-**Golden rule:** anything under `public/` is reachable by a URL; `lib/` and
-`data/` are not. Credentials and everyone's data live outside the web root.
-
-## The apps
-
-| App | Login | Storage | Highlights |
-|-----|-------|---------|------------|
-| Reminders | yes | `reminders-<user>.json` | folders (dropdown, each with a show-in-All checkbox) + sections (bold groups), a **+** on each section to add inline, **+ Section** on the folder row, dates and times read out of what you type, two permanent folders — **Reminders** and **Calendar**, whose undated items ride along on the calendar — inline text edit, a Completed toggle |
-| Notes | yes | `notes-<user>.json` | list view → editor, folders + sections, **+ Section** beside **+ Note**, title/date/body, a formatting row (quote, bold, italic, underline, bullets), autosave |
-| Calendar | yes | `events-<user>.json` + reminders + notes | month grid (a dot per event, plus one for the day's reminders and one for its notes), tap a day to open it, swipe up for the week view and sideways to page, per-day panel, several calendars with their own colours, quick-add window |
-| Habits | yes | `habits-<user>.json` | rolling 7-day grid of tick boxes (swipe or arrow to page a week), a Month view drawing each day as a pie of how much got ticked, sections with **+ Section** underneath, a pencil beside the title for edit mode |
-| Aki's Bookshelf | yes, **aki only** | `books-<user>.json`, `booknotes-<user>.json` | book cards from Open Library, covers, ratings, shelves, per-book notes with sections and a quote window (quote + your note + page + optional date) |
-| Chat | **no** | `chat.json` (shared) | public message board, live AJAX feed |
-
-## Auth & data model
-
-- **Users** are defined in `lib/config.php` as a `username => password` map, plus
-  anyone who signed up (`data/accounts.json`). Add or remove people by editing that
-  file. Login is a PHP session (`$_SESSION['user']`), one login covers the whole
-  suite, and it lasts a year — you stay signed in until you actually log out.
-- A demo account, **example / examplepassword**, is built by
-  `php tools/seed-example.php`. It fills the account with plausible reminders
-  (dated, undated, repeating, and several overdue and still open), events, notes and
-  two months of habit history, all relative to today. Neither `tools/` nor `data/`
-  is deployed, so run it on the server too if you want the demo live.
-- Each user gets **their own data files** (`reminders-alice.json`, …), so people
-  don't see each other's items. Chat is the deliberate exception (shared + public).
-- **Everything is encrypted at rest.** All reads and writes go through
-  `store_read()` / `store_write()`, which use AES-256-CBC behind an `ENC1:` prefix.
-  Legacy plaintext files are still readable and get encrypted on their next write.
-- **Folders** are a per-user filter; **sections** are bold headers that group items
-  within a folder. Both reminders and notes have both. Reminders always has the two
-  permanent folders **Reminders** and **Calendar**; notes always has **General**.
-  Each folder in the dropdown carries a checkbox for whether "All" includes it.
-  Folders are added, removed and given a default in the folder window behind
-  **Manage folders**, the last row of that dropdown; the default is where new items
-  land while you're viewing "All".
-- Writes are `POST` + CSRF token, then either a redirect or — for the drag/tick
-  style interactions — a JSON reply.
-- Every app wears the same **top bar**: back button, the app's name, one round
-  button (the **+**, or a pencil in Habits), the username on the right, and a rule
-  under the lot. Everything on it is the same height.
-- **Deleting takes two presses.** There is no confirm box and no Undo: the first
-  press turns the button red, the second one goes through, and the server refuses
-  anything destructive that didn't come from that second press.
-
-## Sharing (sean ⇄ aki)
-
-Nothing is ever copied. `shares-<user>.json` records which of your calendars and
-reminder folders the other person may see, and their app reads **your** file
-directly. Tick them in the **Share** window — behind the **+** in Reminders, or the
-Share button in the Calendar's manage window. Nothing is shared until you tick it,
-and each of you ticks your own. Shared reminder folders show up in the folder dropdown as
-`@aki:Groceries`; while one is selected, reads and writes go to the owner's file.
-Un-sharing takes effect immediately.
-Their sections and folder list stay theirs to arrange. Anyone who isn't in the
-sean/aki pair gets no sharing UI at all.
-
-## Run & test locally
+## Web — run & test
 
 ```sh
-php -S 127.0.0.1:8787 -t public       # start a local server
+php -S 127.0.0.1:8787 -t public     # apps at /reminders/, /calendar/, /notes/, /habits/, /chat/
+php tools/test.php                  # the test suite (~15s, no framework)
+find public lib tools -name '*.php' -exec php -l {} \;   # lint
 ```
 
-- Reminders → http://127.0.0.1:8787/reminders/
-- Calendar  → http://127.0.0.1:8787/calendar/
-- Notes     → http://127.0.0.1:8787/notes/
-- Habits    → http://127.0.0.1:8787/habits/
-- Chat      → http://127.0.0.1:8787/chat/
+Local logins come from `lib/config.php` (copy `lib/config.sample.php`); local data lands in `./data/`, separate from the live site.
 
-Log in with a user from `lib/config.php` (default `admin` / `changeme`).
-Local test data is written to `./data/` and is completely separate from the
-live site's data.
+## Web — deploy
 
-There is no test suite. The check before deploying is a syntax sweep:
+Two live instances share one source tree: **production** (`/`) and a **`/test/` sandbox** with its own data.
+`deploy.sh` is one-way (Mac → server), lints first, and never sends `config.php`, never touches the data dirs, never uses `--delete`.
 
 ```sh
-find public lib -name '*.php' -exec php -l {} \;
+./deploy.sh            # → TEST only (the safe default)
+./deploy.sh promote    # copy the verified TEST tree onto PROD (server-side)
+./deploy.sh both       # → TEST and PROD at once
+./deploy.sh --dry-run  # preview, change nothing
 ```
 
-## Deploy
+The SSH target lives in a gitignored `deploy.conf` (copy `deploy.conf.sample`). Secrets live in
+`lib/config.php` (gitignored, never deployed): the user map, the `data_key` for at-rest encryption,
+and NFSN credentials. A blank `data_key` is generated into `data/.datakey` on first use — keep it.
+
+## iOS + Apple Watch — build & run
+
+A fully native SwiftUI app (no web view, no login, no network) with all data in one local `suite.json`.
 
 ```sh
-./deploy.sh              # push to seancheren.com
-./deploy.sh --dry-run    # preview exactly what would change, without doing it
+open ios/Seancheren.xcodeproj   # pick a scheme + device, then ⌘R:
+                                #   Seancheren      → iPhone (installs the embedded watch app)
+                                #   SeancherenWatch → Apple Watch (needs a paired simulator/device)
 ```
 
-`deploy.sh` lints all PHP, then `rsync`s **`public/` → `/home/public/`** and
-**`lib/` → `/home/protected/lib/`**. It is **one-way (Mac → server)** and:
-
-- never sends `lib/config.php` (the server keeps its own live credentials/secrets),
-- never touches `/home/protected/data/` (everyone's real reminders/notes/events),
-- never uses `--delete` (it only adds/updates; it won't remove server files).
-
-### Reconcile if you edited on the server
-
-The Mac is the source of truth. If you ever hand-edit files directly on the
-server, pull them back down before your next deploy so nothing is overwritten:
+From the command line (no simulator needed):
 
 ```sh
-rsync -av <USERNAME>@ssh.nyc1.nearlyfreespeech.net:/home/public/ public/
+cd ios
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test        # logic tests
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -scheme Seancheren -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-`<USERNAME>` is your real SSH login — it's kept out of the repo. `deploy.sh` reads the
-full target from a gitignored `deploy.conf` (copy `deploy.conf.sample`), so nothing tracked
-carries the login. Set the same value here when you run the command by hand.
-
-## Secrets
-
-`lib/config.php` is gitignored and never deployed. Put real values there:
-
-```php
-'users' => [ 'admin' => '…', 'aki' => '…' ],
-'data_key'             => '…',   // key for the at-rest encryption
-'nfsn_member_password' => '…',   // NearlyFreeSpeech account password
-'nfsn_api_key'         => '…',   // NFSN control panel -> Profile -> API key
-```
-
-If `data_key` is left empty a random one is generated into `data/.datakey` on
-first use. Keep that file — losing it means losing the data.
+Nothing in `ios/` is deployed. See `ios/README.md` for detail.
 
 ## License
 
-BSD 3-Clause — see [LICENSE](LICENSE). Do what you like with the code; keep the
-copyright notice, and don't use the author's name to endorse your own version.
+BSD 3-Clause — see [LICENSE](LICENSE).
