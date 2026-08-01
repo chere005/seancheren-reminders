@@ -1,0 +1,4 @@
+# The deploy target for deploy.sh — kept OUT of the repo because it names a real SSH login.
+# Copy this file to `deploy.conf` (gitignored) and set your host; deploy.sh sources it.
+# Alternatively export SUITE_DEPLOY_HOST in your shell instead of creating this file.
+HOST="<USERNAME>@ssh.nyc1.nearlyfreespeech.net"
