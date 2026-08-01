@@ -511,6 +511,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $secOrder = json_decode((string) ($_POST['sections'] ?? '[]'), true);
         if (!is_array($order))    { $order = []; }
         if (!is_array($secOrder)) { $secOrder = []; }
+        // A payload that decoded to nothing carries no instruction. Rebuilding from it
+        // still preserved every row, but it reassembled the file as "sections, then
+        // everything else" — and stored order is what breaks ties between same-dated
+        // reminders, so a garbage post quietly reshuffled the list.
+        if (!$order && !$secOrder) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => true, 'skipped' => 'empty order']);
+            exit;
+        }
         $list = load_reminders($dataFile);
 
         // Sections are per-folder, so a drag only reorders the viewed folder's sections
