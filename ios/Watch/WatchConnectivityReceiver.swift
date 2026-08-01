@@ -28,6 +28,8 @@ final class WatchLinkReceiver: NSObject, ObservableObject, WCSessionDelegate {
         return try? JSONDecoder().decode(WatchList.self, from: bytes)
     }
 
+    /// Decode a pushed list (from either delivery path), cache it, and show it. A payload
+    /// without our key — an empty context before the phone has sent anything — is ignored.
     private func absorb(_ payload: [String: Any]) {
         guard let bytes = payload[WatchLink.listKey] as? Data,
               let incoming = try? JSONDecoder().decode(WatchList.self, from: bytes) else { return }
