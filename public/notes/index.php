@@ -982,9 +982,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 <?= folder_nav_styles() ?>
     .newsection { margin: 0; display: flex; gap: 0.4rem; align-items: center; }
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
-    /* Both wear the height of the button they appear in place of. */
+    /* The + matches the input's height: align-self: stretch fills the flex row, whose
+       height the (taller, padding-sized) input sets, so the two line up whatever the input. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
