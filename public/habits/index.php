@@ -39,7 +39,7 @@ function is_section(array $it): bool { return ($it['type'] ?? '') === 'section';
  * than the saturated folder colours do. Stored on the section row itself, keyed by id
  * like everything else here, rather than in a side file.
  */
-function habits_palette(): array { return app_palette('habits', true); }
+function habits_palette(): array { return app_palette('habits'); }   // its own tier now (a similar shade to the other apps)
 
 function habit_section_color(array $s, int $i): string
 {

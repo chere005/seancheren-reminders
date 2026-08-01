@@ -966,7 +966,7 @@ function folder_nav_styles(): string
     /* The folder's colour: a swatch that opens the palette under it. */
     .foldermodal .fcolor { flex: 0 0 auto; position: relative; }
     .foldermodal .fcolor summary {
-      width: 20px; height: 20px; border-radius: 50%; border: 1px solid #444;
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid #444;   /* square, like the calendar's */
       cursor: pointer; list-style: none;
     }
     .foldermodal .fcolor summary::-webkit-details-marker { display: none; }
@@ -977,7 +977,7 @@ function folder_nav_styles(): string
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .foldermodal .fswatches button {
-      width: 22px; height: 22px; border-radius: 50%; border: 1px solid #444; cursor: pointer; padding: 0;
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0;   /* square */
     }
     /* Which folder new items land in — same shape as the Calendar's default picker. */
     .foldermodal .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }

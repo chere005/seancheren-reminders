@@ -828,6 +828,10 @@ $secRows = [];
 foreach ($all as $it) {
     if (is_section($it) && in_array($folderOf($it), $viewFolders, true)) { $secRows[] = $it; }
 }
+// How many sections each folder has, so a folder's *only* section shows no delete × (its
+// last section is undeletable — the guard is enforced server-side, this just hides the ×).
+$folderSecCount = [];
+foreach ($secRows as $s) { $folderSecCount[$folderOf($s)] = ($folderSecCount[$folderOf($s)] ?? 0) + 1; }
 
 // Reminder rows, filtered to the folders on screen.
 $items = array_values(array_filter($all,
@@ -1411,6 +1415,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                   '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
             <?php render_section_add_button($sname, $sfolder); ?>
             <span class="sec-tail">
+              <?php // No × on a folder's only section — its last section can't be deleted. ?>
+              <?php if (($folderSecCount[$sfolder] ?? 0) > 1): ?>
               <form method="post" action="" style="display:inline">
                 <input type="hidden" name="csrf" value="<?= $csrf ?>">
                 <input type="hidden" name="action" value="delete_section">
@@ -1419,6 +1425,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                 <input type="hidden" name="name" value="<?= e($sname) ?>">
                 <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
               </form>
+              <?php endif; ?>
             </span>
           </div>
           <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
