@@ -877,6 +877,52 @@ t('both habit views render, and draw actual cells', function () {
     ok(preg_match_all('/<div class="mcell/', $r['body']) >= 28, 'the month grid has a cell per day');
 });
 
+t('the section manager is on the page — a Manage sections row and its window', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/habits/', [], $jar);
+    has('id="habitSecMgr"', $r['body'], 'the filter dropdown carries a Manage sections row');
+    has('id="hsecModal"', $r['body'], 'the manager window renders');
+    has('id="hsecReorder"', $r['body'], 'with a draggable list of sections');
+});
+
+t('the manager reorders sections without disturbing the habits', function () {
+    $jar = login('example', 'examplepassword');
+    $onlySecs = fn() => array_values(array_filter(stored('habits', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section'));
+    $habitNames = function () {   // every non-section row, name-sorted, to compare as a set
+        $n = array_column(array_values(array_filter(stored('habits', 'example'),
+            fn($x) => ($x['type'] ?? '') !== 'section')), 'name');
+        sort($n); return $n;
+    };
+    // Make sure there are at least two to swap, then reverse the whole order.
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_section',
+        'name' => 'ZZManage', 'mgr' => '1'], $jar);
+    $ids = array_column($onlySecs(), 'id');
+    $before = $habitNames();
+    ok(count($ids) >= 2, 'at least two sections exist');
+    $rev = array_reverse($ids);
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'reorder',
+        'order' => '[]', 'sections' => json_encode($rev)], $jar, true);
+    eq($rev, array_column($onlySecs(), 'id'), 'the stored section order is reversed');
+    eq($before, $habitNames(), 'every habit is still there');
+});
+
+t('the last section is undeletable — at least one always stays', function () {
+    $jar = login('example', 'examplepassword');
+    $onlySecs = fn() => array_values(array_filter(stored('habits', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section'));
+    // Delete down to a single section; that one then refuses to go.
+    $list = $onlySecs();
+    for ($i = 0; $i < count($list) - 1; $i++) {
+        req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
+            'id' => $list[$i]['id'], 'confirm' => '1', 'mgr' => '1'], $jar);
+    }
+    eq(1, count($onlySecs()), 'down to one section');
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
+        'id' => $onlySecs()[0]['id'], 'confirm' => '1', 'mgr' => '1'], $jar);
+    eq(1, count($onlySecs()), 'the last section stays put');
+});
+
 // ---------------------------------------------------------------- 9. the Add app
 area('add');
 
