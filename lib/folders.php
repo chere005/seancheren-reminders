@@ -131,6 +131,27 @@ function folder_tint(string $hex, string $alpha = '33'): string
     return preg_match('/^#[0-9a-fA-F]{6}$/', $hex) ? $hex . $alpha : 'transparent';
 }
 
+/**
+ * Where a folder's catch-all group sits among that folder's sections. The catch-all is
+ * not a stored row — it is drawn for every folder — so it cannot carry its place in the
+ * reminders list the way a real section does. It is kept here as an index instead, and
+ * clamped on read, so deleting a section can never strand it past the end.
+ */
+function folder_catchall_index(string $dir, string $type, string $folder, int $count, ?string $user = null): int
+{
+    $v = folders_load($dir, $user)['catchall'][$type][$folder] ?? null;
+    if (!is_int($v) && !(is_string($v) && ctype_digit($v))) { return $count; }   // default: last
+    return max(0, min($count, (int) $v));
+}
+
+function folder_catchall_index_set(string $dir, string $type, string $folder, int $i): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true) || $folder === '') { return; }
+    $data = folders_load($dir);
+    $data['catchall'][$type][$folder] = max(0, $i);
+    folders_save($dir, $data);
+}
+
 /** The picker posts the keys it drew as one \x1F-joined field; unpack it. */
 function folder_pick_keys(string $raw): array
 {

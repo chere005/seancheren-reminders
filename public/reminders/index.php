@@ -538,6 +538,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         foreach ($thisFolderSecs as $e) { $sectionsList[] = $e; }
         $sectionsList = array_merge($sectionsList, $otherSecs);
 
+        // The catch-all rides in the same drag but has no row to carry its place, so its
+        // index among this folder's sections is stored beside the folder list. Only when
+        // one folder is in view: in "All" the posted names span every folder on screen
+        // and there is no telling which folder a bare "" belonged to.
+        if ($viewFolder !== 'All' && in_array('', $secOrder, true)) {
+            $seen = 0;
+            foreach ($secOrder as $name) {
+                if ($name === '') { break; }
+                if (isset($secExists[$viewFolder . "\x1F" . $name])) { $seen++; }
+            }
+            folder_catchall_index_set($cfg['data_dir'], 'reminders', $viewFolder, $seen);
+        }
+
         $newReminders = [];
         $used = [];
         foreach ($order as $o) {
@@ -1279,9 +1292,12 @@ $sectionInput =
       <?php // Sections always render, empty or not. Each belongs to one folder; its
             // rename and delete forms carry that folder, so acting on it never touches
             // another folder's same-named section. ?>
+      <?php // Each block is buffered rather than echoed, so the catch-all can be put back
+            // in at whatever position it was last dragged to instead of always trailing. ?>
+      <?php $blocks = []; ?>
       <?php foreach ($secRows as $s): ?>
         <?php if ($folderOf($s) !== $sfolder) { continue; } ?>
-        <?php $sname = (string) $s['name']; ?>
+        <?php $sname = (string) $s['name']; ob_start(); ?>
         <div class="section-group" data-section="<?= e($sname) ?>" data-folder="<?= e($sfolder) ?>"
              data-id="<?= e($s['id']) ?>" style="--ind:0">
           <div class="section-head">
@@ -1340,7 +1356,19 @@ $sectionInput =
         <?php render_section_add_row('', $csrf, $view, $sfolder); ?>
         <?php render_rows($looseByFolder[$sfolder] ?? [], $csrf, $view, $today, ''); ?>
       </div>
-      <?php endif; ?>
+      <?php $blocks[] = ''; $catch = ob_get_clean(); endif; ?>
+      <?php
+        // Where the catch-all goes. A partner's folder is theirs, so it just trails there.
+        $at = ($hasCatch && !$isShared)
+            ? folder_catchall_index($cfg['data_dir'], 'reminders', $sfolder, $folderSecs)
+            : $folderSecs;
+        array_pop($blocks);                       // the placeholder pushed above
+        foreach ($blocks as $bi => $bhtml) {
+            if ($hasCatch && $bi === $at) { echo $catch; }
+            echo $bhtml;
+        }
+        if ($hasCatch && $at >= $folderSecs) { echo $catch; }
+      ?>
       <?php if ($showFolders): ?></div><?php endif; ?>
     <?php endforeach; ?>
    </div>
