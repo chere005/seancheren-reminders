@@ -126,7 +126,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf, in
         <div class="hname"<?= $hc ?> data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>">
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
-          <form method="post" action="" style="display:inline">
+          <form method="post" action="" class="hdel-form">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_habit">
             <input type="hidden" name="id" value="<?= e($h['id']) ?>">
@@ -750,12 +750,17 @@ function render_habit_section_modal(array $sections, string $csrf): void
     /* The drag handle on a habit and on a section. Hidden with visibility rather than
        display, as everywhere else, so turning edit mode on doesn't shove the names
        sideways. Nothing else on the grid moves. */
+    /* Out of edit mode the handle and the delete form leave the flow entirely (not just
+       hidden), so the name box hugs the label and the text sits dead-centre in its border
+       rather than pushed off by an invisible handle. In edit mode both return. */
     .hdrag {
-      flex: 0 0 auto; width: 16px; color: #6a5f8c; cursor: grab; visibility: hidden;
-      display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem;
+      flex: 0 0 auto; width: 16px; color: #6a5f8c; cursor: grab; display: none;
+      align-items: center; justify-content: center; font-size: 0.9rem;
       line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none;
     }
-    body.editing .hdrag { visibility: visible; }
+    body.editing .hdrag { display: inline-flex; }
+    .hname .hdel-form { display: none; }
+    body.editing .hname .hdel-form { display: inline-flex; align-items: center; }
     .hdrag:active { cursor: grabbing; color: var(--accent); }
     /* What is being dragged dims; where it will land is a single accent line, because
        shuffling a CSS grid live made it impossible to see what you were about to get. */
