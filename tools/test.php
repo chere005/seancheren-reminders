@@ -1742,8 +1742,8 @@ function ALL_ACTIONS(): array
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
                           'folder_vis_only', 'reorder_folders', 'share_set'],
         '/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
-                          'toggle_reminder', 'cal_add', 'cal_color', 'cal_default', 'cal_delete',
-                          'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
+                          'toggle_reminder', 'cal_add', 'cal_color', 'cal_shared_color', 'cal_default',
+                          'cal_delete', 'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
                           'folder_vis', 'share_set'],
         '/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
                           'add_section', 'rename_section', 'delete_habit', 'delete_section',
@@ -2955,6 +2955,36 @@ t('aki gets the app itself', function () {
 // Each person can recolour how the other's shared folders look *in their own picker*.
 // The whole point is that it never touches the owner's data, so that is what's checked.
 area('shared2');
+
+t("recolouring a partner's shared calendar is my own view override, square swatch", function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calendar/', [], $jar)['body'];
+    has('openSwatches(sw, c.id, true)', $b, 'shared calendars get the square swatch picker (not a dot)');
+    preg_match('/const SHARED_CALS = (\[.*?\]);/s', $b, $m);
+    $shared = json_decode($m[1] ?? '[]', true);
+    ok(!empty($shared), "example sees at least one of buddy's shared calendars");
+    $cid = (string) $shared[0]['id'];
+    // Capture buddy's own colour, and pick an override that differs from it.
+    $buddyCol = '';
+    foreach (stored('calendars', 'buddy') as $c) { if (($c['id'] ?? '') === $cid) { $buddyCol = (string) ($c['color'] ?? ''); } }
+    $col = app_palette('calendar')[3];
+    if ($col === $buddyCol) { $col = app_palette('calendar')[4]; }
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+        'id' => $cid, 'color' => $col], $jar, true);
+    eq($col, stored('calprefs', 'example')['shared_cal_colors'][$cid] ?? null,
+       'the override is stored on my side, keyed by calendar id');
+    // buddy's own calendar colour is untouched by my override.
+    foreach (stored('calendars', 'buddy') as $c) {
+        if (($c['id'] ?? '') === $cid) { eq($buddyCol, (string) ($c['color'] ?? ''), "buddy's own colour is not changed"); }
+    }
+    // Off-palette colour and non-shared id are both refused.
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+        'id' => $cid, 'color' => '#abcdef'], $jar, true);
+    eq($col, stored('calprefs', 'example')['shared_cal_colors'][$cid] ?? null, 'an off-palette colour is refused');
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+        'id' => 'nosuchcal', 'color' => app_palette('calendar')[1]], $jar, true);
+    ok(!isset(stored('calprefs', 'example')['shared_cal_colors']['nosuchcal']), 'a non-shared id is refused');
+});
 
 t('a recolour is stored on the viewer\'s side, keyed by the view name', function () {
     $dir = datadir();

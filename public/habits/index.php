@@ -622,7 +622,17 @@ function render_habit_section_modal(array $sections, string $csrf): void
                   <?php endforeach; ?>
                 </form>
               </details>
-              <span class="fname"><?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?></span>
+              <?php // The name is an editable field: Enter or blur posts rename_section by id
+                    // and reopens the manager (mgr=1). Uses the shared .frename machinery. ?>
+              <form method="post" action="" class="frename-form">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="action" value="rename_section">
+                <input type="hidden" name="mgr" value="1">
+                <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
+                <input type="hidden" name="name" value="<?= htmlspecialchars((string) ($s['name'] ?? ''), ENT_QUOTES) ?>">
+                <input class="fname frename" name="newname" value="<?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?>"
+                       maxlength="40" autocomplete="off" aria-label="Section name">
+              </form>
               <?php if (!$only): ?>
                 <form method="post" action="" style="display:inline">
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -655,6 +665,13 @@ function render_habit_section_modal(array $sections, string $csrf): void
       // Add/delete reload the page; remember the window was open so it comes back rather
       // than folding away — the same trick msec_* uses for the filter menu.
       m.addEventListener('submit', function () { try { sessionStorage.setItem('hsecOpen', '1'); } catch (_) {} });
+      // The rename field commits with a programmatic form.submit() (no submit event fires),
+      // so flag the reopen the moment it's typed into — the reload that follows finds it.
+      m.addEventListener('input', function (e) {
+        if (e.target.classList && e.target.classList.contains('frename')) {
+          try { sessionStorage.setItem('hsecOpen', '1'); } catch (_) {}
+        }
+      });
       try { if (sessionStorage.getItem('hsecOpen') === '1') { sessionStorage.removeItem('hsecOpen'); open(); } } catch (_) {}
       if (d) d.addEventListener('click', close);
       m.addEventListener('click', function (e) { if (e.target === m) close(); });
@@ -786,7 +803,9 @@ function render_habit_section_modal(array $sections, string $csrf): void
     }
     .colhead.ahead { color: #666; }        /* tomorrow, ticked off early */
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
-    .corner { }
+    /* The corner cell holds the collapse-all button; the grid's align-items:center lines it
+       up vertically with the day-of-week labels beside it, and it sits at the left edge. */
+    .corner { display: flex; align-items: center; justify-content: flex-start; }
 
     /* Section header row spans the full grid width. */
     .hsection {
@@ -796,7 +815,6 @@ function render_habit_section_modal(array $sections, string $csrf): void
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* Collapse-all bar above the top section, left-aligned under the back button. */
-    .hbar { display: flex; justify-content: flex-start; margin: 0.1rem 0 0.6rem; }
     /* The section's collapse chevron picks up the section's violet; it points down when
        open, right when the section is folded. Its rows leave the grid entirely when folded. */
     .hsection .sec-collapse { color: #6a5f8c; }
@@ -1068,11 +1086,11 @@ function render_habit_section_modal(array $sections, string $csrf): void
       <?= $mFiltered ? 'in the ' . count($mShown) . ' section' . (count($mShown) === 1 ? '' : 's')
                        . " you're counting" : '' ?> were ticked.</p>
   <?php else: ?>
-    <?php // Collapse-all sits above the top section, at the left edge (under the back
-          // button); it folds every section's habits away, or expands them on a second press. ?>
-    <div class="hbar"><?= collapse_all_button('', 'hCollapseAll') ?></div>
     <div class="grid" id="wGrid">
-      <div class="corner"></div>
+      <?php // Collapse-all sits in the grid's corner cell, so it lines up on the day-label
+            // row (and at the left edge, under the back button); it folds every section's
+            // habits away, or expands them all on a second press. ?>
+      <div class="corner"><?= collapse_all_button('', 'hCollapseAll') ?></div>
       <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
         <div class="colhead <?= $i < $extraDays ? 'wide-only' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
           <?= substr(date('D', $ts), 0, 2) ?><span class="num"><?= (int) date('j', $ts) ?></span>

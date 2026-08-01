@@ -193,6 +193,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
+    // --- My own view colour for a partner's shared calendar (AJAX) ---
+    // Stored in my calprefs, keyed by calendar id, so it never touches their data. Validated
+    // against the calendar palette and against calendars they actually shared with me.
+    if ($action === 'cal_shared_color') {
+        $cid = (string) ($_POST['id'] ?? '');
+        $col = (string) ($_POST['color'] ?? '');
+        if (in_array($cid, $sharedIds, true) && in_array($col, CAL_COLORS, true)) {
+            $ov = is_array($calPrefs['shared_cal_colors'] ?? null) ? $calPrefs['shared_cal_colors'] : [];
+            $ov[$cid] = $col;
+            $calPrefs['shared_cal_colors'] = $ov;
+            store_write($prefFile, $calPrefs);
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
     // --- Show/hide a reminder folder on the calendar (AJAX, same answer-with-the-truth style) ---
     if ($action === 'folder_vis') {
         $fname  = (string) ($_POST['name'] ?? '');
@@ -457,6 +474,14 @@ $calColor = array_column($calsOnly, 'color', 'id');
 // Shared calendars join the picker and the colour map; their ids stay distinct from mine.
 $pickIds  = array_merge($calIds, $sharedIds);
 $calColor = array_merge($calColor, array_column($sharedCals, 'color', 'id'));
+// My own view overrides for a partner's shared calendar colours win over the owner's, so a
+// shared calendar shows in whatever colour I chose for it (view-only, stored in my calprefs).
+$sharedCalOverrides = is_array($calPrefs['shared_cal_colors'] ?? null) ? $calPrefs['shared_cal_colors'] : [];
+foreach ($sharedIds as $sid) {
+    if (isset($sharedCalOverrides[$sid]) && in_array($sharedCalOverrides[$sid], CAL_COLORS, true)) {
+        $calColor[$sid] = $sharedCalOverrides[$sid];
+    }
+}
 
 // The choice sticks in calprefs, so it survives closing the app — not just the session.
 if (isset($_GET['cal'])) {
@@ -1167,7 +1192,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     $pickGroups = [[share_name($me), array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $calsOnly)]];
     if ($sharedCals) {
       $pickGroups[] = [share_name($partner),
-        array_map(fn($c) => [$c['id'], $c['name'], $c['color'] ?? CAL_COLORS[0]], $sharedCals)];
+        array_map(fn($c) => [$c['id'], $c['name'], $calColor[$c['id']] ?? ($c['color'] ?? CAL_COLORS[0])], $sharedCals)];
     }
     // What the closed button shows.
     $curName = 'All calendars'; $curColor = '';
@@ -2006,7 +2031,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   const PARTNER = <?= json_encode($partner ? share_name($partner) : null) ?>;
   const SHARED_FOLDERS = <?= json_encode(array_values($sharedFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   // id/name/colour only — enough to offer them as members of a set.
-  const SHARED_CALS = <?= json_encode(array_map(fn($c) => ['id' => $c['id'], 'name' => $c['name'], 'color' => $c['color'] ?? CAL_COLORS[0]], $sharedCals), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const SHARED_CALS = <?= json_encode(array_map(fn($c) => ['id' => $c['id'], 'name' => $c['name'], 'color' => $calColor[$c['id']] ?? ($c['color'] ?? CAL_COLORS[0])], $sharedCals), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let SHARES = <?= json_encode($myShares, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN = <?= json_encode(array_values($hidFolders), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   let HIDDEN_SHARED = <?= json_encode(array_values($hidShared), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -2061,11 +2086,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       li.appendChild(handle);
 
       if (c.shared) {
-        const dot = document.createElement('span');
-        dot.className = 'cdot-ro'; dot.style.background = c.color;
+        // A partner's calendar: recolourable in *my* view (same square swatch my own
+        // calendars use), stored as my override — no delete, since it isn't mine.
+        const sw = document.createElement('button');
+        sw.type = 'button'; sw.className = 'cswatch'; sw.style.background = c.color; sw.title = 'Choose colour (your view)';
+        sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, c.id, true); });
         const name = document.createElement('span'); name.className = 'cname'; name.textContent = c.name;
         const badge = document.createElement('span'); badge.className = 'cshared-badge'; badge.textContent = PARTNER;
-        li.append(dot, name, badge);
+        li.append(sw, name, badge);
       } else {
         const sw = document.createElement('button');
         sw.type = 'button'; sw.className = 'cswatch'; sw.style.background = c.color; sw.title = 'Choose colour';
@@ -2157,13 +2185,25 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   window.onSharesChanged = (s) => { SHARES = s; calDirty = true; window.shareRender(); };
   const renderShare = () => { if (window.shareRender) { window.shareRender(); } };
 
-  // Colour palette popover, anchored to the swatch that opened it.
-  function openSwatches(anchor, id) {
+  // Colour palette popover, anchored to the swatch that opened it. `shared` recolours my
+  // *view* of a partner's calendar (my override) rather than the calendar itself.
+  function openSwatches(anchor, id, shared) {
     swatchPop.innerHTML = '';
     PALETTE.forEach(col => {
       const b = document.createElement('button');
       b.type = 'button'; b.style.background = col; b.title = col;
-      b.addEventListener('click', () => { swatchPop.hidden = true; calApi('cal_color', { id, color: col }); });
+      b.addEventListener('click', () => {
+        swatchPop.hidden = true;
+        if (shared) {
+          // Update the swatch and my cached copy now; reload on close paints the grid dots.
+          anchor.style.background = col;
+          const sc = SHARED_CALS.find(c => c.id === id); if (sc) { sc.color = col; }
+          calDirty = true;
+          calApi('cal_shared_color', { id, color: col });
+        } else {
+          calApi('cal_color', { id, color: col });
+        }
+      });
       swatchPop.appendChild(b);
     });
     swatchPop.hidden = false;

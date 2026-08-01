@@ -14,15 +14,15 @@
 const PALETTES = [
     'reminders' => [
         'own'    => ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
-        'shared' => ['#bcd5fb', '#f7c6c4', '#c6efd8', '#fbdcb6', '#dcc7f3', '#d2d6dd'],
+        'shared' => ['#dce9fd', '#fce0de', '#dcf6e8', '#feefd6', '#efe4fa', '#e6e9ee'],
     ],
     'calendar' => [
         'own'    => ['#2672ed', '#e5342e', '#46ce7e', '#f18322', '#8a3ad9', '#7c8598'],
-        'shared' => ['#aecbf9', '#f4bab7', '#b6ebcf', '#fad2a5', '#d0b6ef', '#c5cad3'],
+        'shared' => ['#d2e2fc', '#fbd7d4', '#d3f2e2', '#fde7c6', '#e7d8f8', '#dee2e8'],
     ],
     'notes' => [
         'own'    => ['#125ed9', '#d1201a', '#31b96a', '#dd6e0e', '#7526c5', '#677183'],
-        'shared' => ['#a7c6f7', '#eeb1ad', '#aae4c4', '#f6c896', '#c8abec', '#bcc2cd'],
+        'shared' => ['#c9ddfb', '#f8ccc8', '#caefdb', '#fbdebb', '#ddc8f4', '#d6dbe2'],
     ],
 ];
 
