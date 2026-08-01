@@ -286,6 +286,16 @@ rather than rendered. Whitespace is not a message.
 Behind the shared login. A signed-in stranger gets the refusal page and none of the app's
 markup. Aki — made through the real sign-up — gets the app.
 
+Its **themes** are covered too: all eight offer a swatch, an untouched bookshelf is still
+Midnight, and the suite's accent-only row is hidden here. Picking one repaints the page
+(`--bg`, `--gold`) rather than just the accent, flips `color-scheme` for the two light
+themes, and follows through to the PWA `theme-color`; a plain post redirects, the AJAX one
+the picker actually uses answers JSON. An unknown key changes nothing. The bookshelf theme
+and the suite theme are set independently and neither moves the other. **Not covered:** how
+any of it *looks* — the contrast figures were computed once when the palettes were chosen
+(everything clears 4.5:1 on its own background), but nothing re-checks them, so a new or
+edited theme needs that done by hand. Nor does anything drive the picker's click.
+
 ### `shared2`
 Recolouring a partner's shared folder writes only on the viewer's side, keyed by the
 `@<partner>:<Folder>` view name, and leaves the owner's file byte-identical. A colour off
@@ -400,7 +410,8 @@ failures only exist in standalone mode.
   elements* (`<div class="mcell`), not on a word.
 - No screenshots and no layout assertions — nothing here measures a pixel.
 - Habit history is random per seed, so nothing asserts on its counts.
-- Aki's Bookshelf is not covered at all; it gates on one username and is its own app.
+- Aki's Bookshelf is covered only at the gate and for its themes; the books, covers, notes
+  and shelves are not — it gates on one username and is its own app.
 - The chat app is only checked for rendering.
 - Nothing tests the live server, TLS, the deploy, or the seeding-over-HTTP procedure.
 - The iOS/watch app in `ios/` is a separate codebase with no tests; build it in Xcode.
