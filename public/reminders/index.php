@@ -294,15 +294,25 @@ function render_shared_folder_ro(string $dir, string $partner, string $folder, s
         <span class="fshared-badge" title="Shared by <?= e($partner) ?>"><?= e($partner) ?></span>
         <span class="folder-rule" aria-hidden="true"></span>
       </div>
+      <?php // Their sections fold like mine do. The collapse key is folder + section, and
+            // the folder here is the "@partner:Folder" view key, so their "Errands" and my
+            // "Errands" can never collapse each other. Read-only is about their *data* —
+            // whether I want to look at it right now is mine to decide. ?>
       <?php foreach ($secs as $s): $sn = (string) $s['name']; if (empty($bySec[$sn])) { continue; } ?>
-        <div class="section-group" data-section="<?= e($sn) ?>">
-          <div class="section-head"><span class="section-title"><?= e($sn) ?></span></div>
+        <div class="section-group" data-section="<?= e($sn) ?>" data-folder="<?= e($key) ?>">
+          <div class="section-head">
+            <?= section_collapse_button() ?>
+            <span class="section-title"><?= e($sn) ?></span>
+          </div>
           <?php render_ro_rows($bySec[$sn], $today); ?>
         </div>
       <?php endforeach; ?>
       <?php if ($loose): ?>
-        <div class="section-group">
-          <div class="section-head"><span class="section-title"><?= DEFAULT_SECTION ?></span></div>
+        <div class="section-group" data-section="" data-folder="<?= e($key) ?>">
+          <div class="section-head">
+            <?= section_collapse_button() ?>
+            <span class="section-title"><?= DEFAULT_SECTION ?></span>
+          </div>
           <?php render_ro_rows($loose, $today); ?>
         </div>
       <?php endif; ?>
@@ -1294,21 +1304,24 @@ $sectionInput =
           <?php render_section_add_row($sname, $csrf, $view, $sfolder); ?>
           <?php render_rows($grouped[$s['id']] ?? [], $csrf, $view, $today, $sname); ?>
         </div>
+        <?php $blocks[] = ob_get_clean(); ?>
       <?php endforeach; ?>
       <?php
-        // The folder's catch-all: last, no drag handle. It's deletable only when the
+        // The folder's catch-all. It drags like any other section — it just can't store
+        // its place in the reminders list, not being a row there, so its index lives in
+        // folders-<user>.json. It's deletable only when the
         // folder has another section (its loose items move there), and once it has no
         // loose items *and* there are other sections it stops rendering — so a fully
         // sectioned folder isn't headed by an empty "Reminders". A folder with no
         // sections always keeps it, so there's always a "+" to add against.
-        $folderSecs = 0;
-        foreach ($secRows as $s) { if ($folderOf($s) === $sfolder) { $folderSecs++; } }
-        if (!empty($looseByFolder[$sfolder]) || $folderSecs === 0):
+        $folderSecs = count($blocks);
+        $hasCatch   = !empty($looseByFolder[$sfolder]) || $folderSecs === 0;
+        if ($hasCatch): ob_start();
       ?>
       <div class="section-group default-group" data-section="" data-folder="<?= e($sfolder) ?>">
         <div class="section-head">
           <?= section_collapse_button() ?>
-          <span class="sec-handle blank" aria-hidden="true"></span>
+          <span class="sec-handle" title="Drag section" aria-hidden="true">&#9776;</span>
           <span class="section-title"><?= DEFAULT_SECTION ?></span>
           <?php render_section_add_button('', $sfolder); ?>
           <?php if ($folderSecs > 0 && !$isShared): ?>
