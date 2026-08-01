@@ -17,6 +17,11 @@ struct CalendarView: View {
     @State private var draft = ""
     @FocusState private var draftFocused: Bool
 
+    // Day-panel groups fold independently, remembered per kind like the web's `calFold_*`.
+    @AppStorage("calFoldEvents") private var foldEvents = false
+    @AppStorage("calFoldReminders") private var foldReminders = false
+    @AppStorage("calFoldNotes") private var foldNotes = false
+
     // Week vs month view (remembered), and which calendar/set the view is scoped to.
     @AppStorage("calWeekMode") private var weekMode = false
     @State private var calSel: UUID?
@@ -170,19 +175,27 @@ struct CalendarView: View {
 
     private var dayPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(dayTitle).font(.headline)
+            // The date, with "+ Add" to its right — one menu, the kind picked inside, each
+            // landing on the selected day: an event opens its sheet, a reminder the inline
+            // row, a note its sheet, all pre-dated here.
+            HStack {
+                Text(dayTitle).font(.headline)
+                Spacer()
+                Menu {
+                    Button { addEvent() } label: { Label("Event", systemImage: "calendar") }
+                    Button { startReminder() } label: { Label("Reminder", systemImage: "checklist") }
+                    Button { addNote() } label: { Label("Note", systemImage: "note.text") }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+                .tint(Theme.reminder)
+                .font(.callout)
+            }
 
             let events = store.events(on: selected, scope: scope)
             let reminders = store.reminders(on: selected, today: today)
             let notes = store.notes(on: selected)
-
-            if events.isEmpty && reminders.isEmpty && notes.isEmpty && !drafting {
-                Text("Nothing on this day.").font(.callout).foregroundStyle(.secondary)
-            }
-
-            ForEach(events) { eventRow($0) }
-            ForEach(reminders) { reminderRow($0) }
-            ForEach(notes) { noteRow($0) }
 
             if drafting {
                 HStack(spacing: 8) {
@@ -194,21 +207,48 @@ struct CalendarView: View {
                 }
             }
 
-            // One "+ Add" for the day, like the web — pick the kind inside. Each lands on
-            // the selected day: an event opens its sheet, a reminder the inline row, a note
-            // its sheet, all pre-dated here.
-            Menu {
-                Button { addEvent() } label: { Label("Event", systemImage: "calendar") }
-                Button { startReminder() } label: { Label("Reminder", systemImage: "checklist") }
-                Button { addNote() } label: { Label("Note", systemImage: "note.text") }
-            } label: {
-                Label("Add", systemImage: "plus")
+            if events.isEmpty && reminders.isEmpty && notes.isEmpty && !drafting {
+                Text("Nothing on this day.").font(.callout).foregroundStyle(.secondary)
             }
-            .buttonStyle(.bordered)
-            .tint(Theme.reminder)
-            .font(.callout)
+
+            // One collapsible group per kind, like the web's day panel (events, then
+            // reminders, then notes). An empty kind draws no heading.
+            dayGroup("Events", count: events.count, collapsed: $foldEvents) {
+                ForEach(events) { eventRow($0) }
+            }
+            dayGroup("Reminders", count: reminders.count, collapsed: $foldReminders) {
+                ForEach(reminders) { reminderRow($0) }
+            }
+            dayGroup("Notes", count: notes.count, collapsed: $foldNotes) {
+                ForEach(notes) { noteRow($0) }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A collapsible kind group — a chevron, its name and a count that fold the rows away,
+    /// the web's `.dp-group`. Folded state is remembered per kind; an empty group is hidden.
+    @ViewBuilder
+    private func dayGroup<Rows: View>(_ title: String, count: Int, collapsed: Binding<Bool>,
+                                      @ViewBuilder rows: () -> Rows) -> some View {
+        if count > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { collapsed.wrappedValue.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: collapsed.wrappedValue ? "chevron.right" : "chevron.down")
+                            .font(.caption2).foregroundStyle(.secondary).frame(width: 10)
+                        Text(title).font(.subheadline.weight(.semibold))
+                        Text("\(count)").font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if !collapsed.wrappedValue { rows() }
+            }
+        }
     }
 
     private func eventRow(_ e: Event) -> some View {

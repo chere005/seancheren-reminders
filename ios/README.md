@@ -36,8 +36,10 @@ the slash-only US-order text parser (`Shared/Parse.swift`), the two-press delete
 not an SF Symbol tinted the same in a menu), the Habits **week and month views** — the
 month drawn as a pie per day, sliced in the sections' own colours, behind a section filter
 — Reminders' **Copy as Markdown** and **Clear completed**. The Calendar's day panel has one
-**+ Add** (Reminder / Event / Note, landing on the selected day), the web's single Add; a
-day's reminders sort undated-first, then by date, then by time.
+**+ Add** (Reminder / Event / Note, landing on the selected day) to the right of the date,
+the web's single Add, and lays the day's items out in **collapsible Events / Reminders /
+Notes groups** (the web's `.dp-group`, folded state remembered per kind); a day's reminders
+sort undated-first, then by date, then by time.
 
 `PARITY.md` walks every section of the website's test suite and records the iOS status
 (covered / covered-differently / by-eye / out-of-scope / open gap), so the two apps can be
