@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         password_verify($_POST['password'], PASSWORD_HASH)
     ) {
         $_SESSION['auth'] = true;
-        header('Location: /dev/');
+        header('Location: /processing/');
         exit;
     }
     $error = 'Invalid username or password.';
@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (isset($_GET['logout'])) {
     session_destroy();
-    header('Location: /dev/');
+    header('Location: /processing/');
     exit;
 }
 
@@ -98,7 +98,7 @@ $authenticated = !empty($_SESSION['auth']);
 <?php if (!$authenticated): ?>
   <div class="login-box">
     <h1>Sign in</h1>
-    <form method="post" action="/dev/">
+    <form method="post" action="/processing/">
       <label for="username">Username</label>
       <input id="username" type="text" name="username" autocomplete="username" required>
       <label for="password">Password</label>
@@ -111,9 +111,9 @@ $authenticated = !empty($_SESSION['auth']);
   </div>
 
 <?php else: ?>
-  <nav><a href="/dev/?logout">Log out</a></nav>
+  <nav><a href="/processing/?logout">Log out</a></nav>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
-  <script src="/dev/sketch.js"></script>
+  <script src="/processing/sketch.js"></script>
 <?php endif; ?>
 
 </body>

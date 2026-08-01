@@ -2,32 +2,40 @@
 #
 # Deploy the site to NearlyFreeSpeech.  One-way:  your Mac  ->  the server.
 #
-# Two live instances share ONE source tree (no forked copy of the code):
+# Three live instances share ONE source tree (no forked copy of the code):
 #
-#   PRODUCTION      served at  /          public -> /home/public
-#                                         lib    -> /home/protected/lib
-#                                         data   -> /home/protected/data
-#   TEST (sandbox)  served at  /test/     public -> /home/public/test
-#                                         lib    -> /home/protected/lib-test
-#                                         data   -> /home/protected/data-test
+#   PRODUCTION      served at  /            public -> /home/public
+#                                           lib    -> /home/protected/lib
+#                                           data   -> /home/protected/data
+#   TEST (sandbox)  served at  /test/       public -> /home/public/test
+#                                           lib    -> /home/protected/lib-test
+#                                           data   -> /home/protected/data-test
+#   DEV (2nd slot)  served at  /dev/        public -> /home/public/dev
+#                                           lib    -> /home/protected/lib-dev
+#                                           data   -> /home/protected/data-dev
 #
-# The same PHP serves both. A page under /test/ loads lib-test/, whose config.php sets
-# base=/test and data_dir=data-test, so the mirror is isolated in code, config AND data.
-# Which instance a cross-app link points at comes from suite_base() at runtime, never a
-# hand-kept second copy of the code — edit once, it works in both places.
+# The same PHP serves all three. A page under /test/ or /dev/ loads the matching
+# lib-*/, whose config.php sets base=/test or /dev and data_dir accordingly, so each
+# mirror is isolated in code, config AND data. Which instance a cross-app link points at
+# comes from suite_base() at runtime, never a hand-kept second copy of the code — edit
+# once, it works everywhere. DEV exists purely as a second sandbox slot, kept out of
+# the way of TEST's own reviewed/ready-to-promote state; it is never part of `promote`.
 #
 # Usage:
 #   ./deploy.sh              deploy the working tree to TEST only        (default; safe)
 #   ./deploy.sh test         same
 #   ./deploy.sh prod         deploy the working tree straight to PRODUCTION
 #   ./deploy.sh both         deploy to TEST *and* PRODUCTION in one go
+#   ./deploy.sh dev          deploy the working tree to the DEV sandbox only
 #   ./deploy.sh promote      copy the live TEST tree onto PRODUCTION, server-side —
 #                            ship exactly what you verified on /test/, no re-upload
 #   add --dry-run (or -n) to any of the above to preview and touch nothing
 #
 # What it NEVER touches, in any mode:
-#   - lib/config.php  and  lib-test/config.php   (each instance keeps its own secrets)
-#   - /home/protected/data/  and  /home/protected/data-test/   (everyone's live data)
+#   - lib/config.php, lib-test/config.php and lib-dev/config.php (each instance
+#     keeps its own secrets)
+#   - /home/protected/data/, /home/protected/data-test/ and /home/protected/data-dev/
+#     (everyone's live data)
 #   - and it never uses --delete
 #
 set -euo pipefail
@@ -49,10 +57,10 @@ DRY=""
 MODE=""
 for arg in "$@"; do
   case "$arg" in
-    -n|--dry-run)            DRY="--dry-run" ;;
-    test|prod|both|promote)  MODE="$arg" ;;
+    -n|--dry-run)                 DRY="--dry-run" ;;
+    test|prod|both|promote|dev)   MODE="$arg" ;;
     *) echo "Unknown argument: $arg"
-       echo "Usage: ./deploy.sh [test|prod|both|promote] [--dry-run]"; exit 2 ;;
+       echo "Usage: ./deploy.sh [test|prod|both|promote|dev] [--dry-run]"; exit 2 ;;
   esac
 done
 MODE="${MODE:-test}"      # a bare deploy is TEST-only, so prod is never hit by accident
@@ -128,6 +136,34 @@ ensure_test_config() {
   '
 }
 
+# DEV is a second, fixed sandbox slot alongside TEST — same idea (config.php inherits
+# production's real accounts/secrets, then overrides just data_dir and base), its own
+# isolated data dir, created once and left alone after that. It is deliberately separate
+# from TEST so a half-done feature here can't clobber TEST's reviewed, promote-ready state.
+ensure_dev_config() {
+  [[ -n "$DRY" ]] && { echo "==> [DEV] would ensure /home/protected/lib-dev/config.php exists"; return 0; }
+  echo "==> [DEV] ensuring lib-dev/config.php exists…"
+  $SSH "$HOST" '
+    mkdir -p /home/protected/lib-dev
+    if [ ! -f /home/protected/lib-dev/config.php ]; then
+      {
+        echo "<?php"
+        echo "// DEV sandbox config — a second, fixed slot alongside lib-test. Inherits the"
+        echo "// real accounts/secrets from production, then isolates storage and prefixes"
+        echo "// links. Not deployed; created once by deploy.sh. Delete to reset this instance."
+        echo "\$c = require \"/home/protected/lib/config.php\";"
+        echo "\$c[\"data_dir\"] = \"/home/protected/data-dev\";"
+        echo "\$c[\"base\"]     = \"/dev\";"
+        echo "return \$c;"
+      } > /home/protected/lib-dev/config.php
+      chmod a+r /home/protected/lib-dev/config.php
+      echo "    created /home/protected/lib-dev/config.php"
+    else
+      echo "    already present"
+    fi
+  '
+}
+
 case "$MODE" in
   test)
     ensure_test_config
@@ -140,6 +176,10 @@ case "$MODE" in
     push_instance /home/public /home/protected/lib PROD
     ensure_test_config
     push_instance /home/public/test /home/protected/lib-test TEST
+    ;;
+  dev)
+    ensure_dev_config
+    push_instance /home/public/dev /home/protected/lib-dev DEV
     ;;
   promote)
     # Copy the *live test* tree onto production, entirely on the server, so prod ends up
@@ -164,7 +204,7 @@ case "$MODE" in
     ;;
 esac
 
-echo "==> Done ($MODE). Live data in /home/protected/data{,-test}/ was not touched."
+echo "==> Done ($MODE). Live data in /home/protected/data{,-test,-dev}/ was not touched."
 # This must not be the script's last command as a bare `&&` list — on a real run $DRY is
 # empty, the test is false, and its exit 1 would become the script's exit code, breaking
 # `./deploy.sh && git push`. An `if` returns 0.

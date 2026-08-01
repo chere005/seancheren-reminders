@@ -1,14 +1,18 @@
 <?php
-// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
-// the test instance stays isolated from production's code, config and data. Cross-app
-// links carry the same /test prefix via suite_base(); _self_path() redirects already
-// stay put. Keep this preamble identical when adding a page.
-$__test = strpos(__DIR__, '/test/') !== false
-       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, and one
+// served under /dev/ (a second, fixed sandbox slot) loads lib-dev/ — each mirror
+// isolated in code, config and data. Cross-app links carry the same prefix via suite_base();
+// _self_path() redirects already stay put. Keep this preamble identical when adding a page.
+$__test   = strpos(__DIR__, '/test/') !== false
+         || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
+$__dev    = strpos(__DIR__, '/dev/') !== false
+         || strncmp($_SERVER['REQUEST_URI'] ?? '', '/dev/', 5) === 0;
 $__libDir = null;
-$__cands  = $__test
-    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
-    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+$__cands  = $__dev
+    ? [__DIR__ . '/../../../lib-dev', '/home/protected/lib-dev']
+    : ($__test
+        ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+        : [__DIR__ . '/../../lib',         '/home/protected/lib']);
 foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
