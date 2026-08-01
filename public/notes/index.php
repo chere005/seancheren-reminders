@@ -275,21 +275,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if (!is_array($secMap)) { $secMap = []; }
         $sectionRows = [];
         foreach ($byFolder as $f => $rows) {
-            $order  = is_array($secMap[$f] ?? null) ? array_map('strval', $secMap[$f]) : [];
+            // NB: a distinct name from the row-`$order` decoded above — reusing it clobbered
+            // the note order and quietly broke row dragging (and cross-folder re-filing).
+            $names  = is_array($secMap[$f] ?? null) ? array_map('strval', $secMap[$f]) : [];
             $byName = [];
             foreach ($rows as $r) { $byName[(string) $r['name']] = $r; }
-            foreach ($order as $nm) {
+            foreach ($names as $nm) {
                 if (isset($byName[$nm])) { $sectionRows[] = $byName[$nm]; unset($byName[$nm]); }
             }
             foreach ($byName as $r) { $sectionRows[] = $r; }   // any not named keep their place
         }
 
+        // A drag can carry a note into another of MY folders — the item posts the folder
+        // of the block it was dropped in. Re-file it only if that's one of my own note
+        // folders (never a partner's shared block); the section is then re-validated
+        // against the folder it ends up in.
+        $myNoteFolders = folders_load($cfg['data_dir'])['notes'];
         $newRows = [];
         $used    = [];
         foreach ($order as $o) {
             $id = (string) ($o['id'] ?? '');
             if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
             $row = $byId[$id];
+            $folder = (string) ($o['folder'] ?? '');
+            if ($folder !== '' && in_array($folder, $myNoteFolders, true)) { $row['folder'] = $folder; }
             $sec = (string) ($o['section'] ?? '');
             $f   = $row['folder'] ?? FOLDER_DEFAULT;
             if ($sec !== '' && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
@@ -753,7 +762,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* A short rule on the heading's own line, trailing off to the right edge. It rides
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
-    .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
+    .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Every section — named
        or the catch-all — is a .section-group now, so one selector covers them all. */
@@ -1219,8 +1228,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       // Note order (id + section) …
       const order = [];
       root.querySelectorAll('ul.nlist').forEach(ul => {
+        const block = ul.closest('.folder-block');
+        if (block && block.classList.contains('shared-block')) return;   // never re-file into a partner's folder
         const section = ul.dataset.section || '';
-        ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
+        const folder = block ? (block.dataset.folder || '') : '';
+        ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section, folder }));
       });
       // … and section order per folder — the named .section-group's within each block.
       const sections = {};
