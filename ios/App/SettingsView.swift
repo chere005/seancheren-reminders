@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @State private var armed = false
+    @State private var armedSeed = false
 
     var body: some View {
         NavigationStack {
@@ -16,6 +17,23 @@ struct SettingsView: View {
                     row("Notes", store.data.notes.count)
                     row("Events", store.data.events.count)
                     row("Habits", store.data.habits.count)
+                }
+
+                Section {
+                    // Two presses, like the erase below — this replaces everything.
+                    Button {
+                        if armedSeed { store.loadSample(); armedSeed = false; dismiss() }
+                        else { armedSeed = true }
+                    } label: {
+                        Text(armedSeed ? "Tap again — this replaces everything"
+                                       : "Load sample data (Buddy's dinner)")
+                            .foregroundStyle(armedSeed ? Color.white : Theme.reminder)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .listRowBackground(armedSeed ? Theme.reminder.opacity(0.7) : nil)
+                } footer: {
+                    Text("Fills the app with a plausible demo set — the dinner-with-friends "
+                         + "scenario — dated around today. It replaces what's here and syncs to the watch.")
                 }
 
                 Section {

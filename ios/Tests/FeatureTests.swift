@@ -170,6 +170,25 @@ final class FeatureTests: XCTestCase {
         XCTAssertTrue(restored.habitHidden.isEmpty, "the filter defaulted to empty")
     }
 
+    // MARK: - Sample data ("buddy's data")
+
+    func testLoadSamplePopulatesBuddysData() {
+        let store = freshStore()
+        store.loadSample()
+        XCTAssertTrue(store.data.folderList(.reminder).contains { $0.name == "Cooking" }, "a Cooking folder")
+        XCTAssertTrue(store.data.groups.contains { $0.name == "Groceries" && $0.kind == .reminder }, "a section")
+        XCTAssertTrue(store.data.reminders.contains { $0.text == "Milk" }, "a grocery item")
+        XCTAssertTrue(store.data.reminders.contains { $0.ridesAlong }, "a Calendar-folder rider")
+        XCTAssertTrue(store.data.notes.contains { $0.title == "Chicken parmesan" }, "the recipe note")
+        let dinners = store.data.events.filter { $0.text.hasPrefix("Dinner") }
+        XCTAssertEqual(dinners.count, 2, "two dinners")
+        for e in dinners {
+            XCTAssertEqual(cal.component(.weekday, from: e.date), 7, "each dinner on a Saturday")
+        }
+        XCTAssertTrue(store.data.habits.contains { $0.name == "Floss" && !$0.marks.isEmpty }, "a ticked habit")
+        XCTAssertFalse(store.watchList().sections.isEmpty, "and it flows to the watch")
+    }
+
     func testListGroupDecodesWithoutAColour() throws {
         let json = "{\"id\":\"\(UUID().uuidString)\",\"name\":\"Old\",\"kind\":\"reminder\",\"order\":2}"
         let g = try JSONDecoder().decode(ListGroup.self, from: Data(json.utf8))

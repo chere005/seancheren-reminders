@@ -56,6 +56,75 @@ final class Store: ObservableObject {
         touch()
     }
 
+    /// Fill the suite with "buddy's data" — the dinner-with-friends scenario the website's
+    /// seed-buddy builds — so the app (and the watch, which the same push feeds) have a
+    /// plausible set to look at without typing it in. Dated relative to today so it never
+    /// goes stale. Replaces whatever's here.
+    func loadSample() {
+        let cal = Calendar.current
+        let today = Date().day
+        func days(_ n: Int) -> Date { cal.date(byAdding: .day, value: n, to: today)?.day ?? today }
+        // The next Saturday (which=1) and the one after (which=2) — the two dinners.
+        func saturday(_ which: Int) -> Date {
+            var d = cal.date(byAdding: .day, value: 1, to: today) ?? today
+            while cal.component(.weekday, from: d) != 7 { d = cal.date(byAdding: .day, value: 1, to: d) ?? d }
+            return (cal.date(byAdding: .day, value: 7 * (which - 1), to: d) ?? d).day
+        }
+
+        var d = AppData.starter                       // one General folder each, one calendar
+
+        // Reminders: a Cooking folder with Groceries + Dinner-prep sections, plus riders.
+        let cooking   = Folder(name: "Cooking", kind: .reminder, color: 4)
+        d.folders.append(cooking)
+        let groceries = ListGroup(name: "Groceries", kind: .reminder, order: 1, color: 1)
+        let prep      = ListGroup(name: "Dinner prep", kind: .reminder, order: 2, color: 4)
+        d.groups += [groceries, prep]
+        let general = d.folderList(.reminder).first!.id
+        var ord = 0
+        func rem(_ text: String, _ folder: UUID, _ group: GroupRef, due: Date? = nil) {
+            ord += 1
+            d.reminders.append(Reminder(text: text, due: due, folder: folder, group: group, order: ord))
+        }
+        for g in ["Milk", "Eggs", "Flour", "Olive oil", "Parmesan", "Fresh basil"] {
+            rem(g, cooking.id, .group(groceries.id))
+        }
+        rem("Marinate the chicken", cooking.id, .group(prep.id), due: saturday(1))
+        rem("Chop the vegetables",  cooking.id, .group(prep.id), due: saturday(1))
+        rem("Set the table",        cooking.id, .group(prep.id), due: saturday(1))
+        rem("Pick up the wine", general, .calendar)   // undated Calendar rider — rides on today
+        rem("Text everyone the time", general, .inbox, due: days(1))
+
+        // Notes: a Recipes folder with the recipe.
+        let recipes = Folder(name: "Recipes", kind: .note, color: 2)
+        d.folders.append(recipes)
+        d.notes.append(Note(title: "Chicken parmesan",
+                            body: "Serves 4.\n\n- Pound the chicken thin, salt both sides.\n"
+                                + "- Dredge: flour, then egg, then breadcrumbs + parmesan.\n"
+                                + "- Fry 3 min a side; top with sauce and mozzarella.\n"
+                                + "- Bake at 425°F until bubbling, ~15 min.\n\nBuddy's recipe.",
+                            folder: recipes.id, order: 1))
+
+        // Calendar: the two dinners, next two Saturdays, 7pm.
+        let calId = d.calendars.first!.id
+        d.events.append(Event(text: "Dinner with friends", date: saturday(1), minutes: 19 * 60, cal: calId))
+        d.events.append(Event(text: "Dinner, round two", date: saturday(2), minutes: 19 * 60, cal: calId))
+
+        // Habits: a few, with the last week or so already ticked in.
+        let health = ListGroup(name: "Health", kind: .habit, order: 1, color: 3)
+        d.groups.append(health)
+        func habit(_ name: String, group: UUID?, ticked offsets: [Int], order: Int) {
+            var marks = Set<String>()
+            for o in offsets { marks.insert(days(-o).key) }
+            d.habits.append(Habit(name: name, group: group, marks: marks, order: order))
+        }
+        habit("Floss", group: health.id, ticked: [0, 1, 3, 4, 6], order: 1)
+        habit("Read 20 min", group: health.id, ticked: [0, 2, 3, 5], order: 2)
+        habit("Walk", group: nil, ticked: [1, 2, 4, 5, 6], order: 3)
+
+        data = d
+        touch()
+    }
+
     func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
