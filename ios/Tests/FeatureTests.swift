@@ -199,7 +199,7 @@ final class FeatureTests: XCTestCase {
         // These keys did not exist in the first version; a document without them must load,
         // not reset the whole suite to empty because one key was absent.
         let stripped = Self.stripKeys(["indent", "habitHidden", "habitHideUngrouped", "habitsMonth",
-                                       "habitUngroupedColor"],
+                                       "habitUngroupedColor", "hiddenFolders", "hiddenCals"],
                                       from: tree)
         let bytes = try JSONSerialization.data(withJSONObject: stripped)
         let restored = try JSONDecoder().decode(AppData.self, from: bytes)

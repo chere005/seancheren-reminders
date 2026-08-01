@@ -262,6 +262,12 @@ struct AppData: Codable {
     /// The calendar or set the Calendar screen last had selected (nil = all).
     var lastCal: UUID?
 
+    /// Folder/calendar visibility — what the three-gesture picker has hidden, stored as what's
+    /// *off* so a folder or calendar added later shows by default. Folders are keyed by
+    /// `ItemKind.rawValue`; calendars are the web's `hidden_cals`.
+    var hiddenFolders: [String: [UUID]] = [:]
+    var hiddenCals: [UUID] = []
+
     /// The Habits month pies count every section unless it's in here; the ungrouped run
     /// has no id, so it gets its own flag. Stored as what's *hidden*, so a section added
     /// later counts without anyone touching this.
@@ -315,6 +321,8 @@ extension AppData {
         lastFolder        = try c.decodeIfPresent([String: UUID].self, forKey: .lastFolder) ?? [:]
         defaultCal        = try c.decodeIfPresent(UUID.self,         forKey: .defaultCal)
         lastCal           = try c.decodeIfPresent(UUID.self,         forKey: .lastCal)
+        hiddenFolders     = try c.decodeIfPresent([String: [UUID]].self, forKey: .hiddenFolders) ?? [:]
+        hiddenCals        = try c.decodeIfPresent([UUID].self,       forKey: .hiddenCals) ?? []
         habitHidden       = try c.decodeIfPresent(Set<UUID>.self,    forKey: .habitHidden) ?? []
         habitHideUngrouped = try c.decodeIfPresent(Bool.self,        forKey: .habitHideUngrouped) ?? false
         habitsMonth       = try c.decodeIfPresent(Bool.self,         forKey: .habitsMonth) ?? false
@@ -338,6 +346,28 @@ extension Array {
         for i in source.sorted(by: >) { remove(at: i) }
         insert(contentsOf: moving, at: Swift.max(0, Swift.min(target, count)))
     }
+}
+
+/// Tidy a user-typed folder or section name the way the web's `folder_clean` does: drop
+/// control characters, collapse every run of whitespace to one space (which also trims the
+/// ends), and clip to 40. Kept in the core so it's the same rule everywhere and unit-tested.
+func cleanName(_ raw: String) -> String {
+    // Collapse every run of whitespace (spaces, tabs, newlines) to one space — this trims the
+    // ends too — then drop any remaining control / DEL scalars (e.g. \x00, the \x1F separator).
+    let collapsed = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    let printable = String(collapsed.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F })
+    return String(printable.prefix(40))
+}
+
+/// Names a user section can't take, because a permanent unnamed heading already owns them —
+/// the web reserves "Reminders"/"Calendar"/"Notes" the same way. Compared case-insensitively.
+func isReservedGroupName(_ name: String, kind: ItemKind) -> Bool {
+    let reserved: [ItemKind: Set<String>] = [
+        .reminder: ["reminders", "calendar"],
+        .note:     ["notes"],
+        .habit:    ["habits"],
+    ]
+    return reserved[kind]?.contains(name.lowercased()) ?? false
 }
 
 /// "today", "tomorrow", "Aug 3" — a short date, because it sits under the row's text.

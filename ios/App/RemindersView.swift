@@ -3,13 +3,11 @@ import SwiftUI
 struct RemindersView: View {
     @EnvironmentObject private var store: Store
 
-    @State private var folder: UUID?
     @State private var showCompleted = false
     @State private var editing: Reminder?
     @State private var renaming: ListGroup?
     @State private var arming: UUID?
     @State private var confirmClear = false
-    @State private var restored = false
 
     // The inline "type it and hit return" row, which belongs to one group at a time.
     @State private var drafting: GroupRef?
@@ -32,7 +30,7 @@ struct RemindersView: View {
             .navigationTitle("Reminders")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    FolderMenu(kind: .reminder, selection: $folder)
+                    FolderMenu(kind: .reminder)
                 }
                 ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -46,11 +44,11 @@ struct RemindersView: View {
                         // "Copy as Markdown" — the visible list to the clipboard, the same
                         // export the web puts behind its share icon.
                         Button("Copy as Markdown", systemImage: "doc.on.doc") {
-                            UIPasteboard.general.string = store.markdown(folder: folder,
+                            UIPasteboard.general.string = store.markdown(folder: nil,
                                                                          includeDone: showCompleted)
                         }
                         ShareLink("Share as Markdown",
-                                  item: store.markdown(folder: folder, includeDone: showCompleted))
+                                  item: store.markdown(folder: nil, includeDone: showCompleted))
                         Divider()
                         // Settings has no tab of its own — it lives here, the way the site
                         // keeps it in the user menu rather than the app bar.
@@ -62,24 +60,14 @@ struct RemindersView: View {
             }
             .sheet(item: $editing) { ReminderDetail(reminder: $0) }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .confirmationDialog("Delete every completed reminder\(folder == nil ? "" : " here")?",
+            .confirmationDialog("Delete every completed reminder?",
                                 isPresented: $confirmClear, titleVisibility: .visible) {
-                Button("Clear completed", role: .destructive) { store.clearDone(folder: folder) }
+                Button("Clear completed", role: .destructive) { store.clearDone(folder: nil) }
             }
             .alert("Rename group", isPresented: Binding(get: { renaming != nil },
                                                         set: { if !$0 { renaming = nil } })) {
                 RenameField(group: renaming) { renaming = nil }
             }
-        }
-        .onAppear {
-            guard !restored else { return }
-            folder = store.data.lastFolder[ItemKind.reminder.rawValue]
-            restored = true
-        }
-        .onChange(of: folder) {
-            guard restored else { return }
-            store.data.lastFolder[ItemKind.reminder.rawValue] = folder
-            store.touch()
         }
     }
 
@@ -89,7 +77,7 @@ struct RemindersView: View {
     /// rows yet, and vanishing would look like it hadn't been created.
     @ViewBuilder
     private func section(_ ref: GroupRef, title: String, model: ListGroup? = nil) -> some View {
-        let rows = store.reminders(folder: folder, group: ref)
+        let rows = store.remindersShown(folder: nil, group: ref)
             .filter { showCompleted || !$0.done }
 
         Section {
@@ -194,7 +182,7 @@ struct RemindersView: View {
         store.add(Reminder(text: parsed.text,
                            due: parsed.date,
                            minutes: parsed.minutes,
-                           folder: store.target(.reminder, viewing: folder),
+                           folder: store.addTarget(.reminder),
                            group: ref))
         draft = ""
         draftFocused = true
