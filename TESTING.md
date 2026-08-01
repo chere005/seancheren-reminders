@@ -119,13 +119,16 @@ Calendars add, recolour, default and delete. A calendar row tap leaves only it s
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
 section colour must come from the palette, and the response says what actually stuck.
-Both views render. The **section filter** has the suite's three picker gestures — the box
-toggles one, a row tap makes it the only one counted, `All` counts everything and then
-nothing — and an unknown section key is a no-op rather than a stored ghost. It sits by the
-Week/Month switch in **both** views; filtering changes the pies and the legend, but only
-the month pies — the week grid still holds every habit whatever the filter says. Each day's
-pie is drawn in its **sections' own colours** (a conic-gradient of section-coloured slices),
-never the flat accent.
+Both views render. **Sections are required:** a fresh account opens with a default section
+(persisted with a stable id), each section header carries its own **+ Habit** shown out of
+edit mode, and the last section is undeletable. The **Manage sections** window (in the filter
+dropdown) renders and reorders sections without disturbing the habits. The **section filter**
+has the suite's three picker gestures — the box toggles one, a row tap makes it the only one
+counted, `All` counts everything and then nothing — and an unknown section key is a no-op
+rather than a stored ghost (there is no "Ungrouped" key any more). It sits by the Week/Month
+switch in **both** views; filtering changes the pies and the legend, but only the month pies —
+the week grid still holds every habit whatever the filter says. Each day's pie is drawn in its
+**sections' own colours** (a conic-gradient of section-coloured slices), never the flat accent.
 
 ### `add`
 A reminder lands in the chosen folder and section, an event in the chosen calendar, a
@@ -199,7 +202,8 @@ panel into a chosen folder and group. A stale calendar id on an event falling ba
 ### `habits2`
 The month view's per-day count (never more done than there are habits), and each day's pie
 drawn in section colours rather than the accent. Week paging moving a whole week at a time.
-Deleting a section leaving its habits behind, ungrouped. The chosen view remembered per user.
+Deleting a section keeps its habits, moving them into a remaining section (never orphaned,
+since sections are required). The chosen view remembered per user.
 
 ### `feed`
 The widget feed groups by day, never carries a note, and gives reminders the id their tick
@@ -313,8 +317,13 @@ failures only exist in standalone mode.
 
 - [ ] Long-press (touch) and double-click (desktop) enter edit mode: on a reminder row,
       a note row, a section head, a folder head, a calendar row.
+- [ ] Holding to enter edit mode does **not** paint the text blue as if it were selected
+      (Reminders, Notes, Calendar day panel, Habits).
 - [ ] A section head's gesture opens its **name** for typing, in Reminders and Notes.
 - [ ] A reminder's gesture opens its **text** inline.
+- [ ] The `+` beside a folder name (adds a section) shows **without** entering edit mode, in
+      Reminders and Notes; each Habits section header's **+ Habit** likewise shows out of
+      edit mode, and adding from there doesn't flip edit mode on.
 - [ ] Tapping empty space leaves edit mode; Escape leaves edit mode.
 - [ ] The back button is a black × while editing, and it leaves edit mode.
 - [ ] Swipe a row left: the delete appears and deletes on one tap.
@@ -329,6 +338,9 @@ failures only exist in standalone mode.
       heading, including the catch-all group; the permanent global groups don't indent.
 - [ ] Nothing moves until the drop, and the drop line says where it will land.
 - [ ] Collapse a section and a folder; both survive a reload.
+- [ ] A picker dropdown (folders, Habits section filter, calendars) never grows a horizontal
+      scrollbar on a long name — the name wraps; a partner's shared badge stays with the name.
+- [ ] Copy-as-Markdown appears in the Reminders toolbar only on the `sean` account.
 
 **Calendar**
 
@@ -340,6 +352,8 @@ failures only exist in standalone mode.
 - [ ] Close the app, reopen it — you land on today.
 - [ ] The dots on a day read as "how much is on" and the reminder dot takes the worst
       state of the day.
+- [ ] Deleting a reminder or note from the day panel (swipe × or the edit window's Delete)
+      only takes the date off — it stays in its own app; an event deletes outright.
 
 **Keyboard and input**
 
