@@ -14,6 +14,10 @@ data/
 # server-generated WebP cover cache (built on NFSN, not in repo)
 public/akisbookshelf/covers/
 
+# The deploy target names a real SSH login — keep it out of the repo (deploy.conf.sample
+# is the tracked template; deploy.sh sources deploy.conf if present).
+deploy.conf
+
 # Xcode per-user state (the project itself and its shared schemes are committed)
 ios/**/xcuserdata/
 ios/**/*.xcuserdatad

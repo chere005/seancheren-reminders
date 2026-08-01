@@ -153,6 +153,10 @@ server, pull them back down before your next deploy so nothing is overwritten:
 rsync -av <USERNAME>@ssh.nyc1.nearlyfreespeech.net:/home/public/ public/
 ```
 
+`<USERNAME>` is your real SSH login — it's kept out of the repo. `deploy.sh` reads the
+full target from a gitignored `deploy.conf` (copy `deploy.conf.sample`), so nothing tracked
+carries the login. Set the same value here when you run the command by hand.
+
 ## Secrets
 
 `lib/config.php` is gitignored and never deployed. Put real values there:

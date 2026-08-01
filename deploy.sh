@@ -33,7 +33,16 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-HOST="<USERNAME>@ssh.nyc1.nearlyfreespeech.net"
+# The deploy target (SSH <USERNAME>@host) names a real login, so it's kept OUT of the repo:
+# it lives in a gitignored deploy.conf beside this script. Copy deploy.conf.sample to
+# deploy.conf and set HOST, or export SUITE_DEPLOY_HOST. See README ("Reconcile"/"Secrets").
+[ -f "$(dirname "$0")/deploy.conf" ] && . "$(dirname "$0")/deploy.conf"
+HOST="${HOST:-${SUITE_DEPLOY_HOST:-}}"
+if [ -z "$HOST" ]; then
+  echo "No deploy target set. Create deploy.conf (gitignored) from deploy.conf.sample with" >&2
+  echo "  HOST=<USERNAME>@ssh.<region>.nearlyfreespeech.net   (or export SUITE_DEPLOY_HOST)." >&2
+  exit 2
+fi
 SSH="ssh -o BatchMode=yes"
 
 DRY=""
