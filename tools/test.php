@@ -763,7 +763,38 @@ t('editing and deleting a calendar item', function () {
     req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
         'kind' => 'event', 'id' => $ev['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
     ok(!in_array('Panel event renamed', array_column(stored('events', 'example'), 'text'), true),
-       'confirmed press deletes');
+       'confirmed press deletes an event outright — an event is nothing without its date');
+});
+
+t('deleting a reminder or note from the calendar only unschedules it', function () {
+    // A reminder or note rides the calendar because it carries a date; deleting it there
+    // takes the date off and keeps the item, rather than destroying it from its own list.
+    $jar = login('example', 'examplepassword');
+    $today = date('Y-m-d');
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_reminder',
+        'text' => 'Cal-del rem', 'date' => $today, 'ym' => date('Y-m')], $jar);
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_note',
+        'text' => 'Cal-del note', 'date' => $today, 'ym' => date('Y-m')], $jar);
+    $find = function (string $base, string $field, string $val) {
+        foreach (stored($base, 'example') as $x) { if (($x[$field] ?? '') === $val) { return $x; } }
+        return null;
+    };
+    $rem  = $find('reminders', 'text', 'Cal-del rem');
+    $note = $find('notes', 'title', 'Cal-del note');
+    ok($rem !== null && ($rem['due'] ?? '') === $today, 'the reminder starts dated on today');
+    ok($note !== null && ($note['date'] ?? '') === $today, 'the note starts dated on today');
+
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+        'kind' => 'reminder', 'id' => $rem['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+        'kind' => 'note', 'id' => $note['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
+
+    $rem2 = null;  foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $rem['id'])  { $rem2  = $x; } }
+    $note2 = null; foreach (stored('notes', 'example')     as $x) { if (($x['id'] ?? '') === $note['id']) { $note2 = $x; } }
+    ok($rem2 !== null, 'the reminder still exists');
+    eq('', (string) ($rem2['due'] ?? ''), 'but its date is gone');
+    ok($note2 !== null, 'the note still exists');
+    eq('', (string) ($note2['date'] ?? ''), 'but its date is gone');
 });
 
 t('calendars: add, recolour, default, delete', function () {
