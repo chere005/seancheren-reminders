@@ -214,6 +214,18 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(onLater, ["future"], "a future day shows only what's due then")
     }
 
+    func testCalendarDaySortsUndatedFirstThenDateThenTime() {
+        let store = freshStore()
+        let today = day(2026, 7, 20)
+        store.add(Reminder(text: "3pm", due: today, minutes: 15 * 60))
+        store.add(Reminder(text: "9am", due: today, minutes: 9 * 60))
+        store.add(Reminder(text: "rider", due: nil, group: .calendar))   // undated Calendar rider
+        store.add(Reminder(text: "overdue", due: day(2026, 7, 10)))      // earlier date, rides today
+        let order = store.reminders(on: today, today: today).map(\.text)
+        XCTAssertEqual(order, ["rider", "overdue", "9am", "3pm"],
+                       "undated rider, then oldest date, then by time within a date")
+    }
+
     func testNotesOnDay() {
         let store = freshStore()
         store.add(Note(title: "n1", date: day(2026, 8, 3)))
