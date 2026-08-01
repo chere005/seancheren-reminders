@@ -1,5 +1,6 @@
 package com.seancheren.suite.app
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +53,8 @@ import java.util.UUID
 @Composable
 fun RemindersScreen(vm: SuiteViewModel) {
     val store = vm.store
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var folderSel by remember { mutableStateOf(store.data.lastFolder[ItemKind.reminder.name]) }
     var folderMenu by remember { mutableStateOf(false) }
     var addingKey by remember { mutableStateOf<String?>(null) }
@@ -101,6 +107,19 @@ fun RemindersScreen(vm: SuiteViewModel) {
 
     Column(Modifier.fillMaxSize()) {
         TopBar(store.folderName(folderSel)) {
+            Text(
+                "⧉",
+                color = Muted,
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        clipboard.setText(AnnotatedString(store.markdown(folderSel)))
+                        Toast.makeText(context, "Copied as Markdown", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(6.dp),
+            )
+            Spacer(Modifier.size(6.dp))
             Box {
                 Pill("Folders") { folderMenu = true }
                 DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {

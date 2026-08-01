@@ -188,4 +188,16 @@ class ParityTest {
         val ei = md.indexOf("## Errands")
         assertTrue(ci in 0 until ri && ri < ei)
     }
+
+    // MARK: - A calendar day sorts undated-first, then by date, then by time
+
+    @Test fun testDayRemindersSortUndatedFirstThenByTime() {
+        val store = freshStore()
+        val today = day(2026, 5, 10)
+        store.add(Reminder(text = "rider", group = GroupRef.Calendar))    // undated → first
+        store.add(Reminder(text = "3pm", due = today, minutes = 15 * 60))
+        store.add(Reminder(text = "9am", due = today, minutes = 9 * 60))
+        store.add(Reminder(text = "notime", due = today))                 // no time sorts before timed
+        assertEquals(listOf("rider", "notime", "9am", "3pm"), store.reminders(today, today).map { it.text })
+    }
 }
