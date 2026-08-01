@@ -1057,6 +1057,10 @@ $sectionInput =
     .fsec-add:hover { border-color: #888; color: #fff; }
     body.editing .fsec-add { display: inline-flex; }
     .fsec-form.newsection { margin: 0; }
+    /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
+       so the wash-backed folder name reads as the level above them. Reminders' two permanent
+       groups (Calendar, Reminders) are global, sit outside any block, and so don't move. */
+    .folder-block .section-group { padding-left: 0.85rem; }
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */

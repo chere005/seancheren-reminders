@@ -410,11 +410,27 @@ $monthItems = array_values(array_filter($habitItems, function ($h) use ($section
     return !in_array($key, $mHidden, true);
 }));
 $habitTotal = count($monthItems);
-$monthDone  = [];   // 'YYYY-MM-DD' => how many of the counted habits were ticked that day
+// Per day: the total counted habits ticked, plus the breakdown by section, so each day's
+// pie can be filled in the sections' own colours instead of one flat accent.
+$monthDone = [];   // 'YYYY-MM-DD' => total ticked
+$monthSec  = [];   // 'YYYY-MM-DD' => [sectionKey => ticked]
 foreach ($monthItems as $h) {
+    $sec = (string) ($h['section'] ?? '');
+    $key = in_array($sec, $sectionIds, true) ? $sec : MSEC_NONE;
     foreach ((array) ($h['done'] ?? []) as $d => $on) {
-        if ($on && strncmp((string) $d, $mym, 7) === 0) { $monthDone[(string) $d] = ($monthDone[(string) $d] ?? 0) + 1; }
+        if ($on && strncmp((string) $d, $mym, 7) === 0) {
+            $monthDone[(string) $d]      = ($monthDone[(string) $d] ?? 0) + 1;
+            $monthSec[(string) $d][$key] = ($monthSec[(string) $d][$key] ?? 0) + 1;
+        }
     }
+}
+// Section key -> its colour, so a day's slices can be drawn in them. MSEC_NONE (ungrouped
+// habits) reuses the picker's violet default; the section index matches the picker's, so
+// a section shows the same colour in the pie, the menu and its own header.
+$secColors = [MSEC_NONE => '#8b7fd4'];
+$sci = 0;
+foreach ($habits as $it) {
+    if (is_section($it)) { $secColors[(string) $it['id']] = habit_section_color($it, $sci); $sci++; }
 }
 
 /**
@@ -782,16 +798,10 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
       // the same gesture as everywhere else in the suite. Habits was the last app still
       // carrying the button, and two ways in is one too many.
       //
-      // The month view's section filter goes in the same slot every other app's picker
-      // does — captured with ob_start() and handed to render_user_menu(), the way
-      // render_folder_pick() is elsewhere. Week view has nothing to filter, so it gets
-      // nothing rather than a control that does nothing.
+      // The section filter used to ride in this top-bar slot (month only). It now sits by
+      // the Week/Month switch in the view bar below, in both views — so the top bar keeps
+      // just the settings menu and the username, like the other apps with no title control.
       $titleControls = '';
-      if ($hView === 'month') {
-          ob_start();
-          render_msec_pick($habits, $mHidden, $csrf);
-          $titleControls = ob_get_clean();
-      }
     ?>
     <?= render_user_menu(false, '', '', false, $titleControls) ?>
   </header>
@@ -802,6 +812,9 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
       <a href="?v=week"<?= $hView === 'week' ? ' class="on"' : '' ?>>Week</a>
       <a href="?v=month"<?= $hView === 'month' ? ' class="on"' : '' ?>>Month</a>
     </div>
+    <?php // The section filter sits right of the switch, in both views: it decides which
+          // sections feed the Month pies, and lives here so it can be set from either. ?>
+    <div class="msecpick"><?php render_msec_pick($habits, $mHidden, $csrf); ?></div>
     <div class="range">
       <?php if ($hView === 'week'): ?>
         <a href="?w=<?= $weekOff - 1 ?>" id="wPrev" aria-label="Previous week">&lsaquo;</a>
@@ -825,14 +838,26 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
       <?php for ($d = 1; $d <= $mDays; $d++):
               $ymd  = sprintf('%04d-%02d-%02d', $mYear, $mMon, $d);
               $done = $monthDone[$ymd] ?? 0;
-              $frac = $habitTotal > 0 ? min(1, $done / $habitTotal) : 0;
-              $pct  = round($frac * 100, 1);
-              // A whole circle when everything's ticked, otherwise a wedge of the accent
-              // over the empty colour — the same conic-gradient trick the calendar's
-              // multi-colour dots use.
-              $bg   = $frac <= 0 ? '#1b1726'
-                    : ($frac >= 1 ? 'var(--accent)'
-                    : 'conic-gradient(var(--accent) 0 ' . $pct . '%, #1b1726 ' . $pct . '% 100%)');
+              // The pie is the day's ticks sliced out of the whole counted set: each
+              // section's slice in its own colour, the unfinished remainder left the empty
+              // colour. So a full circle is a day where everything got done, and its
+              // colours say which sections; a day with nothing done is a bare ring.
+              if ($habitTotal <= 0 || $done <= 0) {
+                  $bg = '#1b1726';
+              } else {
+                  $stops = []; $acc = 0;
+                  foreach ($mShown as $key) {           // menu order, counted sections only
+                      $c = $monthSec[$ymd][$key] ?? 0;
+                      if ($c <= 0) { continue; }
+                      $from = round($acc / $habitTotal * 100, 3); $acc += $c;
+                      $to   = round($acc / $habitTotal * 100, 3);
+                      $stops[] = e($secColors[$key] ?? '#8b7fd4') . " $from% $to%";
+                  }
+                  if ($acc < $habitTotal) {              // the part of the day not yet done
+                      $stops[] = '#1b1726 ' . round($acc / $habitTotal * 100, 3) . '% 100%';
+                  }
+                  $bg = 'conic-gradient(' . implode(',', $stops) . ')';
+              }
               $cls  = $ymd === $today ? ' today' : ($ymd > $today ? ' ahead' : '');
       ?>
         <div class="mcell<?= $cls ?>" title="<?= $done ?> of <?= $habitTotal ?> on <?= $ymd ?>">

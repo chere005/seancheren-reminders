@@ -734,6 +734,12 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { margin-left: auto; width: 20%; border-top: 1px solid #2a2a2a; align-self: center; }
+    /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
+       so the wash-backed folder name reads as the level above them. The catch-all "Notes"
+       group is a bare .section-head + .nlist (not a .section-group), so it's indented too. */
+    .folder-block > .section-group,
+    .folder-block > .section-head,
+    .folder-block > .nlist { padding-left: 0.85rem; }
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.4rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
     /* The + sits in the left slot, ahead of the name — not with the delete X. The
