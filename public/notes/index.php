@@ -176,7 +176,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'notes', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1&fm=1');
+        // Reopen the manager without forcing edit mode (only stay in edit if we were in it).
+        $ed = !empty($_POST['edit']) ? '&edit=1' : '';
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . $ed . '&fm=1');
         exit;
     }
     // The Manage-folders "Default for new items" picker: sets the default folder and its
@@ -193,7 +195,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (!in_array($dSection, $secs, true)) { $dSection = $secs[0] ?? SECTION_DEFAULT_NAME; }
             folder_default_section_set($cfg['data_dir'], 'notes', $dFolder, $dSection);
         }
-        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1&fm=1');
+        $ed = !empty($_POST['edit']) ? '&edit=1' : '';
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . $ed . '&fm=1');
         exit;
     }
     if ($_POST['action'] === 'set_folder_color') {
@@ -227,9 +230,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         // If I was viewing the folder I just renamed, follow it to its new name.
         $vw = (string) ($_POST['view'] ?? 'All');
         if ($done && $vw === $old) { $vw = $new; }
-        // Stay in edit mode; reopen the manager (fm=1) when the rename came from it.
-        $extra = !empty($_POST['fm']) ? '&fm=1' : '';
-        header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . '&edit=1' . $extra);
+        // From the manager (fm): reopen it without forcing edit mode. From the list heading
+        // (in edit mode): stay in edit, since that's where the field lives.
+        $extra = !empty($_POST['fm']) ? '&fm=1' : '&edit=1';
+        header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . $extra);
         exit;
     }
     if ($_POST['action'] === 'delete_folder') {
@@ -241,7 +245,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($n);
         save_notes($dataFile, $notes);
-        header('Location: ' . _self_path() . '?folder=All&edit=1&fm=1');
+        header('Location: ' . _self_path() . '?folder=All' . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
         exit;
     }
 
@@ -933,6 +937,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
     ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; padding-right: 0.25rem; }
+    ul.nlist li:last-child { border-bottom: none; }   /* no divider under a section's last note */
     .noteitem {
       flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem;
       text-decoration: none; color: #eee;

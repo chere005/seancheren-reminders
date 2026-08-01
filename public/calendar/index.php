@@ -889,12 +889,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       text-transform: uppercase; letter-spacing: 0.04em;
     }
     .cleg-kind { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; }
-    .cleg-ico { display: inline-flex; align-items: center; justify-content: center; }
-    .cleg-ico.cleg-event { color: var(--k-event); }
-    .cleg-ico.cleg-reminder { color: var(--k-reminder); }
-    .cleg-ico.cleg-note { color: var(--k-note); }
+    /* The glyph itself carries the item's colour now (inline), so it doubles as the swatch. */
+    .cleg-ico { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
     .cleg-item { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; color: #cbcbcb; white-space: nowrap; }
-    .cleg-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
 
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
@@ -1353,9 +1350,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           <span class="cleg-who"><?= e($blk['who']) ?></span>
           <?php foreach ($blk['kinds'] as $g): ?>
             <div class="cleg-kind">
-              <span class="cleg-ico cleg-<?= e($g['kind']) ?>"><?= cal_legend_icon($g['kind']) ?></span>
+              <?php // Each item is the kind's glyph (calendar / checkbox / page) tinted the
+                    // item's own colour, then its name — no separate dot. ?>
               <?php foreach ($g['items'] as [$nm, $col]): ?>
-                <span class="cleg-item"><span class="cleg-dot" style="background:<?= e($col) ?>"></span><?= e($nm) ?></span>
+                <span class="cleg-item"><span class="cleg-ico" style="color:<?= e($col) ?>"><?= cal_legend_icon($g['kind']) ?></span><?= e($nm) ?></span>
               <?php endforeach; ?>
             </div>
           <?php endforeach; ?>

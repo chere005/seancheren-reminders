@@ -495,6 +495,31 @@ t('the Manage-folders "Default for new items" picker sets folder and section tog
     ok($got !== 'Ghost', 'the unknown section was not stored');
 });
 
+t('a reminder folder renames in place, carrying its reminders and sections', function () {
+    $jar = login('example', 'examplepassword');
+    $post = fn($p) => req('POST', '/reminders/', array_merge(['csrf' => csrf($jar)], $p), $jar);
+    $post(['action' => 'add_folder', 'view' => 'All', 'name' => 'RenR']);
+    $post(['action' => 'add_section', 'view' => 'RenR', 'folder' => 'RenR', 'name' => 'Sub']);
+    $post(['action' => 'add', 'view' => 'RenR', 'folder' => 'RenR', 'section' => 'Sub', 'text' => 'moves too']);
+    $post(['action' => 'rename_folder', 'view' => 'RenR', 'name' => 'RenR', 'newname' => 'RenR2']);
+    $f = folders_load(datadir(), 'example');
+    ok(in_array('RenR2', $f['reminders'], true) && !in_array('RenR', $f['reminders'], true), 'the folder took the new name');
+    $secOk = $noteOk = false;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'Sub') { $secOk = ($x['folder'] ?? '') === 'RenR2'; }
+        if (($x['text'] ?? '') === 'moves too') { $noteOk = ($x['folder'] ?? '') === 'RenR2'; }
+    }
+    ok($secOk, 'its section moved with it');
+    ok($noteOk, 'its reminder moved with it');
+    // The permanent folders are refused (their name is their identity).
+    ok(!folders_rename(datadir(), 'reminders', 'Calendar', 'Nope'), 'the Calendar folder is not renameable');
+    ok(!folders_rename(datadir(), 'reminders', 'Reminders', 'Nope'), 'the Reminders folder is not renameable');
+    // The list heading renders as a rename field for a custom folder, and the manager offers rename.
+    $b = req('GET', '/reminders/?folder=All', [], $jar)['body'];
+    has('class="folder-label foldertitle', $b, 'a custom folder heading is a rename field');
+    has('name="newname"', $b, 'and the manager row too');
+});
+
 t('the subtask + makes a child under its parent, not an indent on the row', function () {
     $jar = login('example', 'examplepassword');
     $parent = rowBy('example', 'Return the library books');   // dated, in Home/Errands
@@ -834,10 +859,11 @@ t('the calendar draws a dot legend keyed by owner and kind', function () {
     $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     has('<div class="cal-legend"', $r['body'], 'the legend renders');
-    has('class="cleg-ico cleg-event"', $r['body'], 'events are led by the calendar glyph');
-    has('class="cleg-ico cleg-reminder"', $r['body'], 'reminders by the checkbox glyph');
-    has('class="cleg-ico cleg-note"', $r['body'], 'notes by the page glyph');
-    ok(preg_match_all('/class="cleg-dot"/', $r['body']) >= 1, 'each item carries a colour dot');
+    // Each item is the kind glyph tinted the item's own colour (no separate dot).
+    ok(preg_match_all('/class="cleg-ico" style="color:#[0-9a-fA-F]{6}"/', $r['body']) >= 1,
+       'each item is a colour-tinted kind glyph');
+    hasnt('cleg-dot', $r['body'], 'the separate colour dot is gone');
+    has('cleg-item', $r['body'], 'items still render with their names');
 });
 
 t("a day's reminders sort undated first, then oldest, then by time", function () {
@@ -1708,9 +1734,9 @@ function ALL_ACTIONS(): array
     return [
         '/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
-                          'add_folder', 'delete_folder', 'set_default_folder', 'set_default_section',
-                          'set_folder_color', 'folder_vis', 'folder_vis_all', 'folder_vis_only',
-                          'reorder_folders', 'share_set', 'change_password', 'set_theme'],
+                          'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
+                          'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
+                          'folder_vis_only', 'reorder_folders', 'share_set', 'change_password', 'set_theme'],
         '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
                           'reorder', 'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
