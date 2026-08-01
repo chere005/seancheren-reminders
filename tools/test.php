@@ -2565,6 +2565,22 @@ t('a tick with no token changes nothing', function () {
 // its own header; this is the test that it still keeps them.
 area('deploy');
 
+t('the seeding wrapper refuses everything by default', function () use ($root) {
+    // It exists to be scp'd to a live host for one minute and deleted. For that minute
+    // it is a URL that can overwrite an account, so the shipped copy must be inert.
+    $s = (string) file_get_contents($root . '/tools/seed-http.php');
+    has("const SEED_KEY = 'CHANGE-ME';", $s, 'the committed copy carries no real key');
+    has('hash_equals', $s, 'and compares in constant time');
+    // No default data dir: a bare hit must never be able to reach production.
+    ok(!preg_match("#\\\$dir\\s*=\\s*\\(string\\)\\s*\\(\\\$_GET\\['dir'\\]\\s*\\?\\?\\s*'/#", $s),
+       'the dir parameter has no default');
+    // And it is not deployable — deploy.sh sends public/ and lib/ only.
+    hasnt('tools', substr($s, 0, 0) . implode(' ', array_filter(
+        preg_split('/\R/', (string) file_get_contents($root . '/deploy.sh')),
+        fn($l) => strpos($l, 'rsync') !== false && strpos($l, 'tools') !== false)),
+       'no rsync line sends tools/');
+});
+
 t('deploy.sh parses', function () use ($root) {
     exec('bash -n ' . escapeshellarg($root . '/deploy.sh') . ' 2>&1', $o, $rc);
     eq(0, $rc, 'bash -n: ' . implode("\n", $o));
