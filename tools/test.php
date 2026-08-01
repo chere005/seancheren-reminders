@@ -1135,6 +1135,15 @@ t('the collapse-all button ships on each list, and habit sections carry a collap
     has('foldercollapsed:', req('GET', '/reminders/', [], $jar)['body'], 'the collapse-all script is present');
 });
 
+t('a habit section shows its colour as a name wash, not a dot', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    ok(preg_match_all('/class="hsec-wash" style="background:#[0-9a-f]{6}[0-9a-f]{2}"/', $b) >= 1,
+       'the section name sits on a colour wash (8-digit hex from folder_tint)');
+    // The old inline colour <details> dot is gone from the grid (colour is set in the manager).
+    ok(strpos($b, '<div class="grid" id="wGrid"') !== false, 'week grid renders');
+});
+
 t('the section manager is on the page — a Manage sections row and its window', function () {
     $jar = login('example', 'examplepassword');
     $r = req('GET', '/habits/', [], $jar);

@@ -818,6 +818,11 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The section's colour as a rounded wash behind its name (like a folder heading), rather
+       than a dot. The name goes near-white on the wash, since the colour identity is the
+       chip now — the same reasoning folder_tint() uses for folder names. */
+    .hsec-wash { display: inline-flex; align-items: center; min-width: 0; border-radius: 999px; padding: 0.05rem 0.6rem; }
+    .hsection .sectitle { color: #f2f2f2; font-weight: 700; }
     /* Collapse-all bar above the top section, left-aligned under the back button. */
     /* The section's collapse chevron picks up the section's violet; it points down when
        open, right when the section is folded. Its rows leave the grid entirely when folded. */
@@ -1109,23 +1114,12 @@ function render_habit_section_modal(array $sections, string $csrf): void
                 // editing) — folds this section's habits away, remembered per page. ?>
           <?= section_collapse_button() ?>
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
-          <?php // The section's colour. Out of edit mode it's just a dot; in edit mode the
-                // dot opens the palette under it, exactly as a folder's swatch does. It's
-                // the same element either way, so entering edit mode shifts nothing. ?>
-          <details class="hcolor">
-            <summary style="background:<?= e($scol) ?>" title="Colour"></summary>
-            <form class="hswatches" method="post" action="">
-              <input type="hidden" name="csrf" value="<?= $csrf ?>">
-              <input type="hidden" name="action" value="set_section_color">
-              <input type="hidden" name="id" value="<?= e($s['id']) ?>">
-              <?php foreach (habits_palette() as $col): ?>
-                <button type="submit" name="color" value="<?= e($col) ?>"
-                        style="background:<?= e($col) ?>" title="<?= e($col) ?>"></button>
-              <?php endforeach; ?>
-            </form>
-          </details>
-          <?= section_title_html($s['name'], $csrf, '', false, 'rename_section',
-                '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
+          <?php // The section's colour is the wash behind its name now, like a folder's — not
+                // a dot beside it. The colour itself is changed in the "Manage sections" window. ?>
+          <span class="hsec-wash" style="background:<?= e(folder_tint($scol)) ?>">
+            <?= section_title_html($s['name'], $csrf, '', false, 'rename_section',
+                  '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
+          </span>
           <?php // The "+" to add a habit to this section, right of the name, always shown. ?>
           <?php render_habit_add((string) $s['id'], $csrf); ?>
           <form method="post" action="" class="hsec-del" style="display:inline">
