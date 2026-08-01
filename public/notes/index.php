@@ -243,6 +243,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'delete_folder') {
         $name  = (string) ($_POST['name'] ?? '');
         folders_delete($cfg['data_dir'], 'notes', $name);
+        // If the folder is still there, the delete was refused (the permanent "General") —
+        // don't touch its notes.
+        if (in_array($name, folders_load($cfg['data_dir'])['notes'], true)) {
+            header('Location: ' . _self_path() . '?folder=All' . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
+            exit;
+        }
         $notes = load_notes($dataFile);
         foreach ($notes as &$n) {
             if (!is_section($n) && ($n['folder'] ?? FOLDER_DEFAULT) === $name) { $n['folder'] = FOLDER_DEFAULT; }

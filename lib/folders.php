@@ -11,17 +11,28 @@ require_once __DIR__ . '/palette.php';
 const FOLDER_DEFAULT = 'General';
 
 /**
- * Folders that always exist and can't be deleted, always first in the list.
- * Reminders has two — "Reminders" (the catch-all) and "Calendar" (undated items there
- * ride along on today); see lib/util.php. Notes keeps the one "General".
- * "General" is still accepted in a reminders list on the way in and migrated away.
+ * The permanent folders: always ensured present, and undeletable. Reminders keeps only
+ * "Calendar" permanent now — an undated reminder in it rides along on today (see
+ * lib/util.php), which is name-specific, so it can't be removed. "Reminders" is an ordinary
+ * folder you can delete or rename (a new account is still *seeded* with it — see
+ * folders_starter()). Notes keeps its one "General".
  */
 function folders_fixed(string $type): array
+{
+    return $type === 'reminders' ? [FOLDER_CALENDAR] : [FOLDER_DEFAULT];
+}
+
+/**
+ * What a brand-new account starts with (seeded once by folders_load). Reminders gets a
+ * general "Reminders" folder plus the permanent "Calendar"; delete "Reminders" and it stays
+ * gone. Notes starts with "General".
+ */
+function folders_starter(string $type): array
 {
     return $type === 'reminders' ? [FOLDER_REMINDERS, FOLDER_CALENDAR] : [FOLDER_DEFAULT];
 }
 
-/** The folder a type falls back to when nothing else is named. */
+/** The folder a type falls back to when nothing else is named (an always-present one). */
 function folder_fallback(string $type): string
 {
     return folders_fixed($type)[0];
@@ -40,19 +51,25 @@ function folders_load(string $dir, ?string $user = null): array
     $file = user_data_file($dir, 'folders', $user);
     $data = store_read($file);
     foreach (['reminders', 'notes'] as $type) {
-        $fixed = folders_fixed($type);
-        $have  = (is_array($data[$type] ?? null)) ? $data[$type] : [];
+        // Brand-new account (this type's list was never written): seed the starter folders.
+        // An existing account keeps its stored list — so a "Reminders" folder deleted from it
+        // stays deleted, since only the *permanent* folders below are ever re-added.
+        $isNew = !is_array($data[$type] ?? null);
+        $have  = is_array($data[$type] ?? null) ? $data[$type] : [];
         // A reminders list from before the permanent folders existed carries "General";
         // its items are re-pointed at "Reminders" by reminders_folder_migrate(), so the
         // name itself just goes.
         if ($type === 'reminders') {
             $have = array_filter($have, fn($f) => $f !== FOLDER_DEFAULT);
         }
-        // Keep the stored order — the permanent folders can be dragged too, so they're
-        // no longer forced to the front. Any fixed folder that isn't in the list yet
-        // (a fresh account) is added at the front, its default spot.
         $have = array_values(array_unique(array_filter($have, fn($f) => is_string($f) && $f !== '')));
-        foreach (array_reverse($fixed) as $ff) {
+        if ($isNew) {
+            foreach (array_reverse(folders_starter($type)) as $sf) {
+                if (!in_array($sf, $have, true)) { array_unshift($have, $sf); }
+            }
+        }
+        // The permanent (undeletable) folders are always present, at the front by default.
+        foreach (array_reverse(folders_fixed($type)) as $ff) {
             if (!in_array($ff, $have, true)) { array_unshift($have, $ff); }
         }
         $data[$type] = $have;
@@ -365,8 +382,13 @@ function folders_add(string $dir, string $type, string $name): void
 function folder_default_get(string $dir, string $type, ?string $user = null): string
 {
     $data = folders_load($dir, $user);
+    $list = array_values($data[$type] ?? []);
     $name = (string) ($data['default'][$type] ?? '');
-    return in_array($name, $data[$type] ?? [], true) ? $name : folder_fallback($type);
+    if (in_array($name, $list, true)) { return $name; }
+    // No valid default (unset, or the chosen folder was deleted): prefer the first ordinary
+    // folder over the special ride-along "Calendar", so new items don't land on the calendar.
+    foreach ($list as $f) { if (!($type === 'reminders' && $f === FOLDER_CALENDAR)) { return $f; } }
+    return $list[0] ?? folder_fallback($type);
 }
 
 function folder_default_set(string $dir, string $type, string $name): void
