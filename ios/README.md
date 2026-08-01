@@ -24,7 +24,9 @@ thing that happens to look the same; changing one doesn't touch the other.
 - **No accounts.** There is nothing to sign into. The app starts empty — one "General"
   folder for reminders and one for notes, one calendar, and nothing in them.
 - **Notes are plain text.** A note is a title and a plain `String` body edited in a
-  `TextEditor` — there's nothing to render, so nothing to sanitise.
+  `TextEditor` — there's nothing to render, so nothing to sanitise. A note can also carry
+  an optional day (`DateOnlyPicker`), which puts it on the calendar under that date; the
+  title is never date-parsed, unlike a reminder's.
 
 Everything the site suite does that makes sense on a phone is reimplemented natively:
 folders and groups, repeats (with month/year day-clamping), the undated-first ordering,

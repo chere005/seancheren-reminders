@@ -37,6 +37,11 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(Recurrence(n: 1, unit: .month).step(day(2024, 1, 31)), day(2024, 2, 29))
     }
 
+    func testYearRepeatClampsALeapDay() {
+        // Feb 29 + 1 year has no Feb 29 to land on, so it clamps to Feb 28, never Mar 1.
+        XCTAssertEqual(Recurrence(n: 1, unit: .year).step(day(2024, 2, 29)), day(2025, 2, 28))
+    }
+
     func testRepeatDatesExpandOverWindow() {
         let rule = Recurrence(n: 1, unit: .week)
         let dates = rule.dates(start: day(2026, 1, 1), from: day(2026, 1, 1), to: day(2026, 1, 31))
@@ -213,7 +218,41 @@ final class CoreTests: XCTestCase {
         let store = freshStore()
         store.add(Note(title: "n1", date: day(2026, 8, 3)))
         store.add(Note(title: "n2", date: day(2026, 8, 4)))
+        store.add(Note(title: "undated"))                      // no date: rides no day
         XCTAssertEqual(store.notes(on: day(2026, 8, 3)).map(\.title), ["n1"])
+        XCTAssertFalse(store.notes(on: day(2026, 8, 4)).contains { $0.title == "undated" },
+                       "an undated note never lands on the calendar")
+    }
+
+    func testNoteCarriesFolderGroupAndDate() {
+        let store = freshStore()
+        store.addFolder("Recipes", kind: .note)
+        store.addGroup("Mains", kind: .note)
+        let folder = store.data.folderList(.note).first { $0.name == "Recipes" }!.id
+        let group  = store.data.groupList(.note).first!.id
+        store.add(Note(title: "Ragu", date: day(2026, 9, 1), folder: folder, group: group))
+        let n = store.data.notes.first { $0.title == "Ragu" }!
+        XCTAssertEqual(n.folder, folder)
+        XCTAssertEqual(n.group, group)
+        XCTAssertEqual(n.date, day(2026, 9, 1))
+        XCTAssertEqual(store.notes(folder: folder, group: group).map(\.title), ["Ragu"], "and it lists there")
+    }
+
+    // The web's "an unknown id is a no-op, not a crash" edge, at the Store layer: acting on a
+    // row that isn't there changes nothing rather than throwing or inventing one.
+    func testUnknownIdIsANoOp() {
+        let store = freshStore()
+        store.add(Reminder(text: "real"))
+        store.addGroup("Sec", kind: .reminder)
+        let count = store.data.reminders.count
+        let ghost = Reminder(text: "ghost")           // never added to the store
+        store.toggle(ghost)
+        store.update(ghost)
+        store.setIndent(ghost, to: 1)
+        store.delete(ghost)
+        store.setGroupColor(UUID(), to: 4)            // no such group
+        XCTAssertEqual(store.data.reminders.count, count, "nothing was added or removed")
+        XCTAssertEqual(store.data.reminders.first { $0.text == "real" }?.indent, 0, "and the real row is untouched")
     }
 
     // MARK: - Habits
@@ -240,6 +279,9 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(p.minutes, 14 * 60)
 
         XCTAssertEqual(parseWhen("Call 2:30 pm", now: now).minutes, 14 * 60 + 30)
+        XCTAssertEqual(parseWhen("Gym 9am", now: now).minutes, 9 * 60, "a bare am hour")
+        XCTAssertEqual(parseWhen("Wake 12:05 am", now: now).minutes, 5, "12:05 am is five past midnight")
+        XCTAssertEqual(parseWhen("Noon 12pm", now: now).minutes, 12 * 60, "12pm is midday")
         XCTAssertEqual(parseWhen("Trip 3/4/27", now: now).date, day(2027, 3, 4))
         XCTAssertEqual(parseWhen("Trip 3/4/2027", now: now).date, day(2027, 3, 4))
     }

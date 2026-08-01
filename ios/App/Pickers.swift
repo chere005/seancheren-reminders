@@ -50,17 +50,7 @@ struct FolderManager: View {
                 Section {
                     ForEach(store.data.folderList(kind)) { folder in
                         HStack {
-                            Menu {
-                                ForEach(Theme.palette.indices, id: \.self) { i in
-                                    Button {
-                                        recolour(folder, to: i)
-                                    } label: {
-                                        Label("Colour \(i + 1)", systemImage: "circle.fill")
-                                    }
-                                }
-                            } label: {
-                                Circle().fill(Theme.color(folder.color)).frame(width: 18, height: 18)
-                            }
+                            ColorDot(selected: folder.color, size: 18) { recolour(folder, to: $0) }
                             Text(folder.name)
                             Spacer()
                             if store.data.defaultFolder[kind.rawValue] == folder.id {
@@ -110,25 +100,64 @@ struct FolderManager: View {
     }
 }
 
-/// A section's colour swatch: a small dot left of the name that drops the palette, the
-/// same control the folder manager uses shrunk to a heading. Posts the new colour and
-/// recolours in place. Shared by Reminders, Notes and Habits.
+/// The palette as tappable colour swatches. This exists because an SF Symbol inside a
+/// `Menu` is drawn in the menu's single tint — ten `circle.fill`s all came out the same
+/// colour, so the picker was unusable. Real `Circle` fills in a grid show the true colours.
+struct ColorSwatchGrid: View {
+    let selected: Int
+    let choose: (Int) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 12), count: 5),
+                  spacing: 12) {
+            ForEach(Theme.palette.indices, id: \.self) { i in
+                Button { choose(i) } label: {
+                    Circle()
+                        .fill(Theme.color(i))
+                        .frame(width: 30, height: 30)
+                        .overlay {
+                            if i == selected {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding()
+    }
+}
+
+/// A colour swatch that opens the palette in a popover — the one control for choosing a
+/// colour, used by sections, folders and calendars. `size` is the dot's diameter (11 for a
+/// section heading, 18 in the manager rows).
+struct ColorDot: View {
+    let selected: Int
+    var size: CGFloat = 11
+    let choose: (Int) -> Void
+    @State private var picking = false
+
+    var body: some View {
+        Button { picking = true } label: {
+            Circle().fill(Theme.color(selected)).frame(width: size, height: size)
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $picking) {
+            ColorSwatchGrid(selected: selected) { choose($0); picking = false }
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+/// A section's colour swatch, left of its name. Shared by Reminders, Notes and Habits.
 struct SectionColorDot: View {
     let group: ListGroup
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        Menu {
-            ForEach(Theme.palette.indices, id: \.self) { i in
-                Button { store.setGroupColor(group.id, to: i) } label: {
-                    Label("Colour \(i + 1)",
-                          systemImage: group.color == i ? "checkmark.circle.fill" : "circle.fill")
-                }
-            }
-        } label: {
-            Circle().fill(Theme.color(group.color)).frame(width: 11, height: 11)
-        }
-        .buttonStyle(.borderless)
+        ColorDot(selected: group.color) { store.setGroupColor(group.id, to: $0) }
     }
 }
 
@@ -154,6 +183,21 @@ struct WhenPicker: View {
                         minutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
                     }), displayedComponents: .hourAndMinute)
             }
+        }
+    }
+}
+
+/// An optional day for a note. A dated note rides on the calendar under that day; an
+/// undated one lives only in its folder. Date-only — a note has no time of day, unlike a
+/// reminder or an event, so there's no `minutes` sibling here.
+struct DateOnlyPicker: View {
+    @Binding var date: Date?
+
+    var body: some View {
+        Toggle("Date", isOn: Binding(get: { date != nil },
+                                     set: { date = $0 ? Date().day : nil }))
+        if let bound = Binding($date) {
+            DatePicker("On", selection: bound, displayedComponents: .date)
         }
     }
 }

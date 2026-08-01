@@ -9,12 +9,13 @@ struct RemindersView: View {
         NavigationStack {
             Group {
                 if link.list.sections.isEmpty {
-                    empty()
+                    empty(synced: link.synced)
                 } else {
                     rows(link.list)
                 }
             }
-            .navigationTitle("Reminders")
+            // No big "Reminders" title: the list already carries a "Reminders" section
+            // header, and on the small screen the large nav title only ate a row of space.
         }
     }
 
@@ -45,12 +46,12 @@ struct RemindersView: View {
         }
     }
 
-    private func empty() -> some View {
+    private func empty(synced: Bool) -> some View {
         VStack(spacing: 8) {
-            Image(systemName: "checklist")
+            Image(systemName: synced ? "checklist" : "iphone.and.arrow.forward")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Nothing on the list.")
+            Text(synced ? "Nothing on the list." : "Open Seancheren on your phone to sync.")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

@@ -137,6 +137,44 @@ final class FeatureTests: XCTestCase {
         XCTAssertTrue(md.contains("  - [ ] file online"), "a subtask is indented two spaces")
     }
 
+    // MARK: - Clear completed
+
+    func testClearDoneRemovesOnlyTheTickedRows() {
+        let store = freshStore()
+        store.add(Reminder(text: "open"))
+        store.add(Reminder(text: "done a", done: true))
+        store.add(Reminder(text: "done b", done: true))
+        store.clearDone(folder: nil)
+        let names = store.data.reminders.map(\.text)
+        XCTAssertEqual(names, ["open"], "the ticked rows go, the open one stays")
+    }
+
+    func testClearDoneIsScopedToTheFolderInView() {
+        let store = freshStore()
+        store.addFolder("Work", kind: .reminder)
+        let work = store.data.folderList(.reminder).first { $0.name == "Work" }!.id
+        let home = store.data.folderList(.reminder).first { $0.id != work }!.id
+        store.add(Reminder(text: "work done", done: true, folder: work))
+        store.add(Reminder(text: "home done", done: true, folder: home))
+        store.clearDone(folder: work)
+        XCTAssertNil(store.data.reminders.first { $0.text == "work done" }, "the viewed folder's done rows go")
+        XCTAssertNotNil(store.data.reminders.first { $0.text == "home done" }, "another folder's are left alone")
+    }
+
+    // MARK: - Habit sections
+
+    func testDeletingAHabitSectionLeavesItsHabitsUngrouped() {
+        let store = freshStore()
+        store.addGroup("Morning", kind: .habit)
+        let sec = store.data.groupList(.habit).first!
+        store.addHabit("floss", group: sec.id)
+        store.deleteGroup(sec)
+        let floss = store.data.habits.first { $0.name == "floss" }
+        XCTAssertNotNil(floss, "the habit survives its section")
+        XCTAssertNil(floss?.group, "and falls back to ungrouped")
+        XCTAssertNil(store.data.groups.first { $0.id == sec.id }, "the section is gone")
+    }
+
     // MARK: - Backward compatibility
 
     /// Strip keys that post-date the first version from a parsed JSON tree, recursively —
@@ -160,7 +198,8 @@ final class FeatureTests: XCTestCase {
         let tree = try JSONSerialization.jsonObject(with: encoded)
         // These keys did not exist in the first version; a document without them must load,
         // not reset the whole suite to empty because one key was absent.
-        let stripped = Self.stripKeys(["indent", "habitHidden", "habitHideUngrouped", "habitsMonth"],
+        let stripped = Self.stripKeys(["indent", "habitHidden", "habitHideUngrouped", "habitsMonth",
+                                       "habitUngroupedColor"],
                                       from: tree)
         let bytes = try JSONSerialization.data(withJSONObject: stripped)
         let restored = try JSONDecoder().decode(AppData.self, from: bytes)
@@ -168,6 +207,14 @@ final class FeatureTests: XCTestCase {
         XCTAssertTrue(restored.reminders.contains { $0.text == "keep me" }, "the data survived")
         XCTAssertEqual(restored.reminders.first { $0.text == "keep me" }?.indent, 0, "indent defaulted")
         XCTAssertTrue(restored.habitHidden.isEmpty, "the filter defaulted to empty")
+        XCTAssertEqual(restored.habitUngroupedColor, 3, "the ungrouped habits colour defaulted")
+    }
+
+    func testUngroupedHabitColour() {
+        let store = freshStore()
+        XCTAssertEqual(store.data.habitUngroupedColor, 3, "a fresh suite has a default ungrouped colour")
+        store.setUngroupedHabitColor(6)
+        XCTAssertEqual(store.data.habitUngroupedColor, 6, "and it can be recoloured")
     }
 
     // MARK: - Sample data ("buddy's data")

@@ -194,14 +194,18 @@ struct CalendarView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                Button { addEvent() } label: { Label("Event", systemImage: "plus") }
-                    .buttonStyle(.bordered).tint(Theme.event)
-                Button { drafting = true; draft = ""; draftFocused = true } label: {
-                    Label("Reminder", systemImage: "plus")
-                }
-                .buttonStyle(.bordered).tint(Theme.reminder)
+            // One "+ Add" for the day, like the web — pick the kind inside. Each lands on
+            // the selected day: an event opens its sheet, a reminder the inline row, a note
+            // its sheet, all pre-dated here.
+            Menu {
+                Button { addEvent() } label: { Label("Event", systemImage: "calendar") }
+                Button { startReminder() } label: { Label("Reminder", systemImage: "checklist") }
+                Button { addNote() } label: { Label("Note", systemImage: "note.text") }
+            } label: {
+                Label("Add", systemImage: "plus")
             }
+            .buttonStyle(.bordered)
+            .tint(Theme.reminder)
             .font(.callout)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,6 +253,21 @@ struct CalendarView: View {
 
     private func addEvent() {
         editingEvent = Event(date: selected, cal: store.data.defaultCal)
+    }
+
+    /// Open the inline reminder row (committed on return, dated to the selected day).
+    private func startReminder() {
+        drafting = true
+        draft = ""
+        draftFocused = true
+    }
+
+    /// Add a note dated to the selected day so it rides this day on the calendar, and open
+    /// it to type — the same add-then-edit the Notes tab uses.
+    private func addNote() {
+        let note = Note(date: selected, folder: store.target(.note, viewing: nil), group: nil)
+        store.add(note)
+        editingNote = note
     }
 
     private func commitReminder() {
@@ -407,15 +426,7 @@ struct CalendarManager: View {
                 Section {
                     ForEach(store.calendarsOnly) { c in
                         HStack {
-                            Menu {
-                                ForEach(Theme.palette.indices, id: \.self) { i in
-                                    Button { recolour(c, to: i) } label: {
-                                        Label("Colour \(i + 1)", systemImage: "circle.fill")
-                                    }
-                                }
-                            } label: {
-                                Circle().fill(Theme.color(c.color)).frame(width: 18, height: 18)
-                            }
+                            ColorDot(selected: c.color, size: 18) { recolour(c, to: $0) }
                             Text(c.name)
                             Spacer()
                             if store.data.defaultCal == c.id {

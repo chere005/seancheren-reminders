@@ -177,10 +177,11 @@ struct HabitsView: View {
     }
 
     /// The counted sections in draw order — ungrouped first, then each group — with the
-    /// colour its slices take. Ungrouped borrows the note violet, as the web does.
+    /// colour its slices take. The ungrouped bucket wears its own stored colour, so its dot
+    /// and its pie wedge match.
     private var countedSections: [(id: UUID?, color: Color)] {
         var out: [(UUID?, Color)] = []
-        if store.habitSectionShown(nil) { out.append((nil, Theme.note)) }
+        if store.habitSectionShown(nil) { out.append((nil, Theme.color(store.data.habitUngroupedColor))) }
         for g in store.data.groupList(.habit) where store.habitSectionShown(g.id) {
             out.append((g.id, Theme.color(g.color)))
         }
@@ -210,7 +211,12 @@ struct HabitsView: View {
             HStack(spacing: 12) {
                 Button { newHabit(group: group) } label: { Image(systemName: "plus") }
                     .buttonStyle(.borderless)
-                if let model { SectionColorDot(group: model) }
+                if let model {
+                    SectionColorDot(group: model)
+                } else {
+                    // The ungrouped bucket has no section row, so its colour lives on AppData.
+                    ColorDot(selected: store.data.habitUngroupedColor) { store.setUngroupedHabitColor($0) }
+                }
                 Text(title)
                 Spacer()
                 if let model {
