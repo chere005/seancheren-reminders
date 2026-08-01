@@ -499,8 +499,7 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
                       data-folder="<?= $e($val) ?>"
                       title="Show in All" aria-label="Show <?= $e($label) ?> in All"></span>
               <?php endif; ?>
-              <span class="fdot" style="background:<?= $e($col) ?>"></span><span class="fpick-name"><?= $e($label) ?></span>
-              <?php if ($shared): ?><span class="fshared-badge" title="Shared by <?= $e($pName) ?>"><?= $e($pName) ?></span><?php endif; ?>
+              <span class="fdot" style="background:<?= $e($col) ?>"></span><span class="fpick-name"><?= $e($label) ?><?php if ($shared): ?><span class="fshared-badge" title="Shared by <?= $e($pName) ?>"><?= $e($pName) ?></span><?php endif; ?></span>
             </a>
           <?php endforeach; ?>
         <?php endforeach; ?>
@@ -768,9 +767,12 @@ function folder_nav_styles(): string
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt .fpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    /* Badge marking a folder as the partner's, in place of an owner heading. */
+    /* Badge marking a folder as the partner's, in place of an owner heading. It rides
+       inline at the end of the name so it flows and wraps with the text rather than
+       floating at the row's mid-height when a long name wraps to a second line. */
     .folderpick-opt .fshared-badge {
-      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      display: inline-block; vertical-align: middle; margin-left: 0.35rem; white-space: nowrap;
+      font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
     }
     .folderpick-opt:hover { background: #262626; color: #fff; }

@@ -734,7 +734,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .calpick-opt .cvis-pad { flex: 0 0 auto; width: 14px; }
     .calpick-opt .cshared-badge {
-      flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
+      display: inline-block; vertical-align: middle; margin-left: 0.35rem; white-space: nowrap;
+      font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
     }
     /* "Manage calendars", the last row of the picker menu. */
@@ -1116,8 +1117,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                         tabindex="0" aria-checked="<?= in_array($val, $hiddenCals, true) ? 'false' : 'true' ?>"
                         data-cal="<?= e($val) ?>" title="Show on the calendar" aria-label="Show <?= e($name) ?>"></span>
                 <?php else: ?><span class="cvis-pad" aria-hidden="true"></span><?php endif; ?>
-                <span class="cdot" style="background:<?= e($col) ?>"></span><span class="cpick-name"><?= e($name) ?></span>
-                <?php if ($isShared): ?><span class="cshared-badge"><?= e(share_name($partner)) ?></span><?php endif; ?>
+                <span class="cdot" style="background:<?= e($col) ?>"></span><span class="cpick-name"><?= e($name) ?><?php if ($isShared): ?><span class="cshared-badge"><?= e(share_name($partner)) ?></span><?php endif; ?></span>
               </a>
             <?php endforeach; ?>
           <?php endforeach; ?>
