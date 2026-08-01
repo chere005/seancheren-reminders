@@ -83,48 +83,57 @@ data class Recurrence(
         get() = if (n == 1) "every ${unit.name}" else "every $n ${unit.name}s"
 
     /**
-     * One step on. Month and year keep the day of the month and clamp it — the 31st
-     * repeats as the 30th, the 28th — rather than sliding into the next month.
+     * The occurrence `i` steps after `start` (i = 0 is `start` itself), computed from
+     * `start` EVERY time — not incrementally — so a month/year repeat keeps the original
+     * day-of-month and can't drift (Jan 31 → Feb 28 → Mar 31, never → Feb 28 → Mar 28).
+     * Mirrors the web's `repeat_step($start, $rep, $i)`.
      */
-    fun step(date: LocalDate): LocalDate {
-        val s = maxOf(1, n)
+    private fun occurrence(start: LocalDate, i: Int): LocalDate {
+        val steps = maxOf(1, n) * i
         return when (unit) {
-            RepeatUnit.day -> date.plusDays(s.toLong())
-            RepeatUnit.week -> date.plusDays(s.toLong() * 7)
-            RepeatUnit.month -> clamped(date, s)
-            RepeatUnit.year -> clamped(date, s * 12)
+            RepeatUnit.day -> start.plusDays(steps.toLong())
+            RepeatUnit.week -> start.plusDays(steps.toLong() * 7)
+            RepeatUnit.month -> clampedFrom(start, steps)
+            RepeatUnit.year -> clampedFrom(start, steps * 12)
         }
     }
 
-    private fun clamped(date: LocalDate, months: Int): LocalDate {
-        val wanted = date.dayOfMonth
-        val moved = YearMonth.from(date).plusMonths(months.toLong())
-        return moved.atDay(minOf(wanted, moved.lengthOfMonth()))
+    /** `months` on from `start`, keeping the day-of-month and clamping to the target month. */
+    private fun clampedFrom(start: LocalDate, months: Int): LocalDate {
+        val moved = YearMonth.from(start).plusMonths(months.toLong())
+        return moved.atDay(minOf(start.dayOfMonth, moved.lengthOfMonth()))
     }
+
+    /** One step on from `date` — the 31st repeats monthly as the 30th, the 28th, and so on. */
+    fun step(date: LocalDate): LocalDate = occurrence(date, 1)
 
     /**
      * Every occurrence inside the window being drawn. There's only ever the one stored
-     * row — this expands it for whatever range the caller is showing.
+     * row — this expands it for whatever range the caller is showing, from `start` so it
+     * can't drift.
      */
     fun dates(start: LocalDate, from: LocalDate, to: LocalDate): List<LocalDate> {
         if (start > to) return emptyList()
         val out = ArrayList<LocalDate>()
-        var d = start
-        var hops = 0
-        while (d <= to && hops < 400) {
+        var i = 0
+        while (i < 400) {
+            val d = occurrence(start, i)
+            if (d > to) break
             if (d >= from) out.add(d)
-            d = step(d)
-            hops++
+            i++
         }
         return out
     }
 
-    /** Where a repeat lands next once it's been ticked off. */
+    /** The first occurrence strictly after `after` — where a ticked repeat rolls to. */
     fun next(start: LocalDate, after: LocalDate): LocalDate {
-        var d = start
-        var hops = 0
-        while (d <= after && hops < 400) { d = step(d); hops++ }
-        return d
+        var i = 1
+        while (i < 400) {
+            val d = occurrence(start, i)
+            if (d > after) return d
+            i++
+        }
+        return start
     }
 }
 

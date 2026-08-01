@@ -13,7 +13,7 @@ data class Parsed(
 // deliberately narrow so they can't wander into other numbers in the sentence. The
 // lookbehind/lookahead keep them from biting into a longer number.
 private val timeRegex = Regex("""(?<![\d:])(\d{1,2})(?::([0-5]\d))?\s*([ap])\.?m\.?""", RegexOption.IGNORE_CASE)
-private val dateRegex = Regex("""(?<![\d/])(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?(?![\d/])""")
+private val dateRegex = Regex("""(?<![\d/])(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?(?![\d/])""")
 
 /**
  * Reads "Vet 8/3 2pm" as a vet appointment on 3 August at two — the cousin of
