@@ -474,11 +474,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($_POST['action'] === 'delete_folder') {
         $name = (string) ($_POST['name'] ?? '');
-        folders_delete($cfg['data_dir'], 'reminders', $name);
-        // Move that folder's reminders to the fallback folder.
-        $list = load_reminders($dataFile);
+        folders_delete($cfg['data_dir'], 'reminders', $name);   // "Calendar" is refused; "Reminders" isn't
+        $myFoldersNow = folders_load($cfg['data_dir'])['reminders'];
+        // If the folder is still there, the delete was refused (a permanent folder) — do NOT
+        // touch its items. (Moving them regardless would strip a permanent folder like
+        // Calendar of its reminders while the folder stayed put.)
+        if (in_array($name, $myFoldersNow, true)) {
+            header('Location: ' . _self_path() . '?folder=All' . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
+            exit;
+        }
+        // Move that folder's reminders to the default folder and its default section (chosen
+        // in Manage folders). folder_default_get() already skips the deleted folder, so this
+        // resolves to a real destination; the section is validated against it.
+        $destFolder = folder_default_get($cfg['data_dir'], 'reminders');
+        $list = sections_normalize(load_reminders($dataFile), $myFoldersNow);
+        $destSecs = [];
+        foreach ($list as $it) {
+            if (is_section($it) && ($it['folder'] ?? '') === $destFolder) { $destSecs[] = (string) $it['name']; }
+        }
+        $defSecRaw = folder_default_section_get($cfg['data_dir'], 'reminders');
+        $destSec   = in_array($defSecRaw, $destSecs, true) ? $defSecRaw : ($destSecs[0] ?? SECTION_DEFAULT_NAME);
         foreach ($list as &$r) {
-            if (!is_section($r) && ($r['folder'] ?? '') === $name) { $r['folder'] = folder_fallback('reminders'); }
+            if (!is_section($r) && ($r['folder'] ?? '') === $name) { $r['folder'] = $destFolder; $r['section'] = $destSec; }
         }
         unset($r);
         save_reminders($dataFile, $list);
