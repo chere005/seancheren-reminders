@@ -113,6 +113,13 @@ enum ItemKind: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The web clips stored text so one runaway paste can't bloat a file; we keep the same caps
+/// so the two stores agree on what a "too long" value becomes.
+enum Limits {
+    static let reminderText = 500
+    static let noteTitle = 200
+}
+
 /// A folder filters one kind of thing. Reminders and notes keep separate sets.
 struct Folder: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -267,6 +274,10 @@ struct AppData: Codable {
     /// `ItemKind.rawValue`; calendars are the web's `hidden_cals`.
     var hiddenFolders: [String: [UUID]] = [:]
     var hiddenCals: [UUID] = []
+    /// Reminder folders switched *off for the calendar* (the web's `rf_mode` = none) — separate
+    /// from the Reminders picker's `hiddenFolders`, since a folder can show in the list but not
+    /// clutter the calendar.
+    var calHiddenFolders: [UUID] = []
 
     /// The Habits month pies count every section unless it's in here; the ungrouped run
     /// has no id, so it gets its own flag. Stored as what's *hidden*, so a section added
@@ -323,6 +334,7 @@ extension AppData {
         lastCal           = try c.decodeIfPresent(UUID.self,         forKey: .lastCal)
         hiddenFolders     = try c.decodeIfPresent([String: [UUID]].self, forKey: .hiddenFolders) ?? [:]
         hiddenCals        = try c.decodeIfPresent([UUID].self,       forKey: .hiddenCals) ?? []
+        calHiddenFolders  = try c.decodeIfPresent([UUID].self,       forKey: .calHiddenFolders) ?? []
         habitHidden       = try c.decodeIfPresent(Set<UUID>.self,    forKey: .habitHidden) ?? []
         habitHideUngrouped = try c.decodeIfPresent(Bool.self,        forKey: .habitHideUngrouped) ?? false
         habitsMonth       = try c.decodeIfPresent(Bool.self,         forKey: .habitsMonth) ?? false

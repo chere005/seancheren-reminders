@@ -178,6 +178,33 @@ final class ParityTests: XCTestCase {
         XCTAssertNil(store.data.notes.first { $0.id == n.id }?.date, "but its date is gone")
     }
 
+    // MARK: - Text caps ("unicode and long text survive a round trip intact")
+
+    func testStoredTextIsClippedToTheDocumentedCaps() {
+        let store = freshStore()
+        store.add(Reminder(text: String(repeating: "a", count: 600)))
+        XCTAssertEqual(store.data.reminders.first?.text.count, Limits.reminderText, "reminder text clipped to 500")
+        store.add(Note(title: String(repeating: "b", count: 300)))
+        XCTAssertEqual(store.data.notes.first?.title.count, Limits.noteTitle, "note title clipped to 200")
+    }
+
+    // MARK: - Per-folder calendar filter ("switched to ... Off for the calendar", rf_mode)
+
+    func testCalendarFolderFilterHidesAFoldersReminders() {
+        let store = freshStore()
+        let today = Date().day
+        store.addFolder("Work", kind: .reminder)
+        let work = store.data.folderList(.reminder).first { $0.name == "Work" }!.id
+        let general = store.data.folderList(.reminder).first { $0.id != work }!.id
+        store.add(Reminder(text: "work due", due: today, folder: work))
+        store.add(Reminder(text: "home due", due: today, folder: general))
+        XCTAssertEqual(store.reminders(on: today, today: today).map(\.text).sorted(), ["home due", "work due"])
+        store.toggleCalFolder(work)                          // switch Work off for the calendar
+        XCTAssertEqual(store.reminders(on: today, today: today).map(\.text), ["home due"],
+                       "a folder off for the calendar drops out of the day")
+        XCTAssertFalse(store.calFolderShown(work))
+    }
+
     // MARK: - Persistence
 
     func testVisibilitySurvivesASaveAndRead() {

@@ -334,6 +334,7 @@ final class Store: ObservableObject {
 
     func add(_ reminder: Reminder) {
         var new = reminder
+        new.text = String(new.text.prefix(Limits.reminderText))
         new.order = (data.reminders.map(\.order).max() ?? 0) + 1
         data.reminders.append(new)
         touch()
@@ -341,7 +342,9 @@ final class Store: ObservableObject {
 
     func update(_ reminder: Reminder) {
         guard let i = data.reminders.firstIndex(where: { $0.id == reminder.id }) else { return }
-        data.reminders[i] = reminder
+        var r = reminder
+        r.text = String(r.text.prefix(Limits.reminderText))
+        data.reminders[i] = r
         touch()
     }
 
@@ -454,6 +457,7 @@ final class Store: ObservableObject {
 
     func add(_ note: Note) {
         var new = note
+        new.title = String(new.title.prefix(Limits.noteTitle))
         new.order = (data.notes.map(\.order).max() ?? 0) + 1   // new notes sort to the end until dragged
         data.notes.append(new)
         touch()
@@ -461,6 +465,7 @@ final class Store: ObservableObject {
     func update(_ note: Note) {
         guard let i = data.notes.firstIndex(where: { $0.id == note.id }) else { return }
         data.notes[i] = note
+        data.notes[i].title = String(note.title.prefix(Limits.noteTitle))
         data.notes[i].updated = Date()
         touch()
     }
@@ -601,6 +606,19 @@ final class Store: ObservableObject {
         return hidden.isEmpty ? nil : all.subtracting(hidden)
     }
 
+    // MARK: - Reminder folders on the calendar (the web's rf_mode)
+    //
+    // Separate from the Reminders picker's visibility: a folder can show in the list but be
+    // switched off for the calendar, so its reminders don't clutter the month.
+
+    /// Whether a reminder folder's items reach the calendar (off is the web's rf_mode 'none').
+    func calFolderShown(_ id: UUID) -> Bool { !data.calHiddenFolders.contains(id) }
+    func toggleCalFolder(_ id: UUID) {
+        if let i = data.calHiddenFolders.firstIndex(of: id) { data.calHiddenFolders.remove(at: i) }
+        else { data.calHiddenFolders.append(id) }
+        touch()
+    }
+
     /// Events on one day, repeats expanded, optionally narrowed to a calendar scope. An
     /// event with no calendar counts as the default one.
     func events(on date: Date, scope: Set<UUID>? = nil) -> [Event] {
@@ -622,8 +640,10 @@ final class Store: ObservableObject {
     /// one rolled onto today, and the Calendar group's undated riders.
     func reminders(on date: Date, today: Date) -> [Reminder] {
         let day = date.day
+        let calHidden = Set(data.calHiddenFolders)
         let rows = data.reminders.filter { r in
             guard !r.done else { return false }
+            if let f = r.folder, calHidden.contains(f) { return false }   // folder off for the calendar
             if r.ridesAlong { return day == today }
             guard let due = r.due else { return false }
             if due.day == day { return true }

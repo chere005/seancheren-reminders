@@ -113,7 +113,7 @@ Legend:
 |---|---|
 | an unknown id is a no-op, not a crash | ✅ **added** `testUnknownIdIsANoOp` |
 | a malformed JSON payload is ignored | 🟰 iOS reorders via typed `IndexSet`, never parses posted JSON |
-| unicode + long text survive a round trip | ✅ strings are native/`Codable`; ⚠️ iOS does **not** clip to 500/200 chars |
+| unicode + long text survive a round trip | ✅ strings are native/`Codable`; stored text is clipped to 500/200 (`Limits`, `testStoredTextIsClippedToTheDocumentedCaps`) |
 | an empty / whitespace-only add is refused | 👁 guarded in the views (`AddView`, `commit`); the Store allows empty on purpose (blank subtasks) |
 | the same section name in two folders | 🟰 iOS groups are **global** across folders, not per-folder |
 
@@ -125,16 +125,12 @@ Sections **1 seeding-parity, 2 auth, 3 storage/encryption, 10 sharing, 11 widget
 doesn't do. The watch hand-off is the native analogue of the widget and is exercised by
 `testWatchListHasOpenItemsInGroupsAndDropsEmpties`.
 
-## Open gaps (⚠️) — the last remaining
-Most gaps are now closed (visibility, reordering, unschedule, name hygiene, reserved names —
-see the tables above). What's left:
-
-1. **Per-folder calendar mode (`rf_mode`).** The web can switch a reminder folder to
-   Dated-only or Off *for the calendar* independently of the Reminders list. iOS shows every
-   folder's reminders on the calendar. (A folder hidden in the Reminders picker still shows
-   on the calendar — the two filters are separate on the web too.)
-2. **Text-length caps.** The web clips reminder text to 500 and note titles to 200; iOS
-   stores what you type. Native input makes it far less pressing than server-side storage.
+## Open gaps (⚠️)
+None outstanding. Every parity-relevant web test now has an iOS twin (see the tables above):
+visibility, folder/section reordering, delete-from-calendar unschedule, name hygiene,
+reserved names, the per-folder calendar filter (`rf_mode`, Off/On), and the 500/200 text
+caps all landed with tests. The web's `rf_mode` "Dated-only" middle state is folded into
+Off/On (a folder is either on or off for the calendar) — the only intentional narrowing.
 
 Deep, deliberate model differences (not gaps to "fix"): permanent Calendar/Reminders as
 **groups** not folders; **global** sections rather than per-folder; **plain-text** notes;
