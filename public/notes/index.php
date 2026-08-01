@@ -207,7 +207,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Section actions (bold headers grouping notes; stored in the notes file).
     if ($_POST['action'] === 'add_section') {
         $name = folder_clean((string) ($_POST['name'] ?? ''));
-        $secFolder = $viewFolder === 'All' ? $defFolder : $viewFolder;   // sections belong to a folder
+        // A section lands in the folder whose "+" was used (each folder head carries one),
+        // falling back to the folder you're viewing, or the default when you're on All.
+        $postFolder = (string) ($_POST['folder'] ?? '');
+        $secFolder  = ($postFolder !== '' && in_array($postFolder, $myFolders, true))
+            ? $postFolder
+            : ($viewFolder === 'All' ? $defFolder : $viewFolder);   // sections belong to a folder
         if ($name !== '' && strcasecmp($name, NOTES_DEFAULT_SECTION) !== 0) {   // "Notes" is reserved
             $notes = load_notes($dataFile);
             $dup   = false;
@@ -470,17 +475,25 @@ if ($partner && !$isShared) {
     foreach (share_calendars($cfg['data_dir'], $me) as $cid => $cname) { $shareCals[] = [$cid, $cname]; }
 }
 
-// The "+ Section" control for the list view.
-$sectionInput =
-    '<form method="post" action="" class="newsection" id="newSecForm" hidden'
-  . ' onsubmit="return this.name.value.trim()!==\'\'">'
-  . '<input type="hidden" name="csrf" value="' . $csrf . '">'
-  . '<input type="hidden" name="action" value="add_section">'
-  . '<input type="hidden" name="view" value="' . e($view) . '">'
-  . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
-  . '<button type="submit" class="plus" title="Add section" aria-label="Add section">'
-  . plus_icon_svg(16, 3) . '</button>'
-  . '</form>';
+/** The "+" beside a folder's name that adds a section to that folder (edit mode). It
+ *  reveals an inline name field posting add_section with the folder, so a section always
+ *  lands in a clear folder — the same control Reminders' folder heads carry. */
+function render_note_folder_add(string $folder, string $csrf, string $view): string
+{
+    $f = htmlspecialchars($folder, ENT_QUOTES);
+    return '<button type="button" class="fsec-add" data-folder="' . $f . '" title="Add section"'
+         . ' aria-label="Add section">' . plus_icon_svg(13) . '</button>'
+         . '<form method="post" action="" class="fsec-form newsection" hidden'
+         . ' onsubmit="return this.name.value.trim()!==\'\'">'
+         . '<input type="hidden" name="csrf" value="' . htmlspecialchars($csrf, ENT_QUOTES) . '">'
+         . '<input type="hidden" name="action" value="add_section">'
+         . '<input type="hidden" name="view" value="' . htmlspecialchars($view, ENT_QUOTES) . '">'
+         . '<input type="hidden" name="folder" value="' . $f . '">'
+         . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
+         . '<button type="submit" class="plus" title="Add section" aria-label="Add section">'
+         . plus_icon_svg(16, 3) . '</button>'
+         . '</form>';
+}
 
 if (!$editing) {
     // Build the grouped list for the current folder.
@@ -791,6 +804,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        in the header rather than sitting between folders, so the first folder gets one
        too — the gap above each heading is what separates one folder from the next. */
     .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
+    /* The "+" that adds a section to this folder — edit mode only, right of its name. */
+    .fsec-add {
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
+      color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; display: none;
+      align-items: center; justify-content: center; padding: 0;
+    }
+    .fsec-add:hover { border-color: #888; color: #fff; }
+    body.editing .fsec-add { display: inline-flex; }
+    .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Every section — named
        or the catch-all — is a .section-group now, so one selector covers them all. */
@@ -1004,11 +1027,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
 <?php if (!$editing): ?>
   <!-- ===== LIST VIEW ===== -->
 
-  <div class="listbar">
-    <?php // No + Note here any more: a note is made from the + on the section it goes in. ?>
-    <button type="button" id="newSecBtn" class="listedit">+ Section</button>
-    <?= $sectionInput ?>
-  </div>
+  <?php // No + Note and no toolbar + Section: a note is made from the + on its section,
+        // and a section from the + beside its folder's name (edit mode). ?>
 
   <?php if (!$isShared) {
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('notes'),
@@ -1034,6 +1054,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
             <?php // The folder's own colour is the wash behind its name, where it used to
                   // be a dot beside it, then a short rule trailing off to the right edge. ?>
             <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($sfolder))) ?>"><?= e($sfolder) ?></div>
+            <?= render_note_folder_add($sfolder, $csrf, $view) ?>
             <span class="folder-rule" aria-hidden="true"></span>
           </div>
           <?php // This folder's sections and its catch-all (dropped in at its saved slot). ?>
@@ -1048,6 +1069,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         <div class="folder-head">
           <?= folder_collapse_button() ?>
           <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($viewFolder))) ?>"><?= e($viewFolder) ?></div>
+          <?php if (!$isShared) { echo render_note_folder_add($viewFolder, $csrf, $view); } ?>
           <span class="folder-rule" aria-hidden="true"></span>
         </div>
         <?php // Sections plus the catch-all, dropped in at its saved slot (draggable too). ?>
@@ -1236,19 +1258,29 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editingNow()) setEdit(false); });
 
-  // "+ Section" turns into the field it's asking for, and turns back if you leave it
-  // empty — the same gesture as the "+" on a section header, and the same size as the
-  // button it replaces so the row doesn't jump.
-  const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
-  if (newSecBtn && newSecForm) {
-    const input = newSecForm.querySelector('input[type=text]');
-    const close = () => { newSecForm.hidden = true; newSecBtn.hidden = false; input.value = ''; };
-    newSecBtn.addEventListener('click', () => {
-      newSecBtn.hidden = true; newSecForm.hidden = false; input.focus();
-    });
-    input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
-    input.addEventListener('blur', () => { if (input.value.trim() === '') { close(); } });
-  }
+  // Each folder head carries its own "+ Section" (edit mode): it reveals an inline name
+  // field for that folder; typing and Enter/blur adds the section there, an empty field
+  // just closes again. A section always lands in a clear folder this way.
+  const fsecClose = (form) => {
+    if (!form) { return; }
+    const btn = form.closest('.folder-head')?.querySelector('.fsec-add');
+    form.hidden = true; form.querySelector('input[type=text]').value = ''; if (btn) { btn.hidden = false; }
+  };
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.fsec-add'); if (!btn) { return; }
+    e.preventDefault(); e.stopPropagation();
+    const form = btn.closest('.folder-head')?.querySelector('.fsec-form'); if (!form) { return; }
+    btn.hidden = true; form.hidden = false; form.querySelector('input[type=text]').focus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') { return; }
+    const inp = e.target.closest && e.target.closest('.fsec-form input[type=text]');
+    if (inp) { e.preventDefault(); fsecClose(inp.closest('.fsec-form')); }
+  });
+  document.addEventListener('blur', (e) => {
+    const inp = e.target.closest && e.target.closest('.fsec-form input[type=text]');
+    if (inp && inp.value.trim() === '') { fsecClose(inp.closest('.fsec-form')); }
+  }, true);
 
   // ---- Drag to reorder notes (edit mode). Hold anywhere on a row to pick it up,
   //      or use the ☰ handle for an immediate grab. Same gesture as the bookshelf's. ----

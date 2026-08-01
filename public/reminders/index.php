@@ -873,17 +873,6 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                                '@' . $partner . ':' . $f, $f, $i === false ? 0 : (int) $i);
 };
 
-// The "+ Section" control that sits on the folder row.
-$sectionInput =
-    '<form method="post" action="" class="newsection" id="newSecForm" hidden'
-  . ' onsubmit="return this.name.value.trim()!==\'\'">'
-  . '<input type="hidden" name="csrf" value="' . $csrf . '">'
-  . '<input type="hidden" name="action" value="add_section">'
-  . '<input type="hidden" name="view" value="' . e($view) . '">'
-  . '<input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">'
-  . '<button type="submit" class="plus" title="Add section" aria-label="Add section">'
-  . plus_icon_svg(16, 3) . '</button>'
-  . '</form>';
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -942,8 +931,8 @@ $sectionInput =
 
     /* The + on each section header, and the row it opens. Both draw their plus with
        plus_icon_svg(), so they centre by construction and need no padding nudge. */
-    /* Same grey outlined pill as "+ Section" on the row above (#newSecBtn/.showall) —
-       it's the same act, just against one section — only kept at its small icon size. */
+    /* Same grey outlined pill as the folder head's "+" (.fsec-add) — it's the same act,
+       just adding a row to one section rather than a section to a folder. */
     .sec-add {
       flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; width: 20px; height: 20px;
@@ -1260,8 +1249,8 @@ $sectionInput =
       </svg>
     </button>
     <textarea id="shareMdText" hidden><?= e($shareMd) ?></textarea>
-    <button type="button" id="newSecBtn" class="showall">+ Section</button>
-    <?= $sectionInput ?>
+    <?php // No toolbar "+ Section": a section is added from the "+" beside each folder's
+          // name (edit mode), so it's always clear which folder it lands in. ?>
   </div>
 
   <?php if (!$isShared) {
@@ -1467,17 +1456,6 @@ $sectionInput =
   }
   window.sectionEditToggle = () => setEdit(!editing());
   document.querySelectorAll('.sec-edit').forEach(p => p.addEventListener('click', window.sectionEditToggle));
-
-  // "+ Section" becomes the field it's asking for, and goes back if left empty — the
-  // button and the field are the same size, so the row doesn't jump when they swap.
-  const newSecBtn = document.getElementById('newSecBtn'), newSecForm = document.getElementById('newSecForm');
-  if (newSecBtn && newSecForm) {
-    const secInput = newSecForm.querySelector('input[type=text]');
-    const closeSec = () => { newSecForm.hidden = true; newSecBtn.hidden = false; secInput.value = ''; };
-    newSecBtn.addEventListener('click', () => { newSecBtn.hidden = true; newSecForm.hidden = false; secInput.focus(); });
-    secInput.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeSec(); } });
-    secInput.addEventListener('blur', () => { if (secInput.value.trim() === '') { closeSec(); } });
-  }
 
   // Each folder head carries its own "+ Section" (edit mode): it reveals an inline name
   // field for that folder; typing and Enter/blur adds the section there, an empty field

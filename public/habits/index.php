@@ -895,13 +895,6 @@ function render_habit_section_modal(array $sections, string $csrf): void
     }
     .mlegend { margin-top: 0.9rem; font-size: 0.78rem; color: #666; text-align: center; }
 
-    /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
-       other apps use. Edit mode only, like every other structural control here. */
-    /* + Section sits at the very bottom, on the left: it's the last thing you'd reach
-       for, not something to hunt for in the middle of the page. */
-    .secfoot { margin: 1.4rem 0 0; display: flex; gap: 0.5rem; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
-    .secfoot .newsection { margin: 0; }
-    body:not(.editing) .secfoot { display: none; }
     /* + Habit closes each run of habits, inside the grid and spanning it, so it lines up
        under the names rather than floating among the day columns. */
     .habitadd { grid-column: 1 / -1; display: none; margin: 0.15rem 0 0.5rem; }
@@ -910,10 +903,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
     /* With no Edit button, edit mode is reached by holding a habit or a section — an
        empty list has nothing to hold, so both ways in stay out on one. */
     body:not(.editing) .grid.empty-list .habitadd { display: flex; }
-    body:not(.editing) .secfoot.always { display: flex; }
-    /* Same grey outlined pill as "+ Section" on Notes and Reminders — worn by both
-       + Section (in .secfoot) and + Habit (in the grid's .habitadd), so they match rather
-       than the + Habit falling back to a raw browser button. */
+    /* Same grey outlined pill as "+ Section" on Notes and Reminders, worn by "+ Habit" in
+       the grid's .habitadd, so it matches rather than falling back to a raw browser button. */
     button.newsecbtn {
       height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
@@ -1057,20 +1048,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
     </div>
   <?php endif; ?>
 
-  <?php // + Section sits under the habits, where you'd add one. ?>
-  <?php if ($hView !== 'month'): ?>
-    <?php // + Habit now closes each section up in the grid, where the habit will land.
-          // All that is left down here is + Section, at the very bottom on the left. ?>
-    <div class="secfoot<?= (!$habitItems && !$sections) ? ' always' : '' ?>">
-      <button type="button" class="newsecbtn" id="newSecBtn">+ Section</button>
-      <form method="post" action="" class="newsection" id="newSecForm" hidden
-            onsubmit="return this.name.value.trim()!==''">
-        <input type="hidden" name="csrf" value="<?= $csrf ?>">
-        <input type="hidden" name="action" value="add_section">
-        <input type="text" name="name" placeholder="+ Section" maxlength="40" autocomplete="off">
-      </form>
-    </div>
-  <?php endif; ?>
+  <?php // No "+ Section" here any more: sections are added (and reordered, and recoloured)
+        // from "Manage sections" in the filter dropdown, so a new one always gets a colour. ?>
 </div>
 
 <?php render_habit_section_modal($sections, $csrf); ?>
@@ -1158,7 +1137,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
   // any of the windows layered over the page.
   document.addEventListener('click', (e) => {
     if (!editing()) { return; }
-    if (e.target.closest('.hname, .hsection, .cell, .secfoot, .hdrag, .hcolor, .hswatches,'
+    if (e.target.closest('.hname, .hsection, .cell, .hdrag, .hcolor, .hswatches,'
         + ' .viewbar, .bar, button, a, input, textarea, select,'
         + ' .setmodal-backdrop, .modal-backdrop, .tabbar')) { return; }
     setEdit(false);
@@ -1187,7 +1166,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
   document.addEventListener('pointerup', clearLp);
   document.addEventListener('pointercancel', clearLp);
 
-  // ----- "+ Habit" / "+ Section" each swap themselves for a name field, as elsewhere -----
+  // ----- Each "+ Habit" swaps itself for a name field, as elsewhere -----
   const wireAdd = (btnRef, formRef) => {
     const btn  = typeof btnRef  === 'string' ? document.getElementById(btnRef)  : btnRef;
     const form = typeof formRef === 'string' ? document.getElementById(formRef) : formRef;
@@ -1199,7 +1178,6 @@ function render_habit_section_modal(array $sections, string $csrf): void
     });
     field.addEventListener('keydown', e => { if (e.key === 'Escape') { field.value = ''; field.blur(); } });
   };
-  wireAdd('newSecBtn', 'newSecForm');
   // One "+ Habit" per section, so they are wired by data-target rather than by id.
   document.querySelectorAll('.addhabit[data-target]').forEach(btn => {
     wireAdd(btn, document.getElementById(btn.dataset.target));
