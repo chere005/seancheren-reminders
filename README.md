@@ -1,4 +1,8 @@
-# seancheren.com
+I haven't been quite happy with subtle things like not being able to have reminders from previous days on the calendar not continue to show until they are checked off.. I also wanted to tie together reminders, notes, and my calendar.. I also like enforcing date and time patterns.
+
+Feel free to deploy this on your own website, build and deploy the iOS version, etc. This is a personal project to have some fun with claude code, which generated essentially all of the code, and the rest of this readme:
+
+
 
 A small multi-user app suite in plain PHP on [NearlyFreeSpeech.NET](https://nearlyfreespeech.net) —
 no framework, no build step, no database. Each app is one `index.php` that renders its own
