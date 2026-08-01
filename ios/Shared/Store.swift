@@ -15,8 +15,15 @@ final class Store: ObservableObject {
 
     init(file: URL? = nil) {
         self.file = file ?? Store.defaultFile
+        let usingDefaultFile = (file == nil)
         if let loaded = Store.read(self.file) {
             data = loaded
+        } else if usingDefaultFile {
+            // First run of the real app (no suite.json yet): open on buddy's dinner sample
+            // rather than an empty suite, so there's something to look at straight away.
+            // Erase (in Settings) takes it back to empty. A store over an explicit file (the
+            // tests) starts empty instead.
+            data = Store.sampleData()
         } else {
             data = .starter
         }
@@ -56,11 +63,11 @@ final class Store: ObservableObject {
         touch()
     }
 
-    /// Fill the suite with "buddy's data" — the dinner-with-friends scenario the website's
-    /// seed-buddy builds — so the app (and the watch, which the same push feeds) have a
-    /// plausible set to look at without typing it in. Dated relative to today so it never
-    /// goes stale. Replaces whatever's here.
-    func loadSample() {
+    /// "Buddy's data" — the dinner-with-friends scenario the website's seed-buddy builds —
+    /// so the app (and the watch, which the same push feeds) have a plausible set to look
+    /// at without typing it in. Dated relative to today so it never goes stale. Used on the
+    /// first run and by the Settings "Load sample data" button.
+    static func sampleData() -> AppData {
         let cal = Calendar.current
         let today = Date().day
         func days(_ n: Int) -> Date { cal.date(byAdding: .day, value: n, to: today)?.day ?? today }
@@ -121,9 +128,11 @@ final class Store: ObservableObject {
         habit("Read 20 min", group: health.id, ticked: [0, 2, 3, 5], order: 2)
         habit("Walk", group: nil, ticked: [1, 2, 4, 5, 6], order: 3)
 
-        data = d
-        touch()
+        return d
     }
+
+    /// Replace everything with buddy's sample data (the Settings button).
+    func loadSample() { data = Store.sampleData(); touch() }
 
     func save() {
         let encoder = JSONEncoder()
