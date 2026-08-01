@@ -45,7 +45,15 @@ function habit_section_color(array $s, int $i): string
  */
 function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0,
                           string $color = ''): void {
-    $hc = $color !== '' ? ' style="--hc:' . e($color) . '"' : ''; ?>
+    // Three properties rather than one, because CSS can't append an alpha channel to a
+    // custom property and color-mix() is newer than some of the phones this runs on:
+    // the colour itself for a ticked square and the name, a wash for an empty square,
+    // and a line for the borders. Same trick as folder_tint().
+    $hc = '';
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+        $hc = ' style="--hc:' . e($color) . ';--hc-soft:' . e($color . '24')
+            . ';--hc-line:' . e($color . '66') . '"';
+    } ?>
         <div class="hname"<?= $hc ?> data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>">
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
@@ -440,7 +448,7 @@ foreach ($habitItems as $h) {
       padding: 0.3rem 0.6rem; min-height: 28px; display: flex; align-items: center;
       gap: 0.35rem; justify-content: center; justify-self: center; width: fit-content; max-width: 100%;
     }
-    .hname[style*="--hc"] { border-color: var(--hc); background: #1b1726; }
+    .hname[style*="--hc"] { border-color: var(--hc-line); background: var(--hc-soft); }
     .hname[style*="--hc"] .hlabel { color: var(--hc); }
     .hname .hlabel {
       color: #d9d2f0; font-size: 1.02rem; text-align: center; line-height: 1.15;
@@ -470,9 +478,15 @@ foreach ($habitItems as $h) {
     .cell.today { border: 2px solid var(--accent); background: var(--accent-soft); }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
     .cell.done { background: var(--accent); border-color: var(--accent); }
-    /* A ticked square takes its section's colour; today's ring stays the accent, so the
-       one thing you look for on this grid is never repainted by a section. */
+    /* A section's colour themes the whole row, not just the ticks: an empty square takes
+       the wash and the line, a ticked one fills solid. The section reads as a band down
+       the grid whether or not anything in it has been done yet. */
+    .cell[style*="--hc"] { background: var(--hc-soft); border-color: var(--hc-line); }
     .cell.done[style*="--hc"] { background: var(--hc); border-color: var(--hc); }
+    /* Today keeps the accent ring on top of all of it — the one thing you look for on
+       this grid must never be repainted by whichever section it happens to sit in. */
+    .cell.today[style*="--hc"] { border: 2px solid var(--accent); }
+    .cell.done.today[style*="--hc"] { border-color: #eafff6; }
     /* A ticked cell is already accent-filled, so today's ring has to be the light one. */
     .cell.done.today { border-color: #eafff6; }
     .cell:active { transform: scale(0.94); }
