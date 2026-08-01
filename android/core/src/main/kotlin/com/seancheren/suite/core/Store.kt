@@ -189,6 +189,27 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     }
 
     /**
+     * The order a calendar *day* shows its reminders: undated-first, then by date, then by
+     * TIME, then stored order — the web's day-panel order, which the list sort (above) omits
+     * because within a list only the date matters.
+     */
+    private val dayOrder = Comparator<Reminder> { a, b ->
+        val ad = a.due
+        val bd = b.due
+        val byDate = when {
+            ad == null && bd == null -> 0
+            ad == null -> -1
+            bd == null -> 1
+            else -> ad.compareTo(bd)
+        }
+        if (byDate != 0) byDate
+        else {
+            val byTime = (a.minutes ?: -1).compareTo(b.minutes ?: -1)
+            if (byTime != 0) byTime else a.order - b.order
+        }
+    }
+
+    /**
      * A folder+group as an outline: top-level rows sorted undated-first by date (done
      * sinking), each carrying the indent-1 subtasks that follow it in stored order. A
      * subtask never sorts on its own — it travels with its parent. With no subtasks this
@@ -367,7 +388,7 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
      * rolled onto today, and the Calendar group's undated riders.
      */
     fun reminders(on: LocalDate, today: LocalDate): List<Reminder> =
-        sorted(data.reminders.filter { r ->
+        data.reminders.filter { r ->
             if (r.done) return@filter false
             if (r.ridesAlong) return@filter on == today
             val due = r.due ?: return@filter false
@@ -375,7 +396,7 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
             if (due < today && on == today) return@filter true          // overdue rides on today
             val rule = r.recurrence
             if (rule != null) rule.dates(start = due, from = on, to = on).isNotEmpty() else false
-        })
+        }.sortedWith(dayOrder)
 
     fun notes(on: LocalDate): List<Note> = data.notes.filter { it.date == on }
 
