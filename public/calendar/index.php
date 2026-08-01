@@ -394,10 +394,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         unset($it);
         save_json_list($file, $list);
     } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== ''
-              && !empty($_POST['confirm'])) {   // only the confirmed second press deletes
+              && !empty($_POST['confirm'])) {   // only the confirmed second press
         $file = user_data_file($cfg['data_dir'], $spec['base']);
         $list = load_json_list($file);
-        $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
+        if ($kind === 'event') {
+            // An event *is* its date — with no date it has nothing left, so deleting one
+            // from the calendar removes it.
+            $list = array_values(array_filter($list, fn($it) => ($it['id'] ?? '') !== $id));
+        } else {
+            // A reminder or note only *rides* on the calendar because it carries a date.
+            // Deleting it here takes the date (and time) off, so the item itself lives on,
+            // undated, in its own list — the calendar never destroys a reminder or a note.
+            foreach ($list as &$it) {
+                if (($it['id'] ?? '') === $id) { $it[$spec['dateField']] = ''; $it['time'] = ''; break; }
+            }
+            unset($it);
+        }
         save_json_list($file, $list);
         $stay = '&edit=1';   // deleting is edit-mode only; hand it back
     }
