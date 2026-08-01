@@ -1,6 +1,9 @@
 I haven't been quite happy with subtle things like not being able to have reminders from previous days on the calendar not continue to show until they are checked off.. I also wanted to tie together reminders, notes, and my calendar.. I also like enforcing date and time patterns.
 
-Feel free to deploy this on your own website, build and deploy the iOS version, etc. This is a personal project to have some fun with claude code, which generated essentially all of the code, and the rest of this readme:
+Feel free to deploy this on your own website, build and deploy the iOS version, etc. 
+
+
+**This is a personal project to have some fun with claude code, which generated essentially all of the code, and the rest of this readme:**
 
 
 
@@ -12,16 +15,17 @@ iOS + Apple Watch** app lives in `ios/` (SwiftUI, local-only, shares no code wit
 ## Features
 
 - **Reminders** — folders + sections, subtasks, dates/times parsed from what you type, repeats, drag-reorder, Copy-as-Markdown.
-- **Calendar** — month/week views, several calendars, a per-day panel of events + reminders + notes.
+- **Calendar** — month/week views, several calendars, a per-day panel of events + reminders + notes (deleting a reminder or note here just takes it off the calendar).
 - **Notes** — folders + sections, rich-text bodies.
-- **Habits** — a week tick-grid and a month of per-day pie charts, behind a section filter.
+- **Habits** — colour-coded sections (at least one), a week tick-grid and a month of per-day pie charts with a section filter.
+- **Add** — one box that captures a reminder, event or note straight into the folder/section or calendar you choose.
 - **Chat** (public, no login) and **Aki's Bookshelf** (aki only).
 - One login covers the suite; each user has their own encrypted data; sharing is opt-in between paired accounts.
 
 ## Web — run & test
 
 ```sh
-php -S 127.0.0.1:8787 -t public     # apps at /reminders/, /calendar/, /notes/, /habits/, /chat/
+php -S 127.0.0.1:8787 -t public     # apps at /reminders/, /calendar/, /add/, /notes/, /habits/, /chat/
 php tools/test.php                  # the test suite (~15s, no framework)
 find public lib tools -name '*.php' -exec php -l {} \;   # lint
 ```
@@ -63,7 +67,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   xcodebuild -scheme Seancheren -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-Nothing in `ios/` is deployed. See `ios/README.md` for detail.
+Nothing in `ios/` is deployed. See `ios/README.md` for detail. A native **Android** clone of
+the same app (Kotlin + Jetpack Compose, same local-only design) is taking shape in `android/`.
 
 ## License
 

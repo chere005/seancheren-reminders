@@ -87,20 +87,22 @@ function msec_hidden_set(string $prefsFile, array $hidden): void
  * same button-that-becomes-a-field the rest of the suite uses, one per section so a new
  * habit lands where you were looking rather than in a footer far below.
  */
+// The "+" that adds a habit to a section — it rides in the section header, right of the
+// name, and shows whether or not you're in edit mode. Tapping it swaps the button for an
+// inline name field (wireAdd), the way "+ Section" does elsewhere.
 function render_habit_add(string $section, string $csrf): void
 {
-    $id = 'addh-' . ($section === '' ? 'none' : $section);
+    $id = 'addh-' . $section;
     ?>
-    <div class="habitadd">
-      <button type="button" class="newsecbtn addhabit" data-target="<?= e($id) ?>">+ Habit</button>
-      <form method="post" action="" class="newsection" id="<?= e($id) ?>" hidden
-            onsubmit="return this.name.value.trim()!==''">
-        <input type="hidden" name="csrf" value="<?= $csrf ?>">
-        <input type="hidden" name="action" value="add_habit">
-        <input type="hidden" name="section" value="<?= e($section) ?>">
-        <input type="text" name="name" placeholder="+ Habit" maxlength="40" autocomplete="off">
-      </form>
-    </div>
+    <button type="button" class="hsec-add addhabit" data-target="<?= e($id) ?>"
+            title="Add habit" aria-label="Add habit"><?= plus_icon_svg(13) ?></button>
+    <form method="post" action="" class="hadd-form" id="<?= e($id) ?>" hidden
+          onsubmit="return this.name.value.trim()!==''">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="action" value="add_habit">
+      <input type="hidden" name="section" value="<?= e($section) ?>">
+      <input type="text" name="name" placeholder="+ Habit" maxlength="40" autocomplete="off">
+    </form>
     <?php
 }
 
@@ -139,12 +141,36 @@ function render_habit_row(array $h, array $days, string $today, string $csrf, in
         <?php endforeach;
 }
 
+/**
+ * Sections are required in Habits: there is always at least one, and every habit lives in
+ * one. This makes a default "Habits" section when there are none, and re-homes any habit
+ * whose section no longer exists (or was ungrouped) into the first section. Callers persist
+ * the result when it changed, so the default section keeps a stable id across requests.
+ */
+function habits_normalize(array $habits): array
+{
+    $sections = array_values(array_filter($habits, 'is_section'));
+    if (!$sections) {
+        $def = ['id' => bin2hex(random_bytes(6)), 'type' => 'section', 'name' => 'Habits', 'created' => time()];
+        array_unshift($habits, $def);
+        $sections = [$def];
+    }
+    $secIds = array_map(fn($s) => (string) $s['id'], $sections);
+    $first  = $secIds[0];
+    foreach ($habits as &$it) {
+        if (is_section($it)) { continue; }
+        if (!in_array((string) ($it['section'] ?? ''), $secIds, true)) { $it['section'] = $first; }
+    }
+    unset($it);
+    return $habits;
+}
+
 // --- Mutations ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
         http_response_code(400); exit('Bad request (invalid CSRF token).');
     }
-    $habits = load_habits($dataFile);
+    $habits = habits_normalize(load_habits($dataFile));
 
     if ($_POST['action'] === 'toggle') {                 // AJAX: flip a day cell
         $id = (string) ($_POST['id'] ?? '');
@@ -294,14 +320,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
-    $stay = '?edit=1';   // these are all edit-mode controls; hand edit mode back
-    if (!empty($_POST['mgr'])) { $stay = ''; }   // …except the section manager, which is its own window
+    // Hand edit mode back only if the control was used while editing (keep_edit_script
+    // posts `edit`). The always-visible "+ Habit" and the section manager (mgr) must not
+    // drag you into edit mode when you add from outside it.
+    $stay = (!empty($_POST['edit']) && empty($_POST['mgr'])) ? '?edit=1' : '';
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
         $section = (string) ($_POST['section'] ?? '');
-        // Only keep a section id that actually exists.
+        // Every habit lives in a section. Keep the posted one only if it exists, else fall
+        // back to the first section ($habits is normalized, so there is always one).
         $validSection = '';
-        foreach ($habits as $it) { if (is_section($it) && ($it['id'] ?? '') === $section) { $validSection = $section; break; } }
+        $firstSection = '';
+        foreach ($habits as $it) {
+            if (!is_section($it)) { continue; }
+            if ($firstSection === '') { $firstSection = (string) $it['id']; }
+            if (($it['id'] ?? '') === $section) { $validSection = $section; }
+        }
+        if ($validSection === '') { $validSection = $firstSection; }
         if ($name !== '') {
             $habits[] = ['id' => bin2hex(random_bytes(6)), 'name' => mb_substr($name, 0, 40), 'done' => new stdClass(), 'section' => $validSection, 'created' => time()];
             save_habits($dataFile, $habits);
@@ -326,14 +361,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             save_habits($dataFile, $habits);
         }
     } elseif ($_POST['action'] === 'delete_section') {
-        // At least one section always stays — the manager guarantees you never end up
-        // with none, the way the folder manager pins its last folder. Deleting one drops
-        // its habits back to ungrouped rather than throwing them away.
+        // At least one section always stays — the last is undeletable, the way the folder
+        // manager pins its last folder. Its habits move to the first remaining section
+        // (sections are required, so they're never left ungrouped) rather than thrown away.
         $id = (string) ($_POST['id'] ?? '');
         $secCount = count(array_filter($habits, 'is_section'));
         if ($secCount > 1) {
             $habits = array_values(array_filter($habits, fn($it) => !(is_section($it) && ($it['id'] ?? '') === $id)));
-            foreach ($habits as &$it) { if (($it['section'] ?? '') === $id) { $it['section'] = ''; } }
+            $firstRemaining = '';
+            foreach ($habits as $it) { if (is_section($it)) { $firstRemaining = (string) $it['id']; break; } }
+            foreach ($habits as &$it) { if (!is_section($it) && ($it['section'] ?? '') === $id) { $it['section'] = $firstRemaining; } }
             unset($it);
             save_habits($dataFile, $habits);
         }
@@ -347,7 +384,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 }
 
 // --- Render ---
+// Normalize on read and persist if it changed, so a fresh account gets its default section
+// (with a stable id) the first time it opens Habits, and no habit is left sectionless.
 $habits = load_habits($dataFile);
+$normalized = habits_normalize($habits);
+if ($normalized !== $habits) { save_habits($dataFile, $normalized); $habits = $normalized; }
 $today  = date('Y-m-d');
 
 /**
@@ -704,14 +745,24 @@ function render_habit_section_modal(array $sections, string $csrf): void
     .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
 
     /* + Section — left-aligned amber pill above the day grid. */
-    .newsection { margin: 0 0 1.1rem; }
-    body:not(.editing) .newsection { display: none; }   /* edit mode only */
-    .newsection input {
-      width: 220px; max-width: 100%; padding: 0.45rem 0.85rem; background: #1a1a1a;
+    /* The + that adds a habit to a section: a small round pill right of the section name,
+       shown whether or not you're in edit mode, and the field it swaps to. */
+    .hsection .hsec-add {
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #3a3350;
+      color: #b9a7f5; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.1rem;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center; padding: 0;
+    }
+    .hsection .hsec-add:hover { border-color: #b9a7f5; color: #fff; }
+    .hsection .hsec-del { margin-left: auto; }   /* push the delete × to the far right */
+    .hadd-form { margin: 0; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .hadd-form[hidden] { display: none; }
+    .hadd-form input {
+      width: 150px; max-width: 100%; padding: 0.25rem 0.7rem; background: #1a1a1a;
       border: 1px dashed #4a3f6a; border-radius: 999px; color: #b9a7f5; font-size: 16px;
     }
-    .newsection input::placeholder { color: #b9a7f5; opacity: 0.8; }
-    .newsection input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
+    .hadd-form input::placeholder { color: #b9a7f5; opacity: 0.8; }
+    .hadd-form input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
 
     /* Grid: name column + day columns. The name column takes at least half the width
        and absorbs the rest; the day squares are capped small so the habit name has
@@ -747,6 +798,11 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Holding a habit or a section to enter edit mode must not paint the text blue as if it
+       were being selected — so the names don't take a selection. The rename fields (real
+       inputs) opt back in, so you can still select while typing. */
+    .hname, .hsection { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    .hname input, .hsection input { -webkit-user-select: text; user-select: text; }
     /* The drag handle on a habit and on a section. Hidden with visibility rather than
        display, as everywhere else, so turning edit mode on doesn't shove the names
        sideways. Nothing else on the grid moves. */
@@ -900,22 +956,6 @@ function render_habit_section_modal(array $sections, string $csrf): void
     }
     .mlegend { margin-top: 0.9rem; font-size: 0.78rem; color: #666; text-align: center; }
 
-    /* + Habit closes each run of habits, inside the grid and spanning it, so it lines up
-       under the names rather than floating among the day columns. */
-    .habitadd { grid-column: 1 / -1; display: none; margin: 0.15rem 0 0.5rem; }
-    body.editing .habitadd { display: flex; align-items: center; gap: 0.5rem; }
-    .habitadd .newsection { margin: 0; }
-    /* With no Edit button, edit mode is reached by holding a habit or a section — an
-       empty list has nothing to hold, so both ways in stay out on one. */
-    body:not(.editing) .grid.empty-list .habitadd { display: flex; }
-    /* Same grey outlined pill as "+ Section" on Notes and Reminders, worn by "+ Habit" in
-       the grid's .habitadd, so it matches rather than falling back to a raw browser button. */
-    button.newsecbtn {
-      height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
-      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
-      display: inline-flex; align-items: center; justify-content: center; line-height: 1;
-    }
-    button.newsecbtn:hover { border-color: #888; color: #fff; }
 <?= folder_nav_styles() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
@@ -1005,10 +1045,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
       <?= $mFiltered ? 'the' : 'your' ?> <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?>
       <?= $mFiltered ? 'in the ' . count($mShown) . ' section' . (count($mShown) === 1 ? '' : 's')
                        . " you're counting" : '' ?> were ticked.</p>
-  <?php elseif (!$habitItems && !$sections): ?>
-    <p class="empty">No habits yet — add one below, then tap a day to mark it done.</p>
   <?php else: ?>
-    <div class="grid<?= (!$habitItems && !$sections) ? ' empty-list' : '' ?>" id="wGrid">
+    <div class="grid" id="wGrid">
       <div class="corner"></div>
       <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
         <div class="colhead <?= $i < $extraDays ? 'wide-only' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
@@ -1016,10 +1054,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
         </div>
       <?php endforeach; ?>
 
-      <?php // Ungrouped habits belong to no section, so they keep the app's own colour. ?>
-      <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
-      <?php render_habit_add('', $csrf); ?>
-
+      <?php // Every habit lives in a section now; each section header carries the "+" that
+            // adds one, so there is no ungrouped run. ?>
       <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
         <div class="hsection" data-section="<?= e($s['id']) ?>">
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
@@ -1040,7 +1076,9 @@ function render_habit_section_modal(array $sections, string $csrf): void
           </details>
           <?= section_title_html($s['name'], $csrf, '', false, 'rename_section',
                 '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
-          <form method="post" action="" style="display:inline">
+          <?php // The "+" to add a habit to this section, right of the name, always shown. ?>
+          <?php render_habit_add((string) $s['id'], $csrf); ?>
+          <form method="post" action="" class="hsec-del" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">
             <input type="hidden" name="id" value="<?= e($s['id']) ?>">
@@ -1048,7 +1086,6 @@ function render_habit_section_modal(array $sections, string $csrf): void
           </form>
         </div>
         <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays, $scol); ?>
-        <?php render_habit_add((string) $s['id'], $csrf); ?>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
