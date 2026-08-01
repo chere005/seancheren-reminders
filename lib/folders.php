@@ -754,7 +754,7 @@ function folder_nav_styles(): string
     }
     .folderpick-menu {
       position: absolute; right: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
-      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
+      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto; overflow-x: hidden;
       background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
     }
@@ -767,7 +767,7 @@ function folder_nav_styles(): string
       background: none; border: 0; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
-    .folderpick-opt .fpick-name { flex: 1; min-width: 0; }
+    .folderpick-opt .fpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     /* Badge marking a folder as the partner's, in place of an owner heading. */
     .folderpick-opt .fshared-badge {
       flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;

@@ -706,7 +706,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .calpick-menu {
       position: fixed; z-index: 90; min-width: 210px;
-      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto;
+      max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto; overflow-x: hidden;
       background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
     }
@@ -719,7 +719,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem;
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
     }
-    .calpick-opt .cpick-name { flex: 1; min-width: 0; }
+    .calpick-opt .cpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .calpick-opt:hover { background: #262626; color: #fff; }
     /* Show/hide checkbox per calendar — a drawn box, exactly like the folder picker's, so
        cancelling the row's link click doesn't fight a real checkbox's toggle. */
