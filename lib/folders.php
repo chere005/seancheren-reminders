@@ -762,6 +762,9 @@ function folder_nav_styles(): string
     .folderpick-opt {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem;
       border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
+      /* Reset the native <button> look (some rows are buttons — the Habits filter — and
+         showed a white background with unreadable text) so every row matches the <a> ones. */
+      background: none; border: 0; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
     }
     .folderpick-opt .fdot { width: 9px; height: 9px; }
     .folderpick-opt .fpick-name { flex: 1; min-width: 0; }
