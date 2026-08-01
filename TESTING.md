@@ -57,6 +57,14 @@ Two kinds of assertion, and the labels say which:
 
 ## What is covered
 
+### `test-instance`
+`suite_base()` is empty for production, so the tab bar and other cross-app links stay
+unprefixed and prod output is unchanged. Under a base (as the `/test/` mirror runs, via
+`SUITE_BASE` here), every cross-app link — tab bar tabs, login landing — is prefixed with
+`/test`, and no unprefixed one leaks out. A messy prefix (`test/`) is normalised to
+`/test`. What this cannot see: the actual `/test/` URL on the live server, the isolation
+of `data-test/`, and `deploy.sh promote` — those are in *What only eyes can check*.
+
 ### `seed`
 Both seeders build a complete account. Buddy is paired with example both ways — shares
 out its folders and calendar, and example shares back and carries the same dinners from
@@ -206,6 +214,15 @@ failures only exist in standalone mode.
 - [ ] The top bar is on the same line in every app, with the same gap under its rule.
 - [ ] Nothing is clipped by the notch or the home indicator (`env(safe-area-inset-*)`).
 - [ ] Tapping a link doesn't kick you out to Safari with browser chrome.
+
+**The `/test/` sandbox mirror** (after touching the deploy or any cross-app link)
+
+- [ ] `./deploy.sh test` publishes to `seancheren.com/test/`; the app opens there and the
+      tab bar, login and widget links all stay inside `/test/` (never jump to the root).
+- [ ] Signing in on `/test/` lands on `/test/calendar/`, and the data you add there does
+      **not** appear in production (and vice versa) — `data-test/` is separate.
+- [ ] `./deploy.sh promote` leaves prod running what test ran; production's data and both
+      `config.php` files are untouched.
 
 **Gestures** — one pass per app
 

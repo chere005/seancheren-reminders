@@ -25,8 +25,28 @@ function app_config(): array
         // and the web server never has it in its environment.
         $dir = getenv('SUITE_DATA_DIR');
         if (is_string($dir) && $dir !== '') { $config['data_dir'] = $dir; }
+        // Same idea for the link prefix: the /test/ mirror sets 'base' in its own
+        // config.php, but a test run (or a local `SUITE_BASE=/test php -S …`) can force
+        // it here without one. The web server never has this in its environment.
+        $base = getenv('SUITE_BASE');
+        if (is_string($base) && $base !== '') { $config['base'] = $base; }
     }
     return $config;
+}
+
+/**
+ * URL prefix for this instance's cross-app links: '' in production, '/test' in the
+ * sandbox mirror. Every hardcoded absolute link between apps (the tab bar, the login
+ * landing, the widget link) is built through this, so the same source serves at the
+ * site root and under /test/ without the links leaking out of their instance. The
+ * value comes from config `base`; a page served under /test/ loads lib-test, whose
+ * config sets it to '/test'. Redirects that use _self_path() already stay put — they
+ * bounce back to the URL that called them — so only cross-app links need this.
+ */
+function suite_base(): string
+{
+    $b = trim((string) (app_config()['base'] ?? ''), '/');
+    return $b === '' ? '' : '/' . $b;
 }
 
 // Everything in the suite runs on one clock. The server keeps UTC, so without this
@@ -250,7 +270,7 @@ function require_login(string $area = 'App'): void
             session_regenerate_id(true);
             $_SESSION['auth'] = true;
             $_SESSION['user'] = $u;
-            header('Location: ' . LOGIN_LANDING);
+            header('Location: ' . suite_base() . LOGIN_LANDING);
             exit;
         }
         $error = 'Invalid username or password.';
@@ -405,7 +425,7 @@ function signup_handle(array $cfg): array
     session_regenerate_id(true);
     $_SESSION['auth'] = true;
     $_SESSION['user'] = $user;
-    header('Location: ' . LOGIN_LANDING);
+    header('Location: ' . suite_base() . LOGIN_LANDING);
     exit;
 }
 
@@ -425,9 +445,9 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Reminders">
-  <link rel="apple-touch-icon" href="/reminders/icon-180.png">
-  <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
+  <link rel="apple-touch-icon" href="<?= suite_base() ?>/reminders/icon-180.png">
+  <link rel="icon" href="<?= suite_base() ?>/reminders/icon-192.png">
+  <link rel="manifest" href="<?= suite_base() ?>/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }

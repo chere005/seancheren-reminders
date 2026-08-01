@@ -58,12 +58,15 @@ function tabbar_styles(): string
 function render_tabbar(string $active): void
 {
     // A green "+" sits in the middle, between Calendar and Notes, opening the quick-add app.
+    // Links carry the instance's base prefix (suite_base()) so the /test/ mirror's tab bar
+    // stays inside /test/ instead of jumping to production.
+    $b = function_exists('suite_base') ? suite_base() : '';
     $tabs = [
-        'reminders' => ['href' => '/reminders/', 'ico' => '&#9745;',   'label' => 'Reminders'],
-        'calendar'  => ['href' => '/calendar/',  'ico' => '&#128197;', 'label' => 'Calendar'],
-        'add'       => ['href' => '/add/',        'ico' => '+',          'label' => 'Add', 'add' => true],
-        'notes'     => ['href' => '/notes/',     'ico' => '&#128221;', 'label' => 'Notes'],
-        'habits'    => ['href' => '/habits/',    'ico' => '&#128293;', 'label' => 'Habits'],
+        'reminders' => ['href' => $b . '/reminders/', 'ico' => '&#9745;',   'label' => 'Reminders'],
+        'calendar'  => ['href' => $b . '/calendar/',  'ico' => '&#128197;', 'label' => 'Calendar'],
+        'add'       => ['href' => $b . '/add/',        'ico' => '+',          'label' => 'Add', 'add' => true],
+        'notes'     => ['href' => $b . '/notes/',     'ico' => '&#128221;', 'label' => 'Notes'],
+        'habits'    => ['href' => $b . '/habits/',    'ico' => '&#128293;', 'label' => 'Habits'],
     ];
     echo '<nav class="tabbar"><div class="segmented">';
     foreach ($tabs as $key => $t) {

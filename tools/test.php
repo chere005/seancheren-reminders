@@ -34,6 +34,7 @@ putenv('SUITE_DATA_DIR=' . $scratch);      // for this process (the unit checks)
 @mkdir($scratch, 0700, true);
 
 require_once $root . '/lib/auth.php';
+require_once $root . '/lib/tabbar.php';
 require_once $root . '/lib/folders.php';
 require_once $root . '/lib/sharing.php';
 require_once $root . '/lib/richtext.php';
@@ -226,6 +227,43 @@ t('the seeders write nothing outside the scratch directory', function () use ($r
     ok(getenv('SUITE_DATA_DIR') !== rtrim(app_config()['data_dir'], '/')
        || strpos(app_config()['data_dir'], sys_get_temp_dir()) === 0,
        'app_config() must be pointing at the scratch dir');
+});
+
+// ---------------------------------------------------------------- test instance (/test/)
+// The /test/ sandbox mirror is the same source served under a base prefix, with its own
+// data dir. suite_base() is what keeps its cross-app links inside /test/; get this wrong
+// and the mirror's tab bar jumps to production. Prod (no base) must stay byte-identical.
+area('test-instance');
+
+t('suite_base() is empty for production (no base configured)', function () {
+    eq('', suite_base(), 'unprefixed by default');
+    ob_start(); render_tabbar('reminders'); $bar = ob_get_clean();
+    has('href="/reminders/"', $bar, 'prod tab bar links are unprefixed');
+    hasnt('/test/reminders/', $bar, 'no stray /test prefix in prod');
+});
+
+t('a base prefixes every cross-app link (tab bar + login landing)', function () use ($root, $scratch) {
+    // app_config() caches in-process, so exercise the base in a fresh subprocess the way
+    // the real /test/ instance gets it (there, from lib-test/config.php).
+    $php = 'require ' . var_export($root . '/lib/auth.php', true) . ';'
+         . 'require ' . var_export($root . '/lib/tabbar.php', true) . ';'
+         . 'ob_start(); render_tabbar("reminders"); '
+         . 'echo suite_base() . "\n" . ob_get_clean();';
+    exec('SUITE_BASE=/test SUITE_DATA_DIR=' . escapeshellarg($scratch)
+        . ' php -r ' . escapeshellarg($php) . ' 2>&1', $out, $rc);
+    $s = implode("\n", $out);
+    eq(0, $rc, 'subprocess ran');
+    eq('/test', strtok($s, "\n"), 'suite_base() returns the configured prefix');
+    has('href="/test/reminders/"', $s, 'tab bar links carry the /test prefix');
+    has('href="/test/calendar/"', $s, 'and the calendar tab too');
+    hasnt('href="/reminders/"', $s, 'no unprefixed cross-app link leaks out of /test/');
+});
+
+t('suite_base() normalises a messy prefix', function () use ($root, $scratch) {
+    $php = 'require ' . var_export($root . '/lib/auth.php', true) . '; echo suite_base();';
+    exec('SUITE_BASE=' . escapeshellarg('test/') . ' SUITE_DATA_DIR=' . escapeshellarg($scratch)
+        . ' php -r ' . escapeshellarg($php) . ' 2>&1', $out, $rc);
+    eq('/test', trim(implode("\n", $out)), 'trims slashes, adds a single leading one');
 });
 
 // ---------------------------------------------------------------- 2. auth

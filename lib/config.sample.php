@@ -21,6 +21,12 @@ return [
     // Where reminder data is stored (outside the web root).
     'data_dir' => __DIR__ . '/../data',
 
+    // URL prefix this instance's links are built under. '' is production (served at
+    // the site root). The /test/ sandbox mirror sets this to '/test' in its own
+    // lib-test/config.php, so every cross-app link (tab bar, login landing, widget)
+    // stays inside /test/. Leave it '' here. See deploy.sh's test/promote modes.
+    'base' => '',
+
     // --- Outgoing mail (the sign-up verification code) ---
     // Without smtp_host the code goes out through PHP's mail(), which a shared host
     // sends unauthenticated and spam filters usually discard. Name a mailbox here and
