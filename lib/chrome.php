@@ -585,6 +585,14 @@ function swipe_delete_styles(): string
 {
     return <<<CSS
     .swipe-row { touch-action: pan-y; transition: transform 0.16s ease; }
+    /* pan-y hands every *vertical* gesture on a row to the scroller, which is right when
+       the only gesture a row has is a sideways swipe to delete — and fatal in edit mode,
+       where holding a row is supposed to pick it up. The browser decides at touchstart,
+       so the pointer stream is cancelled before the drag ever starts and dragging simply
+       does nothing on a phone. Edit mode is where dragging owns the row (the swipe stands
+       down there anyway), so the row stops offering itself as a scroll surface: the list
+       still scrolls from the margins, the section heads and the space between folders. */
+    body.editing .swipe-row { touch-action: none; }
     .swipe-row.swiped .needs-confirm {
       display: inline-flex; align-items: center; justify-content: center;
       background: #b3261e; border-color: #f66; color: #fff; font-weight: 700;
