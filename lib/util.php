@@ -290,6 +290,21 @@ function sections_normalize(array $list, array $folders, &$changed = false,
                             string $default = SECTION_DEFAULT_NAME): array
 {
     $changed = false;
+    // Safety net first: a folder must never hold two sections with the same name. Items
+    // reference their section by name, so duplicates fight over the items and one set gets
+    // orphaned or lost when a section is deleted. Keep the first of each (folder,name) and
+    // drop the rest; the items still match the survivor by name, so nothing is lost.
+    $seenSec = [];
+    $deduped = [];
+    foreach ($list as $it) {
+        if (($it['type'] ?? '') === 'section') {
+            $k = (string) ($it['folder'] ?? SECTION_DEFAULT_FOLDER) . "\x1F" . (string) ($it['name'] ?? '');
+            if (isset($seenSec[$k])) { $changed = true; continue; }   // drop the duplicate row
+            $seenSec[$k] = true;
+        }
+        $deduped[] = $it;
+    }
+    $list = $deduped;
     // Sections that exist per folder, in stored order.
     $secByFolder = [];
     foreach ($list as $it) {

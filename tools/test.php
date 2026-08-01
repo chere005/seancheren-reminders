@@ -1088,7 +1088,7 @@ t('a section colour must come from the palette, and the answer says what stuck',
     $sec = null;
     foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section') { $sec = $x; break; } }
     ok($sec !== null, 'there is a section to colour');
-    $good = app_palette('habits', true)[2];
+    $good = app_palette('habits')[2];   // habits uses its own tier now
     $r = req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'set_section_color',
         'id' => $sec['id'], 'color' => $good], $jar, true);
     eq($good, json_decode($r['body'], true)['color'] ?? null, 'answers with the stored colour');
@@ -1402,14 +1402,26 @@ t('the plus icon is an SVG, so it centres by construction', function () {
 });
 
 t('every app palette offers six colours and validates its own', function () {
-    foreach (['reminders', 'notes', 'calendar'] as $app) {
+    // Brightness helper: the average channel value of a #rrggbb.
+    $lum = fn($h) => (hexdec(substr($h, 1, 2)) + hexdec(substr($h, 3, 2)) + hexdec(substr($h, 5, 2))) / 3;
+    foreach (['reminders', 'notes', 'calendar', 'habits'] as $app) {
         eq(6, count(app_palette($app)), "$app own");
         eq(6, count(app_palette($app, true)), "$app shared");
         ok(palette_has($app, app_palette($app)[0]), 'own colour validates');
         ok(palette_has($app, app_palette($app, true)[0]), 'shared colour validates');
         ok(!palette_has($app, '#ff0000'), 'a stranger does not');
+        // The shared (partner) set is significantly lighter than the own set — that's the
+        // whole point of the two tiers.
+        foreach (range(0, 5) as $i) {
+            ok($lum(app_palette($app, true)[$i]) > $lum(app_palette($app)[$i]) + 30,
+               "$app shared colour $i is clearly lighter than own");
+        }
     }
-    eq(app_palette('reminders', true), app_palette('habits', true), 'habits borrows the reminders tier');
+    // The own sets read as one family (similar shade), so their first blue is close across apps.
+    ok(abs($lum(app_palette('reminders')[0]) - $lum(app_palette('habits')[0])) < 60,
+       'own tiers stay a similar shade across apps');
+    // Habits has its own tier now (it no longer just borrows the reminders one).
+    ok(app_palette('habits') !== app_palette('reminders'), 'habits has its own own-tier');
 });
 
 t('the folder migration is idempotent', function () {
@@ -1648,7 +1660,7 @@ t("a habit's row carries its section's colour", function () {
     ok($cells > $names, 'and so is every day square on those rows');
     preg_match_all('/--hc:(#[0-9a-f]{6})/', $b, $m);
     $used = array_values(array_unique($m[1]));
-    foreach ($used as $c) { ok(in_array($c, app_palette('habits', true), true), "$c is a palette colour"); }
+    foreach ($used as $c) { ok(in_array($c, app_palette('habits'), true), "$c is a palette colour"); }
     ok(count($used) > 1, 'two sections should not share one colour by default');
 });
 
@@ -1995,6 +2007,38 @@ t('dragging a note section into another folder re-files it, and its notes follow
     eq('STo', $find($sid)['folder'] ?? null, 'the section moved to STo');
     eq('STo', $find($nid)['folder'] ?? null, 'its note followed');
     eq('Mains', $find($nid)['section'] ?? null, 'keeping its section');
+});
+
+t('moving a section into a folder that already has that name is refused (no duplicate, no data loss)', function () {
+    // The data-loss bug: dragging "General" into a folder that already has a "General" made
+    // two same-named sections in one folder, and deleting one then lost the items. The move
+    // must be refused so the folder never holds a duplicate.
+    $jar = login('example', 'examplepassword');
+    foreach (['DupA', 'DupB'] as $f) {
+        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
+    }
+    // Both folders auto-get a "General" section on first render; make sure they exist.
+    req('GET', '/notes/?folder=All', [], $jar);
+    $ga = note_sec_id('DupA', 'General'); $gb = note_sec_id('DupB', 'General');
+    ok($ga && $gb, 'both folders have their own General');
+    // A note in DupA/General, then try to drag DupA's General into DupB (which already has one).
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'DupA', 'folder' => 'DupA', 'section' => 'General'], $jar);
+    $nid = null;
+    foreach (stored('notes', 'example') as $x) { if (($x['type'] ?? '') !== 'section' && ($x['folder'] ?? '') === 'DupA') { $nid = $x['id']; } }
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $nid, 'section' => 'General', 'folder' => 'DupB']]),
+        'sections' => json_encode(['DupB' => [$ga]])], $jar, true);
+    // DupB must still hold exactly one "General"; DupA keeps its own.
+    $countB = 0;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DupB' && ($x['name'] ?? '') === 'General') { $countB++; }
+    }
+    eq(1, $countB, 'DupB never ends up with two General sections');
+    ok(note_sec_id('DupA', 'General') !== null, "DupA keeps its General (the move was refused)");
+    // The note still exists somewhere with a real section (not orphaned/lost).
+    $note = null;
+    foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $nid) { $note = $x; } }
+    ok($note !== null, 'the note was not lost');
 });
 
 t('dragging a note into another folder re-files it', function () {
@@ -2449,6 +2493,23 @@ t('sections_normalize guarantees a real section per folder and re-homes loose it
     ], ['Work'], $ch3);
     ok(!$ch3, 'a folder that already has a section is left alone');
     eq(1, count(array_filter($keep, fn($x) => ($x['type'] ?? '') === 'section')), 'no extra default section');
+});
+
+t('sections_normalize merges duplicate same-named sections without losing items (data-loss guard)', function () {
+    // Two "General" sections in one folder is the corruption that lost items: it must be
+    // deduped to one, and every item that named it must survive (they match by name).
+    $out = sections_normalize([
+        ['id' => 'd1', 'type' => 'section', 'name' => 'General', 'folder' => 'Work'],
+        ['id' => 'd2', 'type' => 'section', 'name' => 'General', 'folder' => 'Work'],   // duplicate
+        ['id' => 'n1', 'text' => 'keep me A', 'folder' => 'Work', 'section' => 'General'],
+        ['id' => 'n2', 'text' => 'keep me B', 'folder' => 'Work', 'section' => 'General'],
+    ], ['Work'], $ch);
+    ok($ch, 'the duplicate was a change to repair');
+    $secs = array_values(array_filter($out, fn($x) => ($x['type'] ?? '') === 'section' && $x['folder'] === 'Work'));
+    eq(1, count($secs), 'the folder ends with a single General section');
+    $items = array_values(array_filter($out, fn($x) => ($x['type'] ?? '') !== 'section'));
+    eq(2, count($items), 'both items survive the merge');
+    foreach ($items as $it) { eq('General', $it['section'], 'and still point at the surviving section'); }
 });
 
 t('folders reorder and keep every folder', function () {

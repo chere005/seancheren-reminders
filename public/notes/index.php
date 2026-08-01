@@ -341,6 +341,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $sectionRows = [];
         $placed      = [];   // section id => true
         $namesIn     = [];   // folder => [name => true], so a move can't create a duplicate
+        // Seed with the sections that are *staying* (not listed in this drag), keyed by their
+        // current folder — so a section can't be re-filed into a folder that already holds
+        // that name (a stale/partial payload used to slip one in, creating a duplicate that
+        // then lost items). A section the drag *does* list frees up its old folder's name.
+        $inMap = [];
+        foreach ($secMap as $ids) { if (is_array($ids)) { foreach ($ids as $sid) { $inMap[(string) $sid] = true; } } }
+        foreach ($notes as $it) {
+            if (is_section($it) && !isset($inMap[(string) $it['id']])) {
+                $namesIn[(string) ($it['folder'] ?? FOLDER_DEFAULT)][(string) $it['name']] = true;
+            }
+        }
         foreach ($secMap as $f => $ids) {
             if (!is_array($ids)) { continue; }
             $folderOk = in_array($f, $myNoteFolders, true);
@@ -655,7 +666,7 @@ if (!$editing) {
 /** One of the user's own sections: its header and the notes under it. Pulled out of the
  *  markup because it's rendered from two places now — the flat list, and once per folder
  *  when the All view is grouping by folder. */
-function render_note_section(array $s, array $grouped, string $csrf, string $view): void
+function render_note_section(array $s, array $grouped, string $csrf, string $view, bool $canDelete = true): void
 {
     $sname   = (string) $s['name'];
     $sfolder = (string) ($s['folder'] ?? FOLDER_DEFAULT);
@@ -669,6 +680,8 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
       <?= section_title_html($sname, $csrf, $view, false, 'rename_section',
             '<input type="hidden" name="folder" value="' . e($sfolder) . '">') ?>
       <?php render_section_add($sname, $csrf, $view, $sfolder); ?>
+      <?php // No × on a folder's only section — its last section can't be deleted. ?>
+      <?php if ($canDelete): ?>
       <form method="post" action="" style="display:inline">
         <input type="hidden" name="csrf" value="<?= $csrf ?>">
         <input type="hidden" name="action" value="delete_section">
@@ -677,6 +690,7 @@ function render_note_section(array $s, array $grouped, string $csrf, string $vie
         <input type="hidden" name="name" value="<?= e($sname) ?>">
         <button class="section-del needs-confirm" type="submit" title="Delete section">&times;</button>
       </form>
+      <?php endif; ?>
     </div>
     <?php
     render_note_rows($grouped[$s['id']] ?? [], $view, $csrf, $sname, '');
@@ -715,7 +729,9 @@ function render_note_folder_sections(array $sections, array $grouped, array $cat
                                      string $catchallFolder, string $dir): void
 {
     $blocks = [];
-    foreach ($sections as $s) { ob_start(); render_note_section($s, $grouped, $csrf, $view); $blocks[] = ob_get_clean(); }
+    // A folder's only section can't be deleted, so it shows no × (the guard is server-side).
+    $canDel = count($sections) > 1;
+    foreach ($sections as $s) { ob_start(); render_note_section($s, $grouped, $csrf, $view, $canDel); $blocks[] = ob_get_clean(); }
     // The unnamed catch-all only appears if there are still loose notes to hold (there won't
     // be once a list is normalised); every folder otherwise keeps its own real sections. Its
     // remembered slot still positions it among them while it does show.

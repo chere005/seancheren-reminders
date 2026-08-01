@@ -1,41 +1,49 @@
 <?php
 /**
- * The suite's colour palettes.
+ * The suite's colour palettes, generated from one base set of six hues.
  *
- * Every app — reminders, calendar, notes — offers the same six hues for its folders or
- * calendars: blue, red, green, orange, purple, grey. What differs is the *shade*: each app
- * sits at its own lightness tier (reminders brightest, calendar mid, notes deepest). A
- * partner's shared items use the **pastel** variant — clearly lighter *and* desaturated, a
- * soft wash rather than a slightly-lighter version of the same saturated hue — so "theirs"
- * reads at a glance as distinct from "mine" rather than as a near-twin. Generated once from
- * HSL; kept here as the single source of truth.
+ * Every app draws from the same six hues (blue, red, green, orange, purple, grey). The
+ * *own* (mine) set is the base nudged only slightly lighter per app, so reminders, calendar,
+ * notes and habits read as one family in a similar shade — a gentle step between them, not
+ * the old bright/mid/deep tiers. The *shared* (a partner's) set is the base pushed
+ * *significantly* lighter — a clear pastel — so someone else's items are obviously theirs.
+ * Kept generated (not hand-typed) so the two tiers stay consistent and easy to tune.
  */
 
-const PALETTES = [
-    'reminders' => [
-        'own'    => ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
-        'shared' => ['#dce9fd', '#fce0de', '#dcf6e8', '#feefd6', '#efe4fa', '#e6e9ee'],
-    ],
-    'calendar' => [
-        'own'    => ['#2672ed', '#e5342e', '#46ce7e', '#f18322', '#8a3ad9', '#7c8598'],
-        'shared' => ['#d2e2fc', '#fbd7d4', '#d3f2e2', '#fde7c6', '#e7d8f8', '#dee2e8'],
-    ],
-    'notes' => [
-        'own'    => ['#125ed9', '#d1201a', '#31b96a', '#dd6e0e', '#7526c5', '#677183'],
-        'shared' => ['#c9ddfb', '#f8ccc8', '#caefdb', '#fbdebb', '#ddc8f4', '#d6dbe2'],
-    ],
+/** The six base hues, at their vivid "own" shade (this is reminders' own set unchanged). */
+const PAL_BASE = ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'];
+
+/**
+ * Per app: [own lighten fraction, shared lighten fraction], 0 = base, 1 = white. Own steps
+ * gently between the apps (they stay a family); shared is a big jump lighter for each.
+ */
+const PAL_TIERS = [
+    'reminders' => [0.00, 0.60],
+    'calendar'  => [0.07, 0.64],
+    'notes'     => [0.14, 0.68],
+    'habits'    => [0.21, 0.72],
 ];
+
+/** Mix a #rrggbb colour toward white by fraction $f (0 = unchanged, 1 = white). */
+function pal_lighten(string $hex, float $f): string
+{
+    $r = hexdec(substr($hex, 1, 2));
+    $g = hexdec(substr($hex, 3, 2));
+    $b = hexdec(substr($hex, 5, 2));
+    $mix = fn($c) => (int) round($c + (255 - $c) * $f);
+    return sprintf('#%02x%02x%02x', $mix($r), $mix($g), $mix($b));
+}
 
 /**
  * The six colours an app offers — the partner ("shared") variant when $shared is true.
- * An app with no tier of its own falls back to the reminders one: Habits asks for
- * app_palette('habits', true) and gets the lighter reminders set, which sits closer to
- * that app's soft violet than the saturated folder colours do.
+ * An app with no tier of its own falls back to reminders. Habits asks for its own set now
+ * (a similar shade to the others), not the borrowed lighter one it used before.
  */
 function app_palette(string $app, bool $shared = false): array
 {
-    $set = PALETTES[$app] ?? PALETTES['reminders'];
-    return $shared ? $set['shared'] : $set['own'];
+    [$ownF, $sharedF] = PAL_TIERS[$app] ?? PAL_TIERS['reminders'];
+    $f = $shared ? $sharedF : $ownF;
+    return array_map(fn($h) => pal_lighten($h, $f), PAL_BASE);
 }
 
 /** True if $hex is one of an app's colours (own or shared) — used to validate a choice. */
