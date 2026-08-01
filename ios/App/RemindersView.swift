@@ -37,6 +37,15 @@ struct RemindersView: View {
                     Menu {
                         Toggle("Completed", systemImage: "checkmark.square", isOn: $showCompleted)
                         Button("New group", systemImage: "plus") { store.addGroup("Group", kind: .reminder) }
+                        Divider()
+                        // "Copy as Markdown" — the visible list to the clipboard, the same
+                        // export the web puts behind its share icon.
+                        Button("Copy as Markdown", systemImage: "doc.on.doc") {
+                            UIPasteboard.general.string = store.markdown(folder: folder,
+                                                                         includeDone: showCompleted)
+                        }
+                        ShareLink("Share as Markdown",
+                                  item: store.markdown(folder: folder, includeDone: showCompleted))
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -70,9 +79,24 @@ struct RemindersView: View {
             .filter { showCompleted || !$0.done }
 
         Section {
-            ForEach(rows) { row($0) }
-                .onMove { store.moveReminders(rows, from: $0, to: $1) }
-                .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
+            ForEach(rows) { r in
+                row(r)
+                    // A left swipe adds a subtask under a task, or lifts a subtask back out
+                    // — the web's + and ‹, one level only.
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        if r.indent == 0 {
+                            Button { editing = store.addSubtask(under: r) } label: {
+                                Label("Subtask", systemImage: "arrow.turn.down.right")
+                            }.tint(Theme.reminder)
+                        } else {
+                            Button { store.setIndent(r, to: 0) } label: {
+                                Label("Promote", systemImage: "arrow.turn.up.left")
+                            }.tint(.gray)
+                        }
+                    }
+            }
+            .onMove { store.moveReminders(rows, from: $0, to: $1) }
+            .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
             if drafting == ref {
                 HStack(spacing: 10) {
                     Image(systemName: "circle").foregroundStyle(.tertiary)
@@ -93,6 +117,7 @@ struct RemindersView: View {
                 }
                 .buttonStyle(.borderless)
 
+                if let model { SectionColorDot(group: model) }
                 Text(title)
                 Spacer()
 
@@ -134,6 +159,7 @@ struct RemindersView: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.leading, CGFloat(reminder.indent) * 18)   // a subtask sits in one level
         .contentShape(Rectangle())
         .onTapGesture { editing = reminder }
     }
@@ -233,16 +259,4 @@ struct ReminderDetail: View {
             }
         }
     }
-}
-
-/// "today", "tomorrow", "Aug 3" — short, because it sits under the text.
-func dayLabel(_ date: Date, today: Date) -> String {
-    let cal = Calendar.current
-    if cal.isDate(date, inSameDayAs: today) { return "today" }
-    if let tomorrow = cal.date(byAdding: .day, value: 1, to: today),
-       cal.isDate(date, inSameDayAs: tomorrow) { return "tomorrow" }
-    let f = DateFormatter()
-    f.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: today)
-        ? "MMM d" : "MMM d, yyyy"
-    return f.string(from: date)
 }

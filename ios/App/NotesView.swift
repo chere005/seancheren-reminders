@@ -64,6 +64,7 @@ struct NotesView: View {
             HStack(spacing: 12) {
                 Button { newNote(group: group) } label: { Image(systemName: "plus") }
                     .buttonStyle(.borderless)
+                if let model { SectionColorDot(group: model) }
                 Text(title)
                 Spacer()
                 if let model {

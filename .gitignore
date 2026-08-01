@@ -19,6 +19,8 @@ ios/**/xcuserdata/
 ios/**/*.xcuserdatad
 ios/build/
 ios/DerivedData/
+# SwiftPM build products from `swift test` (the CLI test package)
+ios/.build/
 
 # Claude Code's per-machine permission grants (the skills themselves are committed)
 .claude/settings.local.json

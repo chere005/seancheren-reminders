@@ -28,7 +28,35 @@ thing that happens to look the same; changing one doesn't touch the other.
 
 Everything the site suite does that makes sense on a phone is reimplemented natively:
 folders and groups, repeats (with month/year day-clamping), the undated-first ordering,
-the slash-only US-order text parser (`Shared/Parse.swift`), and the two-press delete.
+the slash-only US-order text parser (`Shared/Parse.swift`), the two-press delete, plus
+**subtasks** (one level, swipe a task left to add one, a subtask left to lift it out),
+**per-section colours**, the Habits **week and month views** — the month drawn as a pie
+per day, sliced in the sections' own colours, behind a section filter — and Reminders'
+**Copy as Markdown**.
+
+## Tests
+
+`Shared/` (Model, Store, Parse, WatchPayload) is pure Foundation — no SwiftUI — so it
+runs on macOS. `Package.swift` wraps it as a `SuiteCore` module with a `Tests/` XCTest
+suite you drive from the command line, the way the website's `tools/test.php` runs:
+
+```sh
+cd ios
+# The logic layer (repeats, the outline sort, folders/groups, calendars, day queries,
+# parsing, the watch list, Copy-as-Markdown, the Habits filter, tolerant decoding):
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
+
+# Compile-check the SwiftUI app — no simulator needed, it builds for a generic device:
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  xcodebuild -project Seancheren.xcodeproj -scheme Seancheren \
+  -destination 'generic/platform=iOS' -configuration Debug \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+`DEVELOPER_DIR` points the tools at full Xcode when `xcode-select` is on the Command Line
+Tools (which don't ship XCTest for SwiftPM). The suite also proves a `suite.json` written
+before a field existed still loads — the model decodes tolerantly (`decodeIfPresent` +
+defaults) rather than resetting the whole document to empty over one missing key.
 
 ## The watch app
 
@@ -53,6 +81,8 @@ ios/
             HabitsView, Pickers, Theme, SettingsView, PhoneConnectivity      (iOS)
   Watch/    WatchApp, RemindersView, WatchConnectivityReceiver               (watchOS)
   Shared/   Model, Parse, Store, WatchPayload
+  Package.swift + Tests/   CLI test package over Shared/ (SuiteCore + XCTest); not in the
+                           Xcode project — a separate SwiftPM build, so the two don't clash
 ```
 
 `Shared/Model.swift`, `Parse.swift` and `Store.swift` are the iOS app's data layer.
