@@ -188,6 +188,98 @@ if (($_GET['action'] ?? '') === 'search') {
     exit;
 }
 
+/**
+ * Bookshelf themes — this app only. The suite's five (THEMES, lib/auth.php) swap the
+ * accent and nothing else, so every app stays the same dark room with a new highlight;
+ * these repaint the whole page, background and rules and text together. "Midnight" is
+ * the original look and is the default, so an untouched bookshelf looks exactly as it
+ * did. Stored under its own prefs key, so picking one here never disturbs the suite
+ * theme (or the other way round), and nothing outside this file reads them.
+ *
+ * Where a palette had nothing that could carry the job, a member was deepened or
+ * lightened rather than dropped in flat: an all-pastel set has no colour dark enough
+ * to be text, and its mid-tones fail as an accent on their own pale background. Every
+ * theme's accent, muted text and gold clear roughly 4.5:1 on that theme's background.
+ * --gold is the star rating and section headings; it has to be themed because the
+ * original #f0b429 is barely visible on a cream page. The rating stars, the error red
+ * and the quote purple stay literal — like the suite's reminder/event/note colours,
+ * they say what a thing *is*, not which theme you like.
+ */
+const BOOK_THEMES = [
+    //             label            bg         surface    surface-2  line       line-soft  text       text-dim   muted      accent     accent-ink accent-soft gold
+    'midnight' => ['Midnight',      '#111111', '#1a1a1a', '#2a2a2a', '#333333', '#262626', '#eeeeee', '#cccccc', '#888888', '#34d399', '#06251b', '#14332a', '#f0b429'],
+    'sage'     => ['Sage & Cream',  '#fefae0', '#faedcd', '#e9edc9', '#ccd5ae', '#e4e7c9', '#3f3a2e', '#5c5545', '#776e56', '#96632f', '#fefae0', '#efe2c2', '#8a5a12'],
+    'blossom'  => ['Blossom',       '#fdf4f9', '#ffe9f2', '#ffc8dd', '#cdb4db', '#bde0fe', '#3f2e47', '#6a5273', '#7d6486', '#7b4e96', '#fff5fa', '#f0e2f6', '#8a5a12'],
+    'dusk'     => ['Dusk',          '#22223b', '#2e2e4d', '#4a4e69', '#4a4e69', '#34345a', '#f2e9e4', '#c9ada7', '#9a8c98', '#c9ada7', '#22223b', '#33324f', '#e0b877'],
+    'neon'     => ['Neon',          '#12101a', '#1c1830', '#2a2444', '#3a3160', '#241f3c', '#f5f0ff', '#c9bee6', '#9086b0', '#00f5d4', '#072b25', '#10302b', '#fee440'],
+    'plum'     => ['Plum & Mint',   '#2a1327', '#3a1b35', '#4e2a47', '#6b3f60', '#43203d', '#efe4ec', '#b5d8cc', '#a086a6', '#72e1d1', '#10302b', '#1d3b36', '#f0b429'],
+    'forest'   => ['Forest',        '#040303', '#16201d', '#3a4e48', '#3a4e48', '#263230', '#e4ddd6', '#beb0a7', '#6a7b76', '#8b9d83', '#0a0f0d', '#1c2a25', '#c9a227'],
+    'olive'    => ['Olive & Slate', '#241e2d', '#332a3e', '#443850', '#564a62', '#3b3247', '#eaf0ce', '#c0c5c1', '#848b98', '#bbbe64', '#241e2d', '#3a3448', '#d8c46a'],
+];
+
+/** The themes whose page is lighter than their ink; they need color-scheme: light. */
+const BOOK_THEMES_LIGHT = ['sage', 'blossom'];
+
+/** The bookshelf's own theme key, from the same prefs file the suite theme lives in. */
+function book_theme_get(): string
+{
+    $t = (string) (store_read(theme_file())['book_theme'] ?? '');
+    return isset(BOOK_THEMES[$t]) ? $t : 'midnight';
+}
+
+/** Store a pick. An unknown key is refused rather than written. */
+function book_theme_set(string $name): bool
+{
+    if (!isset(BOOK_THEMES[$name])) { return false; }
+    $p = store_read(theme_file());
+    $p['book_theme'] = $name;
+    store_write(theme_file(), $p);
+    return true;
+}
+
+/**
+ * The chosen theme as variables. Emitted *after* theme_css() so --accent is this app's
+ * rather than the suite's — the bookshelf hides the suite picker for that reason.
+ */
+function book_theme_css(): string
+{
+    $key = book_theme_get();
+    [, $bg, $sf, $sf2, $ln, $lns, $tx, $dim, $mut, $ac, $ink, $soft, $gold] = BOOK_THEMES[$key];
+    // Native controls (selects, scrollbars, date pickers) need telling which way round the
+    // page is, or a cream theme draws a black dropdown over it.
+    $scheme = in_array($key, BOOK_THEMES_LIGHT, true) ? 'light' : 'dark';
+    return "    :root { --bg: $bg; --surface: $sf; --surface-2: $sf2; --line: $ln;"
+         . " --line-soft: $lns; --text: $tx; --text-dim: $dim; --muted: $mut;"
+         . " --accent: $ac; --accent-ink: $ink; --accent-soft: $soft; --gold: $gold;"
+         . " --scheme: $scheme; color-scheme: $scheme; }\n";
+}
+
+/** The page background, for the iOS status bar / PWA chrome. */
+function book_theme_bg(): string
+{
+    return BOOK_THEMES[book_theme_get()][1];
+}
+
+/**
+ * The picker, handed to settings_modal_html()'s $extra slot. Each swatch previews the
+ * theme it picks — the page background with the accent as a dot on it — since a single
+ * accent circle can't tell "Midnight" from "Forest".
+ */
+function book_theme_picker_html(): string
+{
+    $now  = book_theme_get();
+    $btns = '';
+    foreach (BOOK_THEMES as $key => [$label, $bg, , , $ln, , , , , $ac]) {
+        $on = $key === $now ? ' on' : '';
+        $btns .= '<button type="button" class="bkthemebtn' . $on . '" data-theme="' . e($key) . '"'
+               . ' style="background:' . $bg . ';border-color:' . $ln . '"'
+               . ' title="' . e($label) . '" aria-label="' . e($label) . '">'
+               . '<span style="background:' . $ac . '"></span></button>';
+    }
+    return '<div class="bkthemes"><p class="setlabel">Bookshelf theme</p>'
+         . '<div class="bkthemerow">' . $btns . '</div></div>';
+}
+
 // --- Mutations (POST -> redirect -> GET), CSRF protected ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
     if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
@@ -200,6 +292,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if (!in_array($shelf, ['library', 'read', 'want'], true)) { $shelf = 'library'; }
     $listUrl  = _self_path();
     $shelfUrl = $listUrl . '?shelf=' . urlencode($shelf);
+
+    // The theme touches no book, so it answers before any of the book plumbing below.
+    // The picker posts in the background and reloads itself, the way the suite's does.
+    if ($action === 'set_book_theme') {
+        book_theme_set((string) ($_POST['theme'] ?? ''));
+        if (strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest') {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => true, 'theme' => book_theme_get()]);
+            exit;
+        }
+        header('Location: ' . $listUrl);
+        exit;
+    }
 
     // Nothing destructive happens without the confirmed second press.
     if (in_array($action, ['delete_book', 'delete_note', 'delete_bsection'], true)
@@ -516,7 +621,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
             </div>
           </div>
         </div>
-        <?= settings_modal_html() ?>
+        <?= settings_modal_html(book_theme_picker_html()) ?>
       </div>
     </header>
     <?php
@@ -527,7 +632,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Aki&#39;s Bookshelf</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(book_theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -537,22 +642,22 @@ function books_header(string $titleHtml, bool $withEdit = false): void
   <link rel="manifest" href="<?= suite_base() ?>/akisbookshelf/manifest.webmanifest">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 1.5rem 1rem; }
     .wrap { max-width: 760px; margin: 0 auto; }
     /* Same top bar as the rest of the suite: everything 32px on one line, rule under it. */
     header {
       display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-      margin-bottom: 0.5rem; padding-bottom: 0.7rem; border-bottom: 1px solid #262626;
+      margin-bottom: 0.5rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--line-soft);
     }
     .hleft { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
     .backbtn, .usermenu .who {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;
-      border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
+      border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text-dim);
       font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
-    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
-    .backbtn:hover { border-color: #888; color: #fff; }
-    .backbtn.exitedit { display: none; background: #000; border-color: #444; color: #eee; font-size: 1.2rem; }
+    .backbtn { width: 32px; background: var(--surface); font-size: 1.35rem; padding: 0; }
+    .backbtn:hover { border-color: var(--muted); color: var(--text); }
+    .backbtn.exitedit { display: none; background: var(--bg); border-color: var(--line); color: var(--text); font-size: 1.2rem; }
     body.editing .backbtn.exitedit { display: inline-flex; }
     body.editing .backbtn.goback { display: none; }
     .htitle h1 { font-size: 1.35rem; }
@@ -560,52 +665,52 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who { padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: #2a4a3d; }
+    .usermenu .who { padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: var(--line); }
     .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     /* The "⋮" sits against the username, not at the header's own gap. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
     /* Edit (a pencil) beside the username, the same pill and the same size. */
     .hedit {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;
-      padding: 0 0.6rem; background: none; border: 1px solid #333; border-radius: 999px;
-      color: #ccc; font-size: 0.95rem; font-family: inherit; line-height: 1;
+      padding: 0 0.6rem; background: none; border: 1px solid var(--line); border-radius: 999px;
+      color: var(--text-dim); font-size: 0.95rem; font-family: inherit; line-height: 1;
       cursor: pointer; flex: 0 0 auto;
     }
-    .hedit:hover { border-color: #888; color: #fff; }
+    .hedit:hover { border-color: var(--muted); color: var(--text); }
     body.editing .hedit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
     .usermenu .who:hover { border-color: var(--accent); }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
-      background: #1c1c1c; border: 1px solid #333; border-radius: 8px; min-width: 120px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px; min-width: 120px;
       box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
     }
     /* Settings and Log out, same as the rest of the suite; the button is dressed to be
        indistinguishable from the link beside it. */
     .usermenu .menu a, .usermenu .menu button {
-      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: #eee;
+      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: var(--text);
       text-decoration: none; font-size: 0.9rem; text-align: left; background: none;
       border: none; border-radius: 0; font-family: inherit; cursor: pointer;
     }
-    .usermenu .menu a:hover, .usermenu .menu button:hover { background: #2a2a2a; }
-    .usermenu .menu button { border-bottom: 1px solid #333; }
+    .usermenu .menu a:hover, .usermenu .menu button:hover { background: var(--surface-2); }
+    .usermenu .menu button { border-bottom: 1px solid var(--line); }
 
     /* Bottom main menu bar (standalone app): Library / Read / Want To Read / Data */
     body { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
     .shelfbar {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-      background: #161616; border-top: 1px solid #2a2a2a;
+      background: var(--surface); border-top: 1px solid var(--surface-2);
       padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
     }
     .shelfbar .inner {
       display: flex; gap: 3px; width: 100%; max-width: 480px; margin: 0 auto;
-      background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 10px; padding: 3px;
+      background: var(--bg); border: 1px solid var(--surface-2); border-radius: 10px; padding: 3px;
     }
     .shelfbar a {
-      flex: 1; text-align: center; padding: 0.55rem 0.3rem; text-decoration: none; color: #888;
+      flex: 1; text-align: center; padding: 0.55rem 0.3rem; text-decoration: none; color: var(--muted);
       font-size: 0.82rem; font-weight: 600; border-radius: 8px;
     }
-    .shelfbar a:hover { color: #ccc; }
-    .shelfbar a.active { background: #2a2a2a; color: var(--accent); }
+    .shelfbar a:hover { color: var(--text-dim); }
+    .shelfbar a.active { background: var(--surface-2); color: var(--accent); }
     @media (max-width: 400px) { .shelfbar a { font-size: 0.7rem; } }
 
     /* Top bar */
@@ -614,22 +719,22 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       padding: 0.5rem 1rem; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 999px; font-size: 0.95rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
-    .bar .addbook:hover { background: #52e0ac; }
+    .bar .addbook:hover { background: var(--accent); }
     .bar .editbtn {
-      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      padding: 0.5rem 1rem; background: none; border: 1px solid var(--line); color: var(--text-dim);
       border-radius: 999px; font-size: 0.95rem; cursor: pointer;
     }
-    .bar .editbtn:hover { border-color: #888; color: #fff; }
+    .bar .editbtn:hover { border-color: var(--muted); color: var(--text); }
     .listbar .sortwrap { position: relative; margin-right: auto; }   /* sort/filter off to the left */
     #sortBtn { white-space: nowrap; }
     .sortmenu {
       position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; min-width: 190px;
-      background: #1c1c1c; border: 1px solid #333; border-radius: 8px; padding: 0.3rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.3rem;
       box-shadow: 0 8px 20px rgba(0,0,0,0.5);
     }
-    .sortmenu .smhead { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: #777; padding: 0.45rem 0.6rem 0.2rem; }
-    .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: #eee; text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
-    .sortmenu a:hover { background: #2a2a2a; }
+    .sortmenu .smhead { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.45rem 0.6rem 0.2rem; }
+    .sortmenu a { display: block; padding: 0.45rem 0.6rem; color: var(--text); text-decoration: none; font-size: 0.88rem; border-radius: 6px; white-space: nowrap; }
+    .sortmenu a:hover { background: var(--surface-2); }
     .sortmenu a.on { color: var(--accent); font-weight: 700; }
     /* Set cover sits to the right of the book's details, level with the middle of the
        cover, and only while editing. */
@@ -640,182 +745,184 @@ function books_header(string $titleHtml, bool $withEdit = false): void
       display: flex; align-items: center; height: calc(84px * 3 / 2);
     }
     .bh-cover-edit .editbtn {
-      padding: 0.5rem 1rem; background: none; border: 1px solid #333; color: #ccc;
+      padding: 0.5rem 1rem; background: none; border: 1px solid var(--line); color: var(--text-dim);
       border-radius: 999px; font-size: 0.95rem; cursor: pointer; font-family: inherit; white-space: nowrap;
     }
-    .bh-cover-edit .editbtn:hover { border-color: #888; color: #fff; }
+    .bh-cover-edit .editbtn:hover { border-color: var(--muted); color: var(--text); }
     .setcoverform { display: flex; gap: 0.5rem; margin: -0.6rem 0 1.25rem; }
     .setcoverform[hidden] { display: none; }   /* make the hidden attribute win over display:flex */
-    .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 16px; }
-    .setcoverform input[type=url]:focus { outline: none; border-color: #888; }
+    .setcoverform input[type=url] { flex: 1; min-width: 0; padding: 0.5rem 0.7rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: 16px; }
+    .setcoverform input[type=url]:focus { outline: none; border-color: var(--muted); }
 
     /* Book cards grid */
     .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
     .bookcard { position: relative; }
-    .booklink { display: flex; flex-direction: column; text-decoration: none; color: #eee; }
+    .booklink { display: flex; flex-direction: column; text-decoration: none; color: var(--text); }
     .coverbox {
       position: relative; width: 100%; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden;
-      background: #1b1b1b; border: 1px solid #2a2a2a; display: flex; align-items: center; justify-content: center;
+      background: var(--surface); border: 1px solid var(--surface-2); display: flex; align-items: center; justify-content: center;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     .coverbox .ph {
       position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      padding: 0.6rem; text-align: center; font-size: 0.8rem; color: #888; font-weight: 600;
+      padding: 0.6rem; text-align: center; font-size: 0.8rem; color: var(--muted); font-weight: 600;
     }
     .coverbox img { position: relative; width: 100%; height: 100%; object-fit: cover; }
     .booklink .btitle { margin-top: 0.5rem; font-size: 0.92rem; font-weight: 600; line-height: 1.25; }
-    .booklink .bauthor { margin-top: 0.15rem; font-size: 0.78rem; color: #999; }
+    .booklink .bauthor { margin-top: 0.15rem; font-size: 0.78rem; color: var(--muted); }
     .cardmeta { display: flex; align-items: center; justify-content: space-between; margin-top: 0.35rem; gap: 0.4rem; }
 
     /* Stars */
     .stars { font-size: 0.95rem; letter-spacing: 1px; line-height: 1; white-space: nowrap; }
-    .stars .star { color: #3a3a3a; }
-    .stars .star.on { color: #f0b429; }
+    /* The unfilled star reads as an outline, so it follows the rule colour rather than a
+       surface — on a cream theme a surface-coloured star is invisible against the page. */
+    .stars .star { color: var(--line); }
+    .stars .star.on { color: var(--gold); }
     .stars.editable { font-size: 1.5rem; letter-spacing: 3px; }
     .stars.editable .star { cursor: pointer; }
-    .stars.editable .star:hover { color: #f7d879; }
+    .stars.editable .star:hover { color: var(--gold); }
     /* Card stars: read-only until Edit mode, then tappable to set the rating (= read). */
     .stars.cardrate .star { cursor: default; }
-    body.editing .stars.cardrate { font-size: 1.15rem; outline: 1px dashed #3a3a3a; border-radius: 5px; padding: 2px 4px; }
+    body.editing .stars.cardrate { font-size: 1.15rem; outline: 1px dashed var(--surface-2); border-radius: 5px; padding: 2px 4px; }
     body.editing .stars.cardrate .star { cursor: pointer; }
-    body.editing .stars.cardrate .star:hover { color: #f7d879; }
+    body.editing .stars.cardrate .star:hover { color: var(--gold); }
 
     /* Read indicator (cards = disabled) */
-    .readchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: #888; }
+    .readchk { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--muted); }
     .readchk input { width: 15px; height: 15px; accent-color: var(--accent); }
 
     .bookcard .bdel {
       position: absolute; top: 6px; right: 6px; display: none; z-index: 2;
-      background: rgba(0,0,0,0.7); border: 1px solid #666; color: #fff; border-radius: 6px;
+      background: rgba(0,0,0,0.7); border: 1px solid var(--muted); color: var(--text); border-radius: 6px;
       width: 26px; height: 26px; font-size: 1rem; line-height: 1; cursor: pointer;
     }
     .bookcard .bdel:hover { border-color: #f66; color: #f66; }
     body.editing .bookcard .bdel { display: block; }
 
-    .empty { color: #666; text-align: center; padding: 2.5rem 0; }
+    .empty { color: var(--muted); text-align: center; padding: 2.5rem 0; }
     .empty strong { color: var(--accent); }
 
     /* Data tab */
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
-    .stat { display: block; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1.4rem 1rem; text-align: center; text-decoration: none; color: inherit; cursor: pointer; }
+    .stat { display: block; background: var(--surface); border: 1px solid var(--surface-2); border-radius: 12px; padding: 1.4rem 1rem; text-align: center; text-decoration: none; color: inherit; cursor: pointer; }
     a.stat:hover { border-color: var(--accent); }
     .stat .num { font-size: 2.4rem; font-weight: 800; color: var(--accent); line-height: 1; }
-    .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: #999; }
-    .stat .lbl span { display: block; font-size: 0.72rem; color: #666; margin-top: 0.15rem; }
+    .stat .lbl { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+    .stat .lbl span { display: block; font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
 
     /* Folders (Goodreads shelves) inside Library */
     .folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
     .foldertile {
       display: flex; flex-direction: column; justify-content: center; gap: 0.2rem;
-      aspect-ratio: 3 / 2; padding: 0.9rem; text-decoration: none; color: #eee;
-      background: #17140f; border: 1px solid #3a3320; border-radius: 10px;
+      aspect-ratio: 3 / 2; padding: 0.9rem; text-decoration: none; color: var(--text);
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     }
-    .foldertile:hover { border-color: #f0b429; }
+    .foldertile:hover { border-color: var(--gold); }
     .foldertile .ficon { font-size: 1.6rem; }
     .foldertile .fname { font-weight: 700; font-size: 0.95rem; word-break: break-word; }
-    .foldertile .fcount { font-size: 0.75rem; color: #999; }
+    .foldertile .fcount { font-size: 0.75rem; color: var(--muted); }
     .folderback { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; }
     .folderback a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
-    .folderback .folder-h { font-weight: 700; color: #f0b429; }
+    .folderback .folder-h { font-weight: 700; color: var(--gold); }
 
     /* Search modal */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 60; display: none; align-items: flex-start; justify-content: center; padding: 1.2rem 1rem; }
     .modal-backdrop.open { display: flex; }
-    .modal { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; width: 100%; max-width: 520px; margin-top: 4vh; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+    .modal { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 520px; margin-top: 4vh; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
     .modal .mhead { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1rem 0.75rem; }
     .modal .mhead h2 { font-size: 1.05rem; flex: 1; }
-    .modal .mhead .mclose { background: none; border: none; color: #999; font-size: 1.4rem; line-height: 1; cursor: pointer; }
-    .modal .mhead .mclose:hover { color: #fff; }
+    .modal .mhead .mclose { background: none; border: none; color: var(--muted); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+    .modal .mhead .mclose:hover { color: var(--text); }
     .modal .msearch { padding: 0 1rem 0.75rem; }
-    .modal .msearch input { width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a; border-radius: 8px; color: #eee; font-size: 1rem; }
+    .modal .msearch input { width: 100%; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--surface-2); border-radius: 8px; color: var(--text); font-size: 1rem; }
     .modal .msearch input:focus { outline: none; border-color: var(--accent); }
     .results { overflow-y: auto; padding: 0 0.5rem 0.5rem; }
-    .results .hint, .results .loading { color: #777; font-size: 0.9rem; text-align: center; padding: 1.5rem 0; }
+    .results .hint, .results .loading { color: var(--muted); font-size: 0.9rem; text-align: center; padding: 1.5rem 0; }
     .rrow { display: flex; gap: 0.75rem; align-items: center; padding: 0.5rem; border-radius: 8px; cursor: pointer; }
-    .rrow:hover { background: #232323; }
-    .rrow .rcover { width: 44px; height: 66px; flex: 0 0 auto; border-radius: 4px; object-fit: cover; background: #262626; border: 1px solid #333; }
+    .rrow:hover { background: var(--surface-2); }
+    .rrow .rcover { width: 44px; height: 66px; flex: 0 0 auto; border-radius: 4px; object-fit: cover; background: var(--line-soft); border: 1px solid var(--line); }
     .rrow .rmeta { flex: 1; min-width: 0; }
     .rrow .rtitle { font-size: 0.95rem; font-weight: 600; }
-    .rrow .rauthor { font-size: 0.8rem; color: #999; margin-top: 0.1rem; }
-    .rrow .radd { flex: 0 0 auto; background: #14332a; color: var(--accent); border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 700; }
+    .rrow .rauthor { font-size: 0.8rem; color: var(--muted); margin-top: 0.1rem; }
+    .rrow .radd { flex: 0 0 auto; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 700; }
 
     /* ---- Book page (notes) ---- */
     .bookhead { display: flex; gap: 0.9rem; align-items: flex-start; margin-bottom: 1.25rem; }
     .bookhead .coverbox { width: 84px; flex: 0 0 auto; }
     .bookhead .bh-title { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
-    .bookhead .bh-author { font-size: 0.85rem; color: #999; margin-top: 0.2rem; }
-    .bookhead .bh-dates { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.35rem; font-size: 0.72rem; color: #777; }
+    .bookhead .bh-author { font-size: 0.85rem; color: var(--muted); margin-top: 0.2rem; }
+    .bookhead .bh-dates { display: flex; flex-wrap: wrap; gap: 0.15rem 0.9rem; margin-top: 0.35rem; font-size: 0.72rem; color: var(--muted); }
     .bookhead .bh-stars { margin-top: 0.5rem; }
     .bookhead .bh-flags { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.6rem; }
     .bookhead .bh-flags .flagrow { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .bookhead .chk { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: #ccc; cursor: pointer; }
+    .bookhead .chk { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: var(--text-dim); cursor: pointer; }
     .bookhead .chk input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
-    .bookhead .flaghint { font-size: 0.72rem; color: #666; }
+    .bookhead .flaghint { font-size: 0.72rem; color: var(--muted); }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
-    ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; }
-    .noteitem { flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem; text-decoration: none; color: #eee; }
-    .noteitem:hover { background: #171717; }
+    ul.nlist li { border-bottom: 1px solid var(--surface-2); display: flex; align-items: center; }
+    .noteitem { flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem; text-decoration: none; color: var(--text); }
+    .noteitem:hover { background: var(--surface); }
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
-    .noteitem .nchev { color: #555; font-size: 1.1rem; }
-    .ndel .del { display: none; background: none; border: 1px solid #444; color: #ccc; cursor: pointer; margin-left: 0.5rem; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; }
+    .noteitem .nchev { color: var(--muted); font-size: 1.1rem; }
+    .ndel .del { display: none; background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer; margin-left: 0.5rem; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; }
     body.editing .ndel .del { display: inline-block; }
     .ndel .del:hover { border-color: #f66; color: #f66; }
 
     /* Drag-to-reorder notes (edit mode) */
     /* Hidden, not gone: taking the handle out of the flow shifted every title sideways. */
-    .nlist .drag-handle { visibility: hidden; flex: 0 0 auto; width: 1rem; display: inline-flex; align-items: center; justify-content: center; color: #666; font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none; }
+    .nlist .drag-handle { visibility: hidden; flex: 0 0 auto; width: 1rem; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none; }
     body.editing .nlist .drag-handle { visibility: visible; }
     .nlist .drag-handle:active { cursor: grabbing; color: #8b6ef0; }
-    .nlist li.dragging { background: #1b1726; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
-    body.editing #bnotes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
+    .nlist li.dragging { background: var(--surface-2); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    body.editing #bnotes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed var(--line); border-radius: 6px; margin: 0.3rem 0; }
     /* Hold-to-drag: stop iOS text selection / callout on the rows while editing. */
     body.editing #bnotes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
     /* Chapters (purple) */
     .chaptersbtn {
-      display: inline-flex; align-items: center; gap: 0.45rem; background: #8b6ef0; color: #fff;
+      display: inline-flex; align-items: center; gap: 0.45rem; background: #8b6ef0; color: var(--text);
       text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 0.55rem 1rem;
       border-radius: 8px; margin-bottom: 1rem;
     }
     .chaptersbtn:hover { background: #a288f5; }
     .chaptersbtn .chev { font-size: 1.15rem; line-height: 1; }
-    .addchapter { background: #8b6ef0; color: #fff; border: none; border-radius: 999px; padding: 0.5rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+    .addchapter { background: #8b6ef0; color: var(--text); border: none; border-radius: 999px; padding: 0.5rem 1rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
     .addchapter:hover { background: #a288f5; }
     .chapters-h { color: #b9a7f5 !important; }
 
     /* Book-note sections */
     .newsection-form { margin-bottom: 0.75rem; }
-    .newsection-form input { width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: #1a1a1a; border: 1px dashed #5a4a2a; border-radius: 999px; color: #f0b429; font-size: 16px; }
-    .newsection-form input::placeholder { color: #f0b429; opacity: 0.85; }
-    .newsection-form input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .newsection-form input { width: 190px; max-width: 100%; padding: 0.35rem 0.8rem; background: var(--surface); border: 1px dashed var(--line); border-radius: 999px; color: var(--gold); font-size: 16px; }
+    .newsection-form input::placeholder { color: var(--gold); opacity: 0.85; }
+    .newsection-form input:focus { outline: none; border-style: solid; border-color: var(--gold); }
     /* Same side padding as a note row, so the section's X sits under the rows' Xs. */
     .section-head { display: flex; align-items: center; gap: 0.5rem; margin: 1.4rem 0 0.3rem; padding: 0 0.25rem; }
     .section-head form { margin-left: auto; }
-    .section-title { font-weight: 700; font-size: 1.15rem; color: #f0b429; }
+    .section-title { font-weight: 700; font-size: 1.15rem; color: var(--gold); }
     /* A section can't be dragged here, but it keeps the handle's slot so its name
        starts level with the note titles under it. */
     .section-head .sec-handle { flex: 0 0 auto; width: 1rem; margin-right: -0.5rem; }
-    .section-del { display: none; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; }
+    .section-del { display: none; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; }
     body.editing .section-del { display: inline-block; }
     .section-del:hover { border-color: #f66; color: #f66; }
-    .editor select.secsel { padding: 0.5rem 0.6rem; background: #1a1a1a; border: 1px solid #4a3f2a; border-radius: 6px; color: #f0b429; font-size: 0.9rem; color-scheme: dark; cursor: pointer; align-self: flex-start; }
-    .editor select.secsel:focus { outline: none; border-color: #f0b429; }
+    .editor select.secsel { padding: 0.5rem 0.6rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--gold); font-size: 0.9rem; color-scheme: var(--scheme); cursor: pointer; align-self: flex-start; }
+    .editor select.secsel:focus { outline: none; border-color: var(--gold); }
 
     /* ---- Note editor ---- */
     .editor { display: flex; flex-direction: column; gap: 0.6rem; }
-    .editor input[type=text] { padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-size: 1.05rem; font-weight: 600; }
-    .editor input:focus, .editor textarea:focus { outline: none; border-color: #888; }
-    .editor textarea { width: 100%; min-height: 320px; resize: vertical; padding: 0.8rem; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.95rem; line-height: 1.5; }
+    .editor input[type=text] { padding: 0.6rem 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: 1.05rem; font-weight: 600; }
+    .editor input:focus, .editor textarea:focus { outline: none; border-color: var(--muted); }
+    .editor textarea { width: 100%; min-height: 320px; resize: vertical; padding: 0.8rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.95rem; line-height: 1.5; }
     .editor .actions { display: flex; align-items: center; gap: 0.75rem; }
-    .editor .meta { font-size: 0.72rem; color: #666; }
-    .editor button.del { margin-left: auto; background: none; border: none; color: #666; font-size: 0.8rem; cursor: pointer; }
+    .editor .meta { font-size: 0.72rem; color: var(--muted); }
+    .editor button.del { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
     .editor button.del:hover { color: #f66; }
 
     /* One-time login greeting */
     .lovebanner {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
-      z-index: 200; background: linear-gradient(135deg, #d6336c, #8b6ef0); color: #fff;
+      z-index: 200; background: linear-gradient(135deg, #d6336c, #8b6ef0); color: var(--text);
       font-weight: 700; font-size: 1.25rem; padding: 1rem 1.6rem; border-radius: 999px;
       box-shadow: 0 12px 32px rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
       white-space: nowrap; pointer-events: none; text-align: center;
@@ -823,6 +930,35 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     .lovebanner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 <?= settings_modal_styles() ?>
 <?= theme_css() ?>
+<?= book_theme_css() ?>
+    /* The suite's Theme row only swaps an accent, and this app's own themes set --accent
+       themselves — leaving both on screen would offer a control that appears to do
+       nothing here. Hidden in this app only; every other app keeps it. */
+    .setmodal .setthemes { display: none; }
+    .setmodal .bkthemes { margin-top: 1.1rem; }
+    .setmodal .bkthemerow { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    /* Each swatch is the theme's own page with its accent as a dot, because eight
+       accent-only circles can't tell Midnight from Forest. */
+    .setmodal .bkthemebtn {
+      width: 30px; height: 30px; border-radius: 50%; border: 1px solid;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; padding: 0; outline: 2px solid transparent; outline-offset: 1px;
+    }
+    .setmodal .bkthemebtn span { width: 11px; height: 11px; border-radius: 50%; display: block; }
+    .setmodal .bkthemebtn.on { outline-color: var(--text); }
+    /* The settings window is the suite's shared one (lib/chrome.php) and is painted for a
+       dark app. Repainting it there would change every app, so the bookshelf re-points
+       just its surfaces at the theme here — otherwise a cream theme opens a black window
+       over a light page. Same selectors, this app only. */
+    .setmodal { background: var(--surface); border-color: var(--line); color: var(--text); }
+    .setmodal h2 { color: var(--text); }
+    .setmodal .setwho, .setmodal .setlabel { color: var(--muted); }
+    .setmodal label { color: var(--text-dim); }
+    .setmodal input[type=password] { background: var(--surface-2); border-color: var(--line); color: var(--text); }
+    .setmodal input[type=password]:focus { border-color: var(--muted); }
+    .setmodal .setsave:hover { background: var(--accent); }
+    .setmodal .setpwtoggle, .setmodal .setact { border-color: var(--line); color: var(--text-dim); }
+    .setmodal .setpwtoggle:hover, .setmodal .setact:hover { border-color: var(--muted); color: var(--text); }
 <?= confirm_delete_styles() ?>
 <?= rt_styles() ?>
   </style>
@@ -1444,6 +1580,22 @@ function books_header(string $titleHtml, bool $withEdit = false): void
   })();
 </script>
 <?= settings_modal_script() ?>
+<script>
+  // The bookshelf theme picker, in the settings window's $extra slot. Posts in the
+  // background then reloads, the same shape as the suite's theme buttons — a theme
+  // changes rules all over the page, so re-rendering is simpler than repainting live.
+  (function () {
+    var csrf = <?= json_encode($_SESSION['csrf'] ?? '') ?>;
+    document.querySelectorAll('.bkthemebtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var body = new URLSearchParams({ csrf: csrf, action: 'set_book_theme', theme: b.dataset.theme });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
+          .then(function () { location.reload(); })
+          .catch(function () { location.reload(); });
+      });
+    });
+  })();
+</script>
 <?= confirm_delete_script() ?>
 <?= rt_script() ?>
 </body>

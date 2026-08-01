@@ -22,10 +22,18 @@ return [
     'data_dir' => __DIR__ . '/../data',
 
     // URL prefix this instance's links are built under. '' is production (served at
-    // the site root). The /test/ sandbox mirror sets this to '/test' in its own
-    // lib-test/config.php, so every cross-app link (tab bar, login landing, widget)
-    // stays inside /test/. Leave it '' here. See deploy.sh's test/promote modes.
+    // the site root). The /test/ and /dev/ sandboxes set this to '/test' / '/dev' in
+    // their own lib-test/ and lib-dev/ config.php, so every cross-app link (tab bar,
+    // login landing, widget) stays inside that instance. Leave it '' here. See
+    // deploy.sh's test/dev/promote modes.
     'base' => '',
+
+    // The session cookie's name. All three instances share one domain, so a cookie at
+    // path '/' reaches every one of them — the *name* is what keeps their logins apart,
+    // and being signed into production must not sign you into /test/ or /dev/. Leave
+    // this unset and it's derived from 'base' (SCSESS, SCSESS_TEST, SCSESS_DEV), which
+    // is already distinct per instance; set it only to pin a particular name.
+    // 'session_name' => 'SCSESS',
 
     // --- Outgoing mail (the sign-up verification code) ---
     // Without smtp_host the code goes out through PHP's mail(), which a shared host

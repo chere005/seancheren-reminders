@@ -108,61 +108,72 @@ push_instance() {   # $1 = public dest   $2 = lib dest   $3 = human label
   fi
 }
 
-# The test instance needs its own config.php in lib-test. It carries NO secrets of its
-# own: it requires production's config.php for the real accounts/secrets, then overrides
-# only where data lives (data-test) and what prefix links are built under (/test). So we
-# create it once, on the server, if it is missing. Delete it to reset the test instance.
-ensure_test_config() {
-  [[ -n "$DRY" ]] && { echo "==> [TEST] would ensure /home/protected/lib-test/config.php exists"; return 0; }
-  echo "==> [TEST] ensuring lib-test/config.php exists…"
-  $SSH "$HOST" '
-    mkdir -p /home/protected/lib-test
-    if [ ! -f /home/protected/lib-test/config.php ]; then
-      {
-        echo "<?php"
-        echo "// Test-instance config for the /test/ sandbox mirror. Inherits the real"
-        echo "// accounts/secrets from production, then isolates storage and prefixes"
-        echo "// links. Not deployed; created once by deploy.sh. Delete to reset test."
-        echo "\$c = require \"/home/protected/lib/config.php\";"
-        echo "\$c[\"data_dir\"] = \"/home/protected/data-test\";"
-        echo "\$c[\"base\"]     = \"/test\";"
-        echo "return \$c;"
-      } > /home/protected/lib-test/config.php
-      chmod a+r /home/protected/lib-test/config.php
-      echo "    created /home/protected/lib-test/config.php"
-    else
-      echo "    already present"
-    fi
-  '
+# A sandbox instance gets a STANDALONE config.php — it deliberately does NOT read
+# production's. That is the whole point of the separation: its accounts, its session
+# cookie and its encryption key are its own, so signing into /test/ or /dev/ has nothing
+# to do with signing into the live site, and a sandbox account can't reach real data.
+#
+# Splitting the configs cannot make existing sandbox data unreadable: no config here sets
+# data_key, so every instance already generates its own .datakey inside its own data dir.
+#
+# A standalone instance starts with no accounts, which would leave no way in — so one
+# bootstrap login is generated on the server and printed ONCE. It is stored in plain text
+# in that config, the way every account in this suite is. Delete the config and re-run to
+# get a fresh one. An older config that still inherits production is reported, not
+# rewritten, since replacing it changes who can log in.
+ensure_instance_config() {   # $1 = instance name (test|dev)   $2 = link prefix (/test|/dev)
+  local name="$1" base="$2" up lib data
+  up=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')
+  lib="/home/protected/lib-$name"
+  data="/home/protected/data-$name"
+  if [[ -n "$DRY" ]]; then
+    echo "==> [$up] would ensure $lib/config.php exists (standalone: own accounts, own session cookie)"
+    return 0
+  fi
+  echo "==> [$up] ensuring $lib/config.php exists…"
+  $SSH "$HOST" sh -s -- "$name" "$up" "$base" "$lib" "$data" <<'REMOTE'
+set -e
+name="$1"; up="$2"; base="$3"; lib="$4"; data="$5"
+mkdir -p "$lib"
+if [ -f "$lib/config.php" ]; then
+  if grep -q '/home/protected/lib/config.php' "$lib/config.php"; then
+    echo "    !! $lib/config.php still INHERITS production's config, so this instance"
+    echo "    !! shares production's accounts and secrets."
+    echo "    !! To give it its own login instead:   rm $lib/config.php"
+    echo "    !! then re-run this deploy. Safe: the instance has its own .datakey, so"
+    echo "    !! its existing data stays readable."
+  else
+    echo "    already present (standalone)"
+  fi
+  exit 0
+fi
+pw=$(php -r 'echo bin2hex(random_bytes(5));')
+cat > "$lib/config.php" <<PHPCONF
+<?php
+// $up sandbox config — STANDALONE. This instance deliberately does NOT read
+// production's config: its accounts, its session cookie name and its encryption key are
+// its own, so signing in here is unrelated to signing in on the live site or on the
+// other sandbox. Not deployed; created once by deploy.sh. Delete it to reset this
+// instance (its data keeps its own .datakey, so the data stays readable either way).
+return [
+    'users'        => ['$name' => '$pw'],
+    'data_dir'     => '$data',
+    'base'         => '$base',
+    'session_name' => 'SCSESS_$up',
+    'timezone'     => 'America/Chicago',
+];
+PHPCONF
+chmod a+r "$lib/config.php"
+echo "    created $lib/config.php"
+echo "    ----------------------------------------------------------------"
+echo "    LOGIN for $base/    user: $name    password: $pw"
+echo "    Shown once. Delete that config and re-run to generate a new one."
+echo "    ----------------------------------------------------------------"
+REMOTE
 }
 
-# DEV is a second, fixed sandbox slot alongside TEST — same idea (config.php inherits
-# production's real accounts/secrets, then overrides just data_dir and base), its own
-# isolated data dir, created once and left alone after that. It is deliberately separate
-# from TEST so a half-done feature here can't clobber TEST's reviewed, promote-ready state.
-ensure_dev_config() {
-  [[ -n "$DRY" ]] && { echo "==> [DEV] would ensure /home/protected/lib-dev/config.php exists"; return 0; }
-  echo "==> [DEV] ensuring lib-dev/config.php exists…"
-  $SSH "$HOST" '
-    mkdir -p /home/protected/lib-dev
-    if [ ! -f /home/protected/lib-dev/config.php ]; then
-      {
-        echo "<?php"
-        echo "// DEV sandbox config — a second, fixed slot alongside lib-test. Inherits the"
-        echo "// real accounts/secrets from production, then isolates storage and prefixes"
-        echo "// links. Not deployed; created once by deploy.sh. Delete to reset this instance."
-        echo "\$c = require \"/home/protected/lib/config.php\";"
-        echo "\$c[\"data_dir\"] = \"/home/protected/data-dev\";"
-        echo "\$c[\"base\"]     = \"/dev\";"
-        echo "return \$c;"
-      } > /home/protected/lib-dev/config.php
-      chmod a+r /home/protected/lib-dev/config.php
-      echo "    created /home/protected/lib-dev/config.php"
-    else
-      echo "    already present"
-    fi
-  '
-}
+ensure_test_config() { ensure_instance_config test /test; }
+ensure_dev_config()  { ensure_instance_config dev  /dev; }
 
 case "$MODE" in
   test)

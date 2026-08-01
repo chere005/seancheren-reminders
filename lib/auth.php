@@ -212,6 +212,41 @@ function token_user(string $dir, string $token): ?string
 }
 
 /**
+ * This instance's session cookie name.
+ *
+ * Production, /test/ and /dev/ are three instances on ONE domain, so the cookie path
+ * cannot separate them: a cookie set at '/' is sent to every path under it, including
+ * /test/ and /dev/. The only thing that reliably keeps three logins apart on one host
+ * is a distinct cookie *name*, so each instance gets one — derived from its link
+ * prefix, so a new instance is separate for free. Config 'session_name' overrides it.
+ */
+function session_cookie_name(array $cfg): string
+{
+    // Stripped to characters that are safe in a Set-Cookie name, so a mistyped config
+    // can't break out of the header. PHP refuses an all-digit session name, so that
+    // falls back too rather than blowing up at session_start().
+    $n = preg_replace('/[^A-Za-z0-9_]/', '', (string) ($cfg['session_name'] ?? ''));
+    if ($n !== '' && !ctype_digit($n)) { return $n; }
+    $b = preg_replace('/[^A-Za-z0-9]/', '', trim((string) ($cfg['base'] ?? ''), '/'));
+    return 'SCSESS' . ($b === '' ? '' : '_' . strtoupper($b));
+}
+
+/**
+ * Where this instance keeps its session files — its own directory inside its own data
+ * dir, so one instance's sessions are not sitting in a pile with another's. Returns
+ * null if it can't be made, in which case the default save path is left alone: a
+ * sandbox that can't write here should still log in, not fail shut.
+ */
+function session_store_dir(array $cfg): ?string
+{
+    $d = rtrim((string) ($cfg['data_dir'] ?? ''), '/');
+    if ($d === '') { return null; }
+    $s = $d . '/sessions';
+    if (!is_dir($s) && !@mkdir($s, 0700, true)) { return null; }
+    return is_dir($s) && is_writable($s) ? $s : null;
+}
+
+/**
  * Start the session so it lasts until the user actually logs out. PHP's default is a
  * cookie that dies with the browser and a server-side GC after ~24 minutes idle — on an
  * iOS home-screen app that reads as "it logged me out again". Both halves have to move
@@ -221,12 +256,23 @@ function token_user(string $dir, string $token): ?string
 function session_boot(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) { return; }
+    $cfg  = app_config();
     $year = 365 * 24 * 60 * 60;
+    // Each instance keeps its own sessions: its own cookie name (the part that actually
+    // separates them), its own cookie path, and its own session files. Being signed into
+    // production must not sign you into /test/ or /dev/, or the sandboxes are only a
+    // sandbox for data and not for who you are.
+    session_name(session_cookie_name($cfg));
+    $store = session_store_dir($cfg);
+    if ($store !== null) { @session_save_path($store); }
+    // '/dev' rather than '/' keeps the sandbox's cookie out of production's requests.
+    // Cookie-path matching is on '/' boundaries, so '/dev' covers /dev/… and not /devil.
+    $path = suite_base() === '' ? '/' : suite_base();
     @ini_set('session.gc_maxlifetime', (string) $year);
     @ini_set('session.cookie_lifetime', (string) $year);
     session_set_cookie_params([
         'lifetime' => $year,
-        'path'     => '/',
+        'path'     => $path,
         'secure'   => !empty($_SERVER['HTTPS']),
         'httponly' => true,
         'samesite' => 'Lax',
@@ -237,7 +283,7 @@ function session_boot(): void
     if (!empty($_SESSION['auth']) && !headers_sent()) {
         setcookie(session_name(), session_id(), [
             'expires'  => time() + $year,
-            'path'     => '/',
+            'path'     => $path,
             'secure'   => !empty($_SERVER['HTTPS']),
             'httponly' => true,
             'samesite' => 'Lax',
