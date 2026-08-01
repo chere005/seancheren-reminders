@@ -824,6 +824,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     body.editing .sec-handle { display: inline-flex; }
     body.editing .section-head .sec-collapse { display: none; }   /* handle takes its slot */
+    /* A section header is a drag target in edit mode: don't let a hold select its text or
+       fire the iOS callout, so a long-press picks the section up cleanly. */
+    body.editing .section-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     .sec-handle.blank { cursor: default; }
     .sec-handle:active { cursor: grabbing; color: var(--accent); }
     .section-group.dragging { opacity: 0.5; }
@@ -1247,11 +1250,17 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     root.addEventListener('pointerdown', (e) => {
       if (!document.body.classList.contains('editing')) return;
       pid = e.pointerId; sx = e.clientX; sy = e.clientY;
-      // A whole-section drag starts on its handle; the catch-all's is .blank, so skip it.
-      const sh = e.target.closest('.sec-handle:not(.blank)');
-      if (sh) {
-        const grp = sh.closest('.section-group[data-section]');
-        if (grp && grp.dataset.section) { e.preventDefault(); beginSec(grp); }
+      // Section drag: the ☰ handle grabs at once; a long-press anywhere on a named
+      // section's header also lifts the whole section — a far bigger target than the ☰ —
+      // except on its rename field, +, delete or chevron, which stay tappable.
+      const onHandle = e.target.closest('.sec-handle:not(.blank)');
+      const head = onHandle ? null : e.target.closest('.section-head');
+      const secGrp = (onHandle || head) && (onHandle || head).closest('.section-group[data-section]');
+      if (secGrp && secGrp.dataset.section) {
+        if (onHandle) { e.preventDefault(); beginSec(secGrp); return; }
+        if (!e.target.closest('input, textarea, button, a, .sec-add, .section-del, .sec-collapse')) {
+          pressTimer = setTimeout(() => { pressTimer = null; beginSec(secGrp); }, 250);
+        }
         return;
       }
       const li = e.target.closest('li[data-id]'); if (!li || !root.contains(li)) return;
