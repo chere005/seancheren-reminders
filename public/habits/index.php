@@ -35,9 +35,18 @@ function habit_section_color(array $s, int $i): string
     return in_array($c, $pal, true) ? $c : $pal[$i % count($pal)];
 }
 
-// Render one habit's name bubble + 7 day cells into the grid.
-function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0): void { ?>
-        <div class="hname" data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>">
+/**
+ * Render one habit's name bubble + its day cells into the grid.
+ *
+ * $color is the colour of the section the habit sits in, carried into the row as a --hc
+ * custom property: the name bubble takes it as a wash and a ticked square fills with it,
+ * so a section reads as one band down the grid rather than as a heading you have to keep
+ * glancing back up at. Ungrouped habits pass '' and fall back to the app's own violet.
+ */
+function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0,
+                          string $color = ''): void {
+    $hc = $color !== '' ? ' style="--hc:' . e($color) . '"' : ''; ?>
+        <div class="hname"<?= $hc ?> data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>">
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <span class="hlabel"><?= e($h['name'] ?? '') ?></span>
           <form method="post" action="" style="display:inline">
@@ -48,7 +57,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf, in
           </form>
         </div>
         <?php foreach ($days as $i => $d): $done = !empty($h['done'][$d]); ?>
-          <button class="cell <?= $i < $extra ? 'wide-only' : '' ?> <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"
+          <button class="cell <?= $i < $extra ? 'wide-only' : '' ?> <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"<?= $hc ?>
                   data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
         <?php endforeach;
 }
@@ -423,11 +432,16 @@ foreach ($habitItems as $h) {
     /* The name bubble hugs the text and centres itself in the column rather than filling
        it, so it reads as a label on a pill, not a big empty input. The name centres, wraps
        to at most two lines and hyphenates a word too long to fit. */
+    /* --hc is the section's colour, set inline per row. Everything below falls back to
+       the app's violet when a habit is in no section, so an ungrouped list looks exactly
+       as it did. color-mix() is avoided here for the same reason as the folder tint. */
     .hname {
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
       padding: 0.3rem 0.6rem; min-height: 28px; display: flex; align-items: center;
       gap: 0.35rem; justify-content: center; justify-self: center; width: fit-content; max-width: 100%;
     }
+    .hname[style*="--hc"] { border-color: var(--hc); background: #1b1726; }
+    .hname[style*="--hc"] .hlabel { color: var(--hc); }
     .hname .hlabel {
       color: #d9d2f0; font-size: 1.02rem; text-align: center; line-height: 1.15;
       overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
@@ -456,6 +470,9 @@ foreach ($habitItems as $h) {
     .cell.today { border: 2px solid var(--accent); background: var(--accent-soft); }
     .cell.ahead { opacity: 0.55; }         /* tomorrow reads as not-yet */
     .cell.done { background: var(--accent); border-color: var(--accent); }
+    /* A ticked square takes its section's colour; today's ring stays the accent, so the
+       one thing you look for on this grid is never repainted by a section. */
+    .cell.done[style*="--hc"] { background: var(--hc); border-color: var(--hc); }
     /* A ticked cell is already accent-filled, so today's ring has to be the light one. */
     .cell.done.today { border-color: #eafff6; }
     .cell:active { transform: scale(0.94); }
@@ -600,6 +617,7 @@ foreach ($habitItems as $h) {
         </div>
       <?php endforeach; ?>
 
+      <?php // Ungrouped habits belong to no section, so they keep the app's own colour. ?>
       <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
 
       <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
@@ -629,7 +647,7 @@ foreach ($habitItems as $h) {
             <button class="del needs-confirm" type="submit" title="Delete section">&times;</button>
           </form>
         </div>
-        <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
+        <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays, $scol); ?>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
