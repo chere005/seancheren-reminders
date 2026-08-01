@@ -1,7 +1,16 @@
 <?php
 // Quick-add bar — opened by the iOS widget. Add a reminder or event for today, fast.
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
+// the test instance stays isolated from production's code, config and data. Cross-app
+// links carry the same /test prefix via suite_base(); _self_path() redirects already
+// stay put. Keep this preamble identical when adding a page.
+$__test = strpos(__DIR__, '/test/') !== false
+       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
 $__libDir = null;
-foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+$__cands  = $__test
+    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
@@ -128,7 +137,7 @@ if ($tickId !== '') {
         <a class="qb evt" href="<?= e(strtok($_SERVER['REQUEST_URI'], '?')) ?>"><span>&#8592;</span><span>Not yet</span></a>
       </div>
     </form>
-    <a class="open" href="/calendar/">Open calendar &rsaquo;</a>
+    <a class="open" href="<?= suite_base() ?>/calendar/">Open calendar &rsaquo;</a>
   </div>
   </body></html>
   <?php exit; endif; ?>
@@ -143,7 +152,7 @@ if ($tickId !== '') {
     </div>
   </form>
   <p class="hint">Times like “2pm” become the event’s time. Added for today.</p>
-  <a class="open" href="/calendar/">Open calendar &rsaquo;</a>
+  <a class="open" href="<?= suite_base() ?>/calendar/">Open calendar &rsaquo;</a>
 </div>
 </body>
 </html>

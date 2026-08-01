@@ -9,8 +9,17 @@
  * by deleting that file). Anyone with the token URL can read that user's upcoming items.
  */
 
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
+// the test instance stays isolated from production's code, config and data. Cross-app
+// links carry the same /test prefix via suite_base(); _self_path() redirects already
+// stay put. Keep this preamble identical when adding a page.
+$__test = strpos(__DIR__, '/test/') !== false
+       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
 $__libDir = null;
-foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+$__cands  = $__test
+    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
@@ -335,7 +344,7 @@ JS);
 </head>
 <body>
 <div class="wrap">
-  <nav><a href="/calendar/">&larr; Calendar</a></nav>
+  <nav><a href="<?= suite_base() ?>/calendar/">&larr; Calendar</a></nav>
   <h1>Calendar widget</h1>
   <div class="sub">A home-screen widget for <strong><?= htmlspecialchars($user, ENT_QUOTES) ?></strong> that shows your agenda and opens the calendar when tapped.</div>
 

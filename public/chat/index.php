@@ -1,7 +1,15 @@
 <?php
-// Locate the shared lib/ — local dev (../../lib) or NFSN (/home/protected/lib).
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
+// the test instance stays isolated from production's code, config and data. Cross-app
+// links carry the same /test prefix via suite_base(); _self_path() redirects already
+// stay put. Keep this preamble identical when adding a page.
+$__test = strpos(__DIR__, '/test/') !== false
+       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
 $__libDir = null;
-foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+$__cands  = $__test
+    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';   // for app_config() only — NO require_login here (public/anonymous)
@@ -73,9 +81,9 @@ $messages = load_chat($dataFile);
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Chat">
-  <link rel="apple-touch-icon" href="/chat/icon-180.png">
-  <link rel="icon" href="/chat/icon-192.png">
-  <link rel="manifest" href="/chat/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="<?= suite_base() ?>/chat/icon-180.png">
+  <link rel="icon" href="<?= suite_base() ?>/chat/icon-192.png">
+  <link rel="manifest" href="<?= suite_base() ?>/chat/manifest.webmanifest">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }

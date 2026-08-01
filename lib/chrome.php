@@ -191,7 +191,7 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
     $share = ($showShare && function_exists('share_button_html')) ? share_button_html() : '';
     // The iOS widget is set up from the Calendar's feed page, but the link belongs in
     // every app's preferences so the menu reads the same wherever you opened it.
-    $widget = '<a class="setact" href="/calendar/feed.php" title="Widget" aria-label="Widget">'
+    $widget = '<a class="setact" href="' . (function_exists('suite_base') ? suite_base() : '') . '/calendar/feed.php" title="Widget" aria-label="Widget">'
             . '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"'
             . ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
             . '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></a>';

@@ -1,7 +1,15 @@
 <?php
-// Locate the shared lib/ — local dev (../../lib) or NFSN (/home/protected/lib).
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
+// the test instance stays isolated from production's code, config and data. Cross-app
+// links carry the same /test prefix via suite_base(); _self_path() redirects already
+// stay put. Keep this preamble identical when adding a page.
+$__test = strpos(__DIR__, '/test/') !== false
+       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
 $__libDir = null;
-foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+$__cands  = $__test
+    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
@@ -343,7 +351,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                    'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
                    'body' => '', 'created' => time(), 'updated' => time()];
         save_json_list($file, $list);
-        header('Location: /notes/?id=' . $newId);   // jump straight to the note editor
+        header('Location: ' . suite_base() . '/notes/?id=' . $newId);   // jump straight to the note editor
         exit;
     } elseif ($action === 'toggle_reminder' && $id !== '') {
         // A reminder shown from a shared folder still lives in its owner's file.
@@ -623,9 +631,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Calendar">
-  <link rel="apple-touch-icon" href="/reminders/icon-180.png">
-  <link rel="icon" href="/reminders/icon-192.png">
-  <link rel="manifest" href="/reminders/manifest.webmanifest?v=2">
+  <link rel="apple-touch-icon" href="<?= suite_base() ?>/reminders/icon-180.png">
+  <link rel="icon" href="<?= suite_base() ?>/reminders/icon-192.png">
+  <link rel="manifest" href="<?= suite_base() ?>/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -1701,7 +1709,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         // There's no Edit button any more — a long-press (touch) or double-click (desktop)
         // turns edit mode on and opens the row straight away.
         const openRow = () => {
-          if (it.kind === 'note') { location.href = '/notes/?id=' + encodeURIComponent(it.id); return; }
+          if (it.kind === 'note') { location.href = '<?= suite_base() ?>/notes/?id=' + encodeURIComponent(it.id); return; }
           document.body.classList.add('editing');
           // Editing any occurrence edits the series — there's only the one stored row.
           openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);

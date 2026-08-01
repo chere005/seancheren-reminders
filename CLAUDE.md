@@ -12,13 +12,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 php -S 127.0.0.1:8787 -t public          # local server; apps at /reminders/, /calendar/, …
 php tools/test.php                       # the test run — see TESTING.md
 find public lib tools -name '*.php' -exec php -l {} \;   # lint everything
-./deploy.sh --dry-run                    # preview the deploy
-./deploy.sh                              # lint, then rsync to the live site
+./deploy.sh --dry-run                    # preview the (test) deploy, touch nothing
+./deploy.sh                              # lint, then rsync to the TEST instance (/test/)
+./deploy.sh both                         # …to TEST *and* production in one go
+./deploy.sh promote                      # ship the live TEST tree onto prod, server-side
 php tools/seed-example.php --force       # (re)build the "example" demo account
 php tools/seed-buddy.php --force         # (re)build "buddy", example's sharing partner
 ```
 
-`deploy.sh` is one-way (Mac → server) and deliberately never sends `lib/config.php`, never touches `/home/protected/data/`, and never uses `--delete`. The Mac is the source of truth; if anything was hand-edited on the server, `rsync` it back down before deploying (see README).
+`deploy.sh` is one-way (Mac → server) and deliberately never sends any `config.php`, never touches `/home/protected/data{,-test}/`, and never uses `--delete`. The Mac is the source of truth; if anything was hand-edited on the server, `rsync` it back down before deploying (see README).
+
+**Two live instances share one source tree** (see "The /test/ sandbox mirror" below). A bare `./deploy.sh` targets **test only**, so production is never hit by accident: `test` (default) → `/test/`; `prod` → the site root; `both` → both; `promote` → copy the *live test* tree onto prod server-side, so prod runs exactly what you verified on `/test/`. Every mode lints first and protects both `config.php`s and both data dirs.
 
 Local login: users come from `lib/config.php` (gitignored; copy `lib/config.sample.php`). Local data lands in `./data/` and is unrelated to live data.
 
@@ -30,7 +34,9 @@ Local login: users come from `lib/config.php` (gitignored; copy `lib/config.samp
 - `lib/` → server `/home/protected/lib/`. Shared code, never served.
 - `data/` → server `/home/protected/data/`. JSON storage, never served, gitignored.
 
-Every app page starts by locating `lib/` at either `__DIR__ . '/../../lib'` (local) or `/home/protected/lib` (server) — copy that preamble verbatim when adding a page.
+Every app page starts by locating `lib/` with the instance-aware preamble — copy it verbatim when adding a page. It picks `lib/` normally, but `lib-test/` when the page is served under `/test/` (it checks for `/test/` in `__DIR__` and in the request URI), so the sandbox mirror loads its own code. All ten data-touching pages carry the identical block; marketing pages (which hold no data) keep the plain `lib`-only preamble.
+
+**The `/test/` sandbox mirror.** A second live instance of the whole suite runs at `seancheren.com/test/`, from the **same source** — there is no forked copy of the code. It is isolated in three ways: its pages load `lib-test/` (→ `/home/protected/lib-test/`), that lib's `config.php` sets `data_dir` to `/home/protected/data-test/` and `base` to `/test`, and `suite_base()` (`lib/auth.php`) prefixes every hardcoded cross-app link (`/reminders/`, the tab bar, `LOGIN_LANDING`, the widget link, icon/manifest hrefs) with that base. Redirects built from `_self_path()` already stay inside `/test/` for free — they bounce back to the URL that called them — so only genuinely cross-app links go through `suite_base()`. `lib-test/config.php` carries no secrets of its own: it `require`s production's `config.php` for the real accounts/secrets and overrides only `data_dir` and `base`, so the two never drift; `deploy.sh` creates it once on the server (delete it to reset test). Test data lands in `data-test/`, auto-created by the web user on first write with its own `.datakey`, so the sandbox starts as an empty suite with the same logins. The `SUITE_BASE` env var forces the prefix without a config (mirrors `SUITE_DATA_DIR`), which is how the test run and a local `SUITE_BASE=/test php -S …` exercise it. **Change a cross-app link and it must go through `suite_base()`, or the mirror's link will jump to production** — the `test-instance` area guards this.
 
 **The public top-level pages** (Home `/`, `projects/`, `about/`, `contact/`) are the site's marketing front, not part of the app suite: no login, no tab bar, no `chrome.php`. They share their own chrome through `lib/site.php` — `site_nav($active)` renders the pill nav and `site_page($active, $title, $bodyHtml)` wraps a page in the full HTML shell (dark theme echoing Reminders: `#111`/`#eee`/`#34d399`). Add a new static page by calling `site_page()` and adding its slug to the `$links` map in `site_nav()`.
 

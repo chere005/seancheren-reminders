@@ -15,8 +15,17 @@
  * needs making in both places.
  */
 
+// A page served under /test/ (the sandbox mirror) loads lib-test/ instead of lib/, so
+// the test instance stays isolated from production's code, config and data. Cross-app
+// links carry the same /test prefix via suite_base(); _self_path() redirects already
+// stay put. Keep this preamble identical when adding a page.
+$__test = strpos(__DIR__, '/test/') !== false
+       || strncmp($_SERVER['REQUEST_URI'] ?? '', '/test/', 6) === 0;
 $__libDir = null;
-foreach ([__DIR__ . '/../../lib', '/home/protected/lib'] as $__c) {
+$__cands  = $__test
+    ? [__DIR__ . '/../../../lib-test', '/home/protected/lib-test']
+    : [__DIR__ . '/../../lib',         '/home/protected/lib'];
+foreach ($__cands as $__c) {
     if (is_file($__c . '/auth.php')) { $__libDir = $__c; break; }
 }
 require_once $__libDir . '/auth.php';
