@@ -43,6 +43,11 @@ There is no framework, for the same reason there isn't one anywhere else in this
 5. runs the unit-level checks in-process against `lib/`;
 6. tears the server down and deletes the scratch directory.
 
+The `instance` area boots a **second** server on top of that, over a throwaway two-instance
+layout built inside the scratch dir, with `SUITE_DATA_DIR` and `SUITE_BASE` explicitly
+unset — so the two instances can only find their data and their prefix through their own
+`config.php`, which is the thing being tested.
+
 `SUITE_DATA_DIR` is read in exactly one place, `app_config()` in `lib/auth.php`, and
 nothing else in the suite sets it. **A test run cannot touch `data/`.** It also never
 reads `lib/config.php` for credentials: it signs in as the two accounts it just seeded.
@@ -114,7 +119,11 @@ Calendars add, recolour, default and delete. A calendar row tap leaves only it s
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
 section colour must come from the palette, and the response says what actually stuck.
-Both views render.
+Both views render. The month view's **section filter** has the suite's three picker
+gestures — the box toggles one, a row tap makes it the only one counted, `All` counts
+everything and then nothing — and an unknown section key is a no-op rather than a stored
+ghost. Filtering changes the pies and the legend and **nothing else**: the week grid still
+holds every habit and carries no picker, because it has nothing to filter.
 
 ### `add`
 A reminder lands in the chosen folder and section, an event in the chosen calendar, a
@@ -143,6 +152,15 @@ reminders tier. `reminders_folder_migrate()` is idempotent. Output is escaped.
 Every page renders for two seeded users with no fatal, warning or notice. The public
 pages need no login. **An empty brand-new account is a working empty suite, not a crash** —
 the case that catches "works for me, my account has data".
+
+### `security`
+Data-driven over `ALL_ACTIONS()` — **every mutating action in the suite**, including
+`quick.php`'s. Each must refuse a POST with a missing or a wrong CSRF token, and a
+signed-out POST must change nothing anywhere, proved with a fingerprint over every one of
+a user's files. Folder names can't carry a control character or the `\x1F` the pickers
+join keys with, and nothing is ever written outside the data dir. One user can't reach
+another's file by naming a folder they never shared. The destructive actions all need the
+confirmed second press.
 
 ### `regress`
 One case per bug that reached a phone. Picker row taps stop the click reaching the PWA
@@ -197,6 +215,69 @@ Dates in every documented shape (`m/d`, `m/d/yy`, `m/d/yyyy`) and times (`2pm`, 
 whitespace, stripping control characters and clipping to 40. `folders_reorder()` losing
 nothing. `kind_color_css()` emitting variables, and the event blue still being a blue.
 
+### `instance`
+The `/test/` mirror for real: two instances of the same source booted side by side the
+way `deploy.sh` lays them out — `public/` + `public/test/`, `lib/` + `lib-test/`, a
+`config.php` each and a data directory each — with **no `SUITE_*` in the environment**, so
+each has to find its data and its prefix from its own config the way the live one does.
+Both come up quiet. Every cross-app link in a `/test/` page carries the prefix and no
+unprefixed one leaks out; production carries no trace of `/test/`. Signing in lands you in
+the instance you signed in to. **A row added on one side never appears on the other**,
+either way round. Every app page under `/test/` is proved to have loaded `lib-test` — the
+case that catches a page whose preamble was forgotten, which would otherwise render fine
+and quietly link back into production.
+
+### `signup`
+A short username, a bad email, a short password and a taken name are all refused and none
+of them creates an account. A good sign-up **parks** the account in `signups.json` and it
+cannot sign in while it's pending. Five wrong codes end it, and the right code afterwards
+is too late. The right code makes the account, signs you in and clears the pending row. A
+brand-new account is an empty working suite with no partner.
+
+### `account`
+The settings window's two handlers, which `require_login()` answers on whatever page
+you're on. Changing a password needs the token *and* the current password, and has a
+six-character floor; a bad token is a 400 and writes nothing. A changed password takes
+effect and the old one stops working, with the override in `passwords.json` rather than
+the account record. The theme is set over AJAX, refuses a name it doesn't know, sticks in
+`prefs-<user>.json`, and a bad token is a 400 there too.
+
+### `token`
+`token_user()` matches the whole string or nothing — a prefix, an extension and a
+different case are all nobody. Two people's tokens read two different feeds. **The feed
+writes nothing whatever it is asked**, and the reminders API has no anonymous read and no
+anonymous write.
+
+### `chat`
+Open to anyone, no login. A message posts and shows. A message and a name are escaped
+rather than rendered. Whitespace is not a message.
+
+### `bookshelf`
+Behind the shared login. A signed-in stranger gets the refusal page and none of the app's
+markup. Aki — made through the real sign-up — gets the app.
+
+### `shared2`
+Recolouring a partner's shared folder writes only on the viewer's side, keyed by the
+`@<partner>:<Folder>` view name, and leaves the owner's file byte-identical. A colour off
+the palette, or a folder they never shared, is refused. Resolution goes mine, then theirs,
+then a shared-palette default by position.
+
+### `site`
+Home, projects, about and contact render for a stranger, ask for no login, leak nothing,
+and carry the site nav — never the app tab bar.
+
+### `quick`
+`quick.php` is the one page the widget can reach that writes. A quick add lands on today
+in the fallback folder with no section; the line is parsed for a date and time.
+`?tick=<id>` shows that one reminder and its Done button marks it — or, for a repeat,
+rolls it instead. A POST with no token or a wrong one is a 400 and changes nothing.
+
+### `deploy`
+Static checks on `deploy.sh`, because a deploy is the one thing here that can destroy data
+and the one thing a test run may never actually perform. It parses; no `rsync` line uses
+`--delete`; every `lib` push excludes `config.php`; nothing names a live data directory; a
+bare deploy is the test instance and production needs saying out loud.
+
 ## What only eyes can check
 
 Everything below is real and none of it is automated. **Every bug reported in the session
@@ -236,6 +317,8 @@ failures only exist in standalone mode.
 - [ ] Two-press delete fills red on the first press and only deletes on the second.
 - [ ] Drag: a reminder between sections; a whole section as a block; a note; a habit;
       a habit section; a folder in the manager; a calendar in the manager.
+- [ ] Habits, month view: the filter button's dot is a pie of the counted sections'
+      colours, and the menu stays open while you tick your way through it.
 - [ ] Nothing moves until the drop, and the drop line says where it will land.
 - [ ] Collapse a section and a folder; both survive a reload.
 

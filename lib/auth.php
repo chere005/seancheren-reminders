@@ -289,9 +289,15 @@ function require_login(string $area = 'App'): void
     // The settings window's theme pick, answered here for the same reason.
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '') === 'set_theme') {
         header('Content-Type: application/json');
-        $ok = hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))
-              && theme_set((string) ($_POST['theme'] ?? ''));
-        echo json_encode(['ok' => $ok]);
+        // A missing or wrong token is a rejected *request*, not a theme the suite
+        // doesn't have — the same 400 every other mutation answers with, so a caller
+        // (and the test sweep) can tell the two apart.
+        if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Bad request.']);
+            exit;
+        }
+        echo json_encode(['ok' => theme_set((string) ($_POST['theme'] ?? ''))]);
         exit;
     }
 
