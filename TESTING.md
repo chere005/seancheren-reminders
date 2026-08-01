@@ -119,11 +119,13 @@ Calendars add, recolour, default and delete. A calendar row tap leaves only it s
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
 section colour must come from the palette, and the response says what actually stuck.
-Both views render. The month view's **section filter** has the suite's three picker
-gestures — the box toggles one, a row tap makes it the only one counted, `All` counts
-everything and then nothing — and an unknown section key is a no-op rather than a stored
-ghost. Filtering changes the pies and the legend and **nothing else**: the week grid still
-holds every habit and carries no picker, because it has nothing to filter.
+Both views render. The **section filter** has the suite's three picker gestures — the box
+toggles one, a row tap makes it the only one counted, `All` counts everything and then
+nothing — and an unknown section key is a no-op rather than a stored ghost. It sits by the
+Week/Month switch in **both** views; filtering changes the pies and the legend, but only
+the month pies — the week grid still holds every habit whatever the filter says. Each day's
+pie is drawn in its **sections' own colours** (a conic-gradient of section-coloured slices),
+never the flat accent.
 
 ### `add`
 A reminder lands in the chosen folder and section, an event in the chosen calendar, a
@@ -195,9 +197,9 @@ switched to Off with `rf_mode` really leaving the calendar. Adding a reminder fr
 panel into a chosen folder and group. A stale calendar id on an event falling back.
 
 ### `habits2`
-The month view's per-day count (never more done than there are habits). Week paging moving
-a whole week at a time. Deleting a section leaving its habits behind, ungrouped. The chosen
-view remembered per user.
+The month view's per-day count (never more done than there are habits), and each day's pie
+drawn in section colours rather than the accent. Week paging moving a whole week at a time.
+Deleting a section leaving its habits behind, ungrouped. The chosen view remembered per user.
 
 ### `feed`
 The widget feed groups by day, never carries a note, and gives reminders the id their tick
@@ -319,8 +321,12 @@ failures only exist in standalone mode.
 - [ ] Two-press delete fills red on the first press and only deletes on the second.
 - [ ] Drag: a reminder between sections; a whole section as a block; a note; a habit;
       a habit section; a folder in the manager; a calendar in the manager.
-- [ ] Habits, month view: the filter button's dot is a pie of the counted sections'
-      colours, and the menu stays open while you tick your way through it.
+- [ ] Habits: the section filter sits by the Week/Month switch in **both** views, and its
+      menu opens and stays open (over the grid below) while you tick through it.
+- [ ] Habits, month view: each day's pie is drawn in its sections' own colours, and a full
+      day reads as a solid circle in one colour when only one section is counted.
+- [ ] Reminders/Notes, All view: a folder's sections sit slightly indented under its
+      heading, including the catch-all group; the permanent global groups don't indent.
 - [ ] Nothing moves until the drop, and the drop line says where it will land.
 - [ ] Collapse a section and a folder; both survive a reload.
 

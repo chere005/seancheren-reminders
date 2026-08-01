@@ -609,6 +609,8 @@ t('the folder heading wears its colour as a wash, not a dot', function () {
        'the heading carries an 8-digit tint');
     ok(!preg_match('/folder-label[^>]*>[^<]*<\/div>\s*<span class="fdot"/', $r['body']),
        'and no dot follows it');
+    has('.folder-block .section-group { padding-left', $r['body'],
+        'and its sections nest slightly indented under it');
 });
 
 // ---------------------------------------------------------------- 6. notes
@@ -620,6 +622,15 @@ t('adding a note opens it in the editor', function () {
         'view' => 'All', 'folder' => 'General', 'section' => ''], $jar);
     eq(302, $r['status']);
     ok(strpos((string) $r['location'], 'id=') !== false, 'redirects into the note');
+});
+
+t('a note folder\'s sections nest indented under its heading', function () {
+    // The catch-all "Notes" group is a bare .section-head + .nlist, so the rule has to
+    // indent those too, not only .section-group.
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/notes/?folder=All', [], $jar);
+    eq(200, $r['status']);
+    has('.folder-block > .nlist { padding-left', $r['body'], 'the indent rule ships');
 });
 
 t('a note body is sanitised on the way in', function () {
@@ -1660,6 +1671,24 @@ t('the month view counts a day against the habits ticked on it', function () {
     }
 });
 
+t('a day\'s pie is drawn in its sections\' colours, not the flat accent', function () {
+    $jar = login('example', 'examplepassword');
+    // Count every section, so a day's slices are its habits' section colours.
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'msec_all', 'show' => '1'], $jar, true);
+    $body = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar)['body'];
+    preg_match_all('/class="pie" style="background:([^"]+)"/', $body, $m);
+    ok(count($m[1]) >= 28, 'every day has a pie');
+    $coloured = 0; $accent = 0;
+    foreach ($m[1] as $bg) {
+        if (strpos($bg, 'var(--accent)') !== false) { $accent++; }
+        // A day with ticks is a conic-gradient whose first slice is a section colour (a
+        // hex), never the old flat green fill.
+        if (preg_match('/conic-gradient\(#[0-9a-fA-F]{6}/', $bg)) { $coloured++; }
+    }
+    eq(0, $accent, 'no pie is filled with the accent any more');
+    ok($coloured > 0, 'at least one day is filled in a section colour');
+});
+
 t('the week grid pages whole weeks', function () {
     $jar = login('example', 'examplepassword');
     $seen = [];
@@ -1734,7 +1763,7 @@ t('the filter changes the pies and nothing else', function () {
     preg_match('/of (\d+) on \d{4}/', $before, $m);
     $wholeTotal = (int) ($m[1] ?? 0);
     ok($wholeTotal > 0, 'the month counts every habit to begin with');
-    has('id="msecBtn"', $before, 'and the picker is in the top bar');
+    has('id="msecBtn"', $before, 'and the picker sits by the Week/Month switch');
 
     req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => $one], $jar, true);
     $after = req('GET', '/habits/?v=month', [], $jar)['body'];
@@ -1742,9 +1771,10 @@ t('the filter changes the pies and nothing else', function () {
     ok((int) ($m2[1] ?? 0) < $wholeTotal, 'filtering to one section counts fewer habits');
     has("you're counting", $after, 'and the legend says so');
 
-    // The week grid is a different question and must be untouched by it.
+    // The picker now sits by the switch in the week view too — but it only feeds the month
+    // pies, so the week grid itself still shows every habit, filtered or not.
     $week = req('GET', '/habits/?v=week', [], $jar)['body'];
-    hasnt('id="msecBtn"', $week, 'the week view has nothing to filter, so no picker');
+    has('id="msecBtn"', $week, 'the picker is by the switch in week view too');
     foreach (stored('habits', 'example') as $h) {
         if (($h['type'] ?? '') === 'section') { continue; }
         has(e_test((string) $h['name']), $week, 'every habit is still in the week grid');
