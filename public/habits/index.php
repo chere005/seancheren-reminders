@@ -752,6 +752,19 @@ foreach ($habitItems as $h) {
     const box = e.target.closest('.hname'); if (!box) return;
     startRename(box);
   });
+  // Leave edit mode by tapping away from what you're editing — the same gesture the
+  // other apps have. A tap stays in edit on anything that *is* editing: a habit, a
+  // section, a day square (still tickable in edit mode), the add buttons, a field, or
+  // any of the windows layered over the page.
+  document.addEventListener('click', (e) => {
+    if (!editing()) { return; }
+    if (e.target.closest('.hname, .hsection, .cell, .secfoot, .hdrag, .hcolor, .hswatches,'
+        + ' .viewbar, .bar, button, a, input, textarea, select,'
+        + ' .setmodal-backdrop, .modal-backdrop, .tabbar')) { return; }
+    setEdit(false);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && editing()) { setEdit(false); } });
+
   // Touch: a long press opens the name the same way a double-click does.
   let lpT = null, lpX = 0, lpY = 0, lpBox = null;
   const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
