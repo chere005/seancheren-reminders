@@ -12,10 +12,7 @@ struct SeancherenApp: App {
             RootView()
                 .environmentObject(store)
                 .preferredColorScheme(.dark)   // the suite is dark-only
-                .onAppear {
-                    link.bind(to: store)
-                    link.push(store.watchList())   // send the current list on launch
-                }
+                .onAppear { link.bind(to: store) }   // pushes now + on every change/activation
         }
     }
 }
