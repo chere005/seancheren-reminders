@@ -602,13 +602,26 @@ function render_shared_note_folder_ro(string $dir, string $partner, string $fold
         <span class="fshared-badge" title="Shared by <?= e($partner) ?>"><?= e($partner) ?></span>
         <span class="folder-rule" aria-hidden="true"></span>
       </div>
+      <?php // Their sections fold like mine do — wrapped in a .section-group so there is
+            // something for the chevron to collapse, keyed by the "@partner:Folder" view
+            // key so their section names can't collide with mine. ?>
       <?php foreach ($secs as $s): $sn = (string) $s['name']; if (empty($bySec[$sn])) { continue; } ?>
-        <div class="section-head"><span class="section-title"><?= e($sn) ?></span></div>
-        <?php render_note_rows_ro($bySec[$sn]); ?>
+        <div class="section-group" data-section="<?= e($sn) ?>" data-folder="<?= e($key) ?>">
+          <div class="section-head">
+            <?= section_collapse_button() ?>
+            <span class="section-title"><?= e($sn) ?></span>
+          </div>
+          <?php render_note_rows_ro($bySec[$sn]); ?>
+        </div>
       <?php endforeach; ?>
       <?php if ($loose): ?>
-        <div class="section-head"><span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span></div>
-        <?php render_note_rows_ro($loose); ?>
+        <div class="section-group" data-section="" data-folder="<?= e($key) ?>">
+          <div class="section-head">
+            <?= section_collapse_button() ?>
+            <span class="section-title"><?= NOTES_DEFAULT_SECTION ?></span>
+          </div>
+          <?php render_note_rows_ro($loose); ?>
+        </div>
       <?php endif; ?>
     </div>
     <?php
