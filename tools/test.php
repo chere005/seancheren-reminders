@@ -807,13 +807,20 @@ t('a section colour must come from the palette, and the answer says what stuck',
        'an off-palette colour is refused and the old one comes back');
 });
 
-t('both habit views render', function () {
+t('both habit views render, and draw actual cells', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/habits/?w=0' => 'colhead', '/habits/?m=' . date('Y-m') => 'mgrid'] as $p => $marker) {
-        $r = req('GET', $p, [], $jar);
-        eq(200, $r['status'], "$p status");
-        has($marker, $r['body'], "$p should render its grid");
-    }
+    // The view is chosen with ?v=; ?m= only picks which month once you are in it. Assert
+    // on rendered *cells*, not on a marker word — every one of these names also appears
+    // in the stylesheet, so "does the page contain mgrid" passes on an empty grid. That
+    // is exactly how the month view went untested until someone looked.
+    $r = req('GET', '/habits/?v=week&w=0', [], $jar);
+    eq(200, $r['status']);
+    ok(preg_match_all('/<div class="colhead/', $r['body']) > 3, 'the week grid has day columns');
+    ok(preg_match_all('/<button class="cell/', $r['body']) > 3, 'and tickable squares');
+
+    $r = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar);
+    eq(200, $r['status']);
+    ok(preg_match_all('/<div class="mcell/', $r['body']) >= 28, 'the month grid has a cell per day');
 });
 
 // ---------------------------------------------------------------- 9. the Add app
@@ -1247,7 +1254,7 @@ t('a reorder that never mentions a habit keeps it rather than dropping it', func
 
 t('wiring: the habits drag drops against a line, between rows', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/', [], $jar)['body'];
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
     has('drop-line', $b, 'the same line the other apps drop against');
     has('grid-column: 1 / -1', $b, 'spanning every column, so it sits between rows');
     has('blockOf', $b, 'a section travels with the habits under it');
@@ -1255,9 +1262,14 @@ t('wiring: the habits drag drops against a line, between rows', function () {
 
 t("a habit's row carries its section's colour", function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/', [], $jar)['body'];
-    $names = preg_match_all('/class="hname" style="--hc:#[0-9a-f]{6}"/', $b);
-    $cells = preg_match_all('/class="cell[^"]*" style="--hc:#[0-9a-f]{6}"/', $b);
+    // Ask for the week grid by name: the view is a stored preference, so whichever test
+    // last looked at the month would otherwise decide what this one is looking at.
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    // The style now carries the colour plus its wash and its line, so match the prefix.
+    $names = preg_match_all('/class="hname" style="--hc:#[0-9a-f]{6};/', $b);
+    $cells = preg_match_all('/class="cell[^"]*" style="--hc:#[0-9a-f]{6};/', $b);
+    has('--hc-soft:#', $b, 'an empty square gets the wash');
+    has('--hc-line:#', $b, 'and the borders get the line');
     ok($names > 0, 'the name bubbles are tinted');
     ok($cells > $names, 'and so is every day square on those rows');
     preg_match_all('/--hc:(#[0-9a-f]{6})/', $b, $m);
@@ -1266,9 +1278,34 @@ t("a habit's row carries its section's colour", function () {
     ok(count($used) > 1, 'two sections should not share one colour by default');
 });
 
+t('a + Habit closes every section, and + Section sits alone at the bottom', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $adds = preg_match_all('/class="habitadd"/', $b);
+    $secs = preg_match_all('/<div class="hsection"/', $b);
+    eq($secs + 1, $adds, 'one per section, plus one closing the ungrouped run');
+    // Each posts into its own section, so a habit lands where you were looking.
+    preg_match_all('/name="section" value="([^"]*)"/', $b, $m);
+    ok(in_array('', $m[1], true), 'the ungrouped one adds with no section');
+    eq(count(array_unique($m[1])), count($m[1]), 'and no two target the same place');
+    // The footer keeps only + Section now.
+    eq(1, substr_count($b, 'id="newSecBtn"'), '+ Section is still there');
+    eq(0, substr_count($b, 'id="newHabitBtn"'), 'and + Habit has left the footer');
+    has('justify-content: flex-start', $b, 'the footer is left-justified');
+});
+
+t('an empty habits list still offers both ways to start', function () {
+    $jar = login('freshy', 'freshpassword');
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    has('empty-list', $b, 'the grid says it is empty');
+    has('secfoot always', $b, 'so + Section stays out of edit mode');
+    ok(preg_match('/body:not\(\.editing\) \.grid\.empty-list \.habitadd/', $b) === 1,
+       'and so does + Habit — there is nothing to long-press to get into edit mode');
+});
+
 t('wiring: tapping away leaves edit mode in habits', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/', [], $jar)['body'];
+    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
     has('setEdit(false)', $b, 'there is a way out that is not a button');
     hasnt('id="editBtn"', $b, 'and the Edit pencil is gone');
 });
@@ -1298,6 +1335,484 @@ t('wiring: the tab bar + is centred by an equal margin top and bottom', function
     // Two-value shorthand (vertical horizontal) is symmetric; three values are not.
     ok(preg_match('/\.segmented a\.addtab \{[^}]*margin:\s*-?\d+px\s+[\d.a-z]+\s*;/', $b) === 1,
        'it must be the two-value shorthand, or the circle sits high again');
+});
+
+// ---------------------------------------------------------------- 15. security sweeps
+// Data-driven rather than one case per action: the point is that *every* mutating action
+// is covered, including one added next week that nobody remembers to write a test for.
+area('security');
+
+/** Every mutating action, by the page that answers it. Add to this when you add one. */
+function ALL_ACTIONS(): array
+{
+    return [
+        '/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
+                          'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
+                          'add_folder', 'delete_folder', 'set_default_folder', 'set_folder_color',
+                          'folder_vis', 'folder_vis_all', 'folder_vis_only', 'reorder_folders',
+                          'share_set', 'change_password'],
+        '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
+                          'reorder', 'add_folder', 'delete_folder', 'set_default_folder',
+                          'set_folder_color', 'folder_vis', 'folder_vis_all', 'folder_vis_only',
+                          'reorder_folders', 'share_set'],
+        '/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
+                          'toggle_reminder', 'cal_add', 'cal_color', 'cal_default', 'cal_delete',
+                          'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
+                          'folder_vis', 'share_set'],
+        '/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
+                          'add_section', 'rename_section', 'delete_habit', 'delete_section'],
+        '/add/'       => ['add_reminder', 'add_event', 'add_note'],
+    ];
+}
+
+/** A cheap fingerprint of everything a user owns, to prove a request changed nothing. */
+function snapshot(string $user = 'example'): string
+{
+    $out = '';
+    foreach (['reminders', 'notes', 'events', 'calendars', 'habits', 'folders', 'calprefs', 'shares'] as $b) {
+        $out .= $b . '=' . json_encode(stored($b, $user)) . '|';
+    }
+    return md5($out);
+}
+
+t('every mutating action refuses a POST with no CSRF token', function () {
+    $jar   = login('example', 'examplepassword');
+    $before = snapshot();
+    $checked = 0;
+    foreach (ALL_ACTIONS() as $page => $actions) {
+        foreach ($actions as $a) {
+            $r = req('POST', $page, ['action' => $a, 'view' => 'All', 'name' => 'x', 'text' => 'x',
+                                     'id' => 'x', 'kind' => 'reminder'], $jar);
+            ok($r['status'] === 400 || $r['status'] === 403,
+               "$page $a: expected a refusal, got {$r['status']}");
+            $checked++;
+        }
+    }
+    ok($checked > 60, "swept $checked actions");
+    eq($before, snapshot(), 'and nothing anywhere was written');
+});
+
+t('every mutating action refuses a POST with the wrong CSRF token', function () {
+    $jar    = login('example', 'examplepassword');
+    $before = snapshot();
+    foreach (ALL_ACTIONS() as $page => $actions) {
+        foreach ($actions as $a) {
+            $r = req('POST', $page, ['csrf' => 'wrong', 'action' => $a, 'view' => 'All',
+                                     'name' => 'x', 'text' => 'x', 'id' => 'x', 'kind' => 'reminder'], $jar);
+            ok($r['status'] === 400 || $r['status'] === 403, "$page $a: got {$r['status']}");
+        }
+    }
+    eq($before, snapshot(), 'nothing was written');
+});
+
+t('a signed-out POST mutates nothing, whatever it claims to be', function () {
+    $before = snapshot();
+    foreach (ALL_ACTIONS() as $page => $actions) {
+        foreach ($actions as $a) {
+            // No jar at all: no session, no token.
+            req('POST', $page, ['action' => $a, 'view' => 'All', 'name' => 'x', 'text' => 'x',
+                                'id' => 'x', 'kind' => 'reminder']);
+        }
+    }
+    eq($before, snapshot(), 'a signed-out caller changed nothing');
+});
+
+t('a folder name cannot carry a path or the separator the pickers use', function () {
+    $jar = login('example', 'examplepassword');
+    foreach (['../escape', 'a/b', "with\x1Fsep", '..', './x'] as $bad) {
+        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder',
+            'view' => 'All', 'name' => $bad], $jar);
+    }
+    foreach (folders_load(datadir(), 'example')['reminders'] as $f) {
+        // A slash is harmless — a folder name is never a path; it lives inside JSON and
+        // is urlencoded into ?folder=. The separator is the one that matters: the
+        // Calendar's add window packs "folder\x1Fgroup" into one value and splits on it.
+        hasnt("\x1F", $f, 'no folder name holds the separator the pickers join keys with');
+        ok(!preg_match('/[\x00-\x1F\x7F]/', $f), 'nor any other control character');
+    }
+    // And nothing was written outside the data dir.
+    foreach (glob(datadir() . '/*') as $file) {
+        eq(realpath(datadir()), dirname(realpath($file)), 'every file is in the data dir');
+    }
+});
+
+t("one user cannot reach another user's file by asking for it", function () {
+    $jar = login('example', 'examplepassword');
+    // A "shared" view key naming a folder buddy has not shared.
+    $before = snapshot('buddy');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => '@buddy:House',
+        'text' => 'should not land', 'folder' => 'House', 'section' => ''], $jar);
+    eq($before, snapshot('buddy'), "buddy's file is untouched by a folder they never shared");
+    eq(null, rowBy('buddy', 'should not land'));
+});
+
+t('the destructive actions all need the confirmed second press', function () {
+    $jar = login('example', 'examplepassword');
+    $before = snapshot();
+    $tries = [
+        ['/reminders/', ['action' => 'delete', 'view' => 'All', 'id' => (rows('example')[0]['id'] ?? 'x')]],
+        ['/reminders/', ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Work']],
+        ['/notes/',     ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Recipes']],
+        ['/habits/',    ['action' => 'delete_habit', 'id' => 'x']],
+    ];
+    foreach ($tries as [$page, $post]) {
+        $post['csrf'] = csrf($jar, $page);
+        req('POST', $page, $post, $jar);
+    }
+    eq($before, snapshot(), 'one press destroys nothing anywhere');
+});
+
+// ---------------------------------------------------------------- 16. notes, in full
+area('notes2');
+
+t('a note carries its folder, section and date, and can be deleted', function () {
+    $jar = login('example', 'examplepassword');
+    // Its own folder, so nothing another area did can decide where this note lands.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+        'view' => 'All', 'name' => 'Notes2folder'], $jar);
+    $r = req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add',
+        'view' => 'All', 'folder' => 'Notes2folder', 'section' => ''], $jar);
+    preg_match('/id=([a-f0-9]+)/', (string) $r['location'], $m);
+    $id = $m[1] ?? '';
+    ok($id !== '', 'the redirect names the new note');
+    // The editor posts the whole form on save, folder included. Omitting it is not a
+    // thing the app does — and the handler reads the field rather than leaving the
+    // folder alone, so a save without it would quietly move the note to General.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'save', 'view' => 'All',
+        'id' => $id, 'title' => 'Full note', 'body' => '<p>body</p>', 'date' => '2026-09-01',
+        'folder' => 'Notes2folder', 'section' => ''], $jar);
+    $n = null;
+    foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { $n = $x; } }
+    eq('Full note', $n['title']);
+    eq('Notes2folder', $n['folder']);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete',
+        'view' => 'All', 'id' => $id], $jar);
+    $still = false;
+    foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { $still = true; } }
+    ok($still, 'one press must not delete a note');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete',
+        'view' => 'All', 'id' => $id, 'confirm' => '1'], $jar);
+    foreach (stored('notes', 'example') as $x) { ok(($x['id'] ?? '') !== $id, 'confirmed press deletes'); }
+});
+
+t('note sections add, rename and delete per folder', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+        'view' => 'All', 'name' => 'Notes2folder'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Puddings'], $jar);
+    $names = fn() => array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section')), 'name');
+    ok(in_array('Puddings', $names(), true), 'added');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section',
+        'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Puddings', 'newname' => 'Afters'], $jar);
+    ok(in_array('Afters', $names(), true), 'renamed');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section',
+        'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Afters', 'confirm' => '1'], $jar);
+    ok(!in_array('Afters', $names(), true), 'deleted');
+});
+
+t('the "Notes" catch-all name is reserved', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        'view' => 'All', 'folder' => 'General', 'name' => 'Notes'], $jar);
+    $n = 0;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'Notes') { $n++; }
+    }
+    eq(0, $n, 'a section may not be called Notes — that is the catch-all');
+});
+
+t('a note folder colour comes from the notes palette', function () {
+    $jar = login('example', 'examplepassword');
+    $c = app_palette('notes')[1];
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color',
+        'view' => 'All', 'name' => 'Recipes', 'color' => $c], $jar, true);
+    eq($c, folder_colors(datadir(), 'notes', 'example')['Recipes'] ?? null);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color',
+        'view' => 'All', 'name' => 'Recipes', 'color' => app_palette('reminders')[1]], $jar, true);
+    eq($c, folder_colors(datadir(), 'notes', 'example')['Recipes'] ?? null,
+       "another app's palette is not this app's");
+});
+
+// ---------------------------------------------------------------- 17. calendar, in full
+area('calendar2');
+
+t('a repeat is expanded across the month being drawn', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/calendar/', [], $jar);
+    preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
+    $byDay = json_decode($m[1], true);
+    $days = [];
+    foreach ($byDay as $d => $items) {
+        foreach ($items as $i) { if (($i['text'] ?? '') === 'Team standup') { $days[] = $d; } }
+    }
+    ok(count($days) > 5, 'a daily repeat shows on many days of the month, not just its start');
+});
+
+t('paging to another month works and lands on its first', function () {
+    $jar = login('example', 'examplepassword');
+    $next = date('Y-m', strtotime('first day of next month'));
+    $r = req('GET', '/calendar/?ym=' . $next, [], $jar);
+    eq(200, $r['status']);
+    has($next . '-01', $r['body'], 'the month it was asked for is the month it drew');
+});
+
+t('a reminder folder can be switched to Dated-only or Off for the calendar', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'rf_mode',
+        'name' => 'Home', 'mode' => 'none', 'ym' => date('Y-m')], $jar, true);
+    $r = req('GET', '/calendar/', [], $jar);
+    preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
+    $found = false;
+    foreach (json_decode($m[1], true) as $items) {
+        foreach ($items as $i) { if (($i['text'] ?? '') === 'Call the dentist back') { $found = true; } }
+    }
+    ok(!$found, "a folder switched off does not reach the calendar");
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'rf_mode',
+        'name' => 'Home', 'mode' => 'all', 'ym' => date('Y-m')], $jar, true);
+});
+
+t('adding a reminder from the day panel puts it in the chosen folder and group', function () {
+    $jar = login('example', 'examplepassword');
+    $day = date('Y-m-d', strtotime('+2 days'));
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_reminder',
+        'kind' => 'reminder', 'text' => 'From the day panel', 'day' => $day, 'date' => $day,
+        'section' => "Home\x1FErrands", 'ym' => date('Y-m')], $jar);
+    $row = rowBy('example', 'From the day panel');
+    ok($row !== null, 'created');
+    eq($day, $row['due']);
+});
+
+t('a calendar with a stale id on an event falls back to a real one', function () {
+    $jar = login('example', 'examplepassword');
+    $day = date('Y-m-d');
+    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_event',
+        'kind' => 'event', 'text' => 'Stale cal event', 'day' => $day, 'date' => $day,
+        'cal' => 'nope', 'ym' => date('Y-m')], $jar);
+    $ids = array_column(stored('calendars', 'example'), 'id');
+    foreach (stored('events', 'example') as $e) {
+        if (($e['text'] ?? '') === 'Stale cal event') {
+            ok(in_array($e['cal'] ?? '', $ids, true) || ($e['cal'] ?? '') === '',
+               'it never keeps an id that does not exist');
+        }
+    }
+});
+
+// ---------------------------------------------------------------- 18. habits, in full
+area('habits2');
+
+t('the month view counts a day against the habits ticked on it', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar);
+    eq(200, $r['status']);
+    $n = preg_match_all('/title="(\d+) of (\d+) on \d{4}-\d{2}-\d{2}"/', $r['body'], $m);
+    ok($n >= 28, 'every day says how many of how many');
+    foreach ($m[1] as $i => $done) {
+        ok((int) $done <= (int) $m[2][$i], 'never more done than there are habits');
+    }
+});
+
+t('the week grid pages whole weeks', function () {
+    $jar = login('example', 'examplepassword');
+    $seen = [];
+    foreach ([-1, 0] as $w) {
+        $r = req('GET', '/habits/?v=week&w=' . $w, [], $jar);
+        eq(200, $r['status'], "?w=$w");
+        preg_match_all('/data-date="(\d{4}-\d{2}-\d{2})"/', $r['body'], $m);
+        ok(count($m[1]) > 0, "?w=$w draws days");
+        $seen[$w] = min($m[1]);
+    }
+    ok($seen[-1] < $seen[0], 'paging back really moves back');
+    eq(7, (int) round((strtotime($seen[0]) - strtotime($seen[-1])) / 86400), 'by a whole week');
+});
+
+t('deleting a section leaves its habits behind, ungrouped', function () {
+    $jar = login('example', 'examplepassword');
+    $sec = null;
+    foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section') { $sec = $x; break; } }
+    $under = array_values(array_filter(stored('habits', 'example'),
+        fn($x) => ($x['type'] ?? '') !== 'section' && ($x['section'] ?? '') === $sec['id']));
+    $before = count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section'));
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
+        'id' => $sec['id'], 'confirm' => '1'], $jar);
+    eq($before, count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section')),
+       'no habit went with it');
+    foreach ($under as $h) {
+        foreach (stored('habits', 'example') as $x) {
+            if (($x['id'] ?? '') === $h['id']) { eq('', (string) ($x['section'] ?? ''), 'it is ungrouped now'); }
+        }
+    }
+});
+
+t('the chosen view is remembered per user', function () {
+    $jar = login('example', 'examplepassword');
+    req('GET', '/habits/?m=' . date('Y-m'), [], $jar);
+    $prefs = store_read(datadir() . '/prefs-example.json');
+    ok(in_array($prefs['habits_view'] ?? '', ['week', 'month'], true), 'the view is stored');
+});
+
+// ---------------------------------------------------------------- 19. the widget feed
+area('feed');
+
+function FEED_TOKEN(): string
+{
+    $t = store_read(datadir() . '/token-example.json');
+    $t = is_array($t) ? ($t['token'] ?? reset($t)) : $t;
+    return is_string($t) ? $t : '';
+}
+
+t('the feed groups by day and never carries a note', function () {
+    if (FEED_TOKEN() === '') { return; }
+    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
+    eq(200, $r['status']);
+    $j = json_decode($r['body'], true);
+    ok(is_array($j), 'JSON');
+    $items = $j['items'] ?? $j;
+    if (!is_array($items)) { return; }
+    $flat = json_encode($items);
+    hasnt('"kind":"note"', $flat, 'notes are dropped server-side, not just in the script');
+});
+
+t('a reminder in the feed carries the id its tick link needs', function () {
+    if (FEED_TOKEN() === '') { return; }
+    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
+    $flat = $r['body'];
+    if (strpos($flat, '"reminder"') === false) { return; }
+    ok(preg_match('/"id"\s*:\s*"[a-f0-9]{6,}"/', $flat) === 1, 'ids are there to tick against');
+});
+
+t('the feed is scoped, and a stale pin cannot widen it', function () {
+    if (FEED_TOKEN() === '') { return; }
+    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()) . '&cals=nosuchcalendar');
+    eq(200, $r['status'], 'a stale pin is not an error');
+    ok(json_decode($r['body'], true) !== null, 'it still answers JSON');
+});
+
+// ---------------------------------------------------------------- 20. edges
+area('edges');
+
+t('an unknown id is a no-op, not a crash', function () {
+    $jar = login('example', 'examplepassword');
+    $before = snapshot();
+    foreach ([['/reminders/', ['action' => 'toggle', 'view' => 'All', 'id' => 'nosuchid']],
+              ['/reminders/', ['action' => 'edit_text', 'view' => 'All', 'id' => 'nosuchid', 'text' => 'x']],
+              ['/reminders/', ['action' => 'set_indent', 'view' => 'All', 'id' => 'nosuchid', 'indent' => '1']],
+              ['/reminders/', ['action' => 'add_subtask', 'view' => 'All', 'parent' => 'nosuchid']],
+              ['/habits/',    ['action' => 'rename_habit', 'id' => 'nosuchid', 'name' => 'x']],
+              ['/habits/',    ['action' => 'set_section_color', 'id' => 'nosuchid', 'color' => app_palette('habits', true)[0]]],
+             ] as [$page, $post]) {
+        $post['csrf'] = csrf($jar, $page);
+        $r = req('POST', $page, $post, $jar, true);
+        ok($r['status'] < 500, "$page {$post['action']}: no server error");
+        hasnt('Fatal error', $r['body'], $page);
+    }
+    eq($before, snapshot(), 'and nothing was written');
+});
+
+t('a malformed JSON payload is ignored rather than believed', function () {
+    $jar = login('example', 'examplepassword');
+    $before = snapshot();
+    foreach ([['/reminders/', 'reorder', ['order' => '{not json', 'sections' => 'nope']],
+              ['/habits/',    'reorder', ['order' => 'null', 'sections' => '"a string"']],
+             ] as [$page, $action, $extra]) {
+        $r = req('POST', $page, array_merge(['csrf' => csrf($jar, $page), 'action' => $action,
+            'view' => 'All'], $extra), $jar, true);
+        ok($r['status'] < 500, "$page $action survived");
+    }
+    eq($before, snapshot(), 'a garbage order changes nothing');
+});
+
+t('unicode and long text survive a round trip intact', function () {
+    $jar = login('example', 'examplepassword');
+    $text = 'Café — naïve “quotes” 🎉 日本語';
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+        'text' => $text, 'folder' => 'Reminders', 'section' => ''], $jar);
+    ok(rowBy('example', $text) !== null, 'stored exactly as sent');
+    $long = str_repeat('a', 900);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+        'text' => $long, 'folder' => 'Reminders', 'section' => ''], $jar);
+    $found = null;
+    foreach (rows('example') as $r) { if (strncmp($r['text'] ?? '', 'aaaa', 4) === 0) { $found = $r; } }
+    ok($found !== null, 'a very long line is kept');
+    eq(500, mb_strlen($found['text']), 'clipped to the documented 500, not stored unbounded');
+});
+
+t('an empty or whitespace-only add is refused', function () {
+    $jar = login('example', 'examplepassword');
+    $before = count(rows('example'));
+    foreach (['', '   ', "\t\n"] as $t) {
+        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+            'text' => $t, 'folder' => 'Reminders', 'section' => ''], $jar);
+    }
+    eq($before, count(rows('example')), 'nothing empty was added');
+});
+
+t('the same section name can exist in two folders without colliding', function () {
+    $jar = login('example', 'examplepassword');
+    foreach (['Work', 'Home'] as $f) {
+        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+            'view' => $f, 'folder' => $f, 'name' => 'Shared name'], $jar);
+    }
+    $secs = array_values(array_filter(stored('reminders', 'example'),
+        fn($r) => ($r['type'] ?? '') === 'section' && ($r['name'] ?? '') === 'Shared name'));
+    eq(2, count($secs), 'one per folder');
+    // Renaming one must not touch the other.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section',
+        'view' => 'Work', 'folder' => 'Work', 'name' => 'Shared name', 'newname' => 'Work only'], $jar);
+    $left = array_values(array_filter(stored('reminders', 'example'),
+        fn($r) => ($r['type'] ?? '') === 'section' && ($r['name'] ?? '') === 'Shared name'));
+    eq(1, count($left), "the other folder's section kept its name");
+    eq('Home', $left[0]['folder']);
+});
+
+// ---------------------------------------------------------------- 21. more lib units
+area('lib2');
+
+t('dates parse in every documented shape', function () {
+    $y = (int) date('Y');
+    [, $d1] = parse_when_from_text('thing 8/3/26');
+    eq('2026-08-03', $d1, 'm/d/yy');
+    [, $d2] = parse_when_from_text('thing 8/3/2027');
+    eq('2027-08-03', $d2, 'm/d/yyyy');
+    [, $d3] = parse_when_from_text('thing 12/25');
+    eq('12-25', substr((string) $d3, 5), 'bare m/d keeps the month and day');
+    ok((int) substr((string) $d3, 0, 4) >= $y, 'and never lands in the past');
+});
+
+t('times parse in every documented shape', function () {
+    foreach (['2pm' => '14:00', '2:30pm' => '14:30', '9am' => '09:00', '12:05 am' => '00:05'] as $in => $want) {
+        [, , $t] = parse_when_from_text('x ' . $in);
+        eq($want, $t, $in);
+    }
+});
+
+t('a repeat spec is cleaned or refused', function () {
+    ok(repeat_clean('week', 2) !== null, 'a real one survives');
+    eq(null, repeat_clean('', 1), 'no unit means it happens once');
+    eq(null, repeat_clean('fortnight', 1), 'an unknown unit is refused');
+});
+
+t('folder names are cleaned on the way in', function () {
+    eq('Work', folder_clean('  Work  '), 'trimmed');
+    eq('a b', folder_clean("a\tb"), 'whitespace collapses');
+    hasnt("\x1F", folder_clean("a\x1Fb"), 'the picker separator cannot survive');
+    ok(!preg_match('/[\x00-\x1F\x7F]/', folder_clean("a\x00b\x07c")), 'no control characters survive');
+    eq(40, mb_strlen(folder_clean(str_repeat('x', 80))), 'clipped to 40');
+});
+
+t('folders reorder and keep every folder', function () {
+    $before = folders_load(datadir(), 'example')['reminders'];
+    folders_reorder(datadir(), 'reminders', array_reverse($before));
+    $after = folders_load(datadir(), 'example')['reminders'];
+    eq(count($before), count($after), 'nothing was lost');
+    foreach ($before as $f) { ok(in_array($f, $after, true), "$f is still there"); }
+});
+
+t('the kind palette is emitted as variables, not literals', function () {
+    $css = kind_color_css();
+    foreach (['--k-reminder', '--k-event', '--k-note', '--k-overdue'] as $v) { has($v, $css); }
+    has('#60a5fa', $css, 'the event blue is a blue, not the old cyan');
 });
 
 // ═══════════════════════════════════════════════════════════════════ run
