@@ -1514,6 +1514,13 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') document.querySelectorAll('.secadd-row').forEach(r => { r.hidden = true; });
   });
+  // Tapping or clicking away from an open add field closes it — the same as Escape — so you
+  // exit "adding a reminder" without having to finish or reach for the +. A click inside the
+  // field itself, or on a + that opens one, is left alone.
+  document.addEventListener('click', e => {
+    if (e.target.closest('.secadd-row') || e.target.closest('.sec-add')) return;
+    document.querySelectorAll('.secadd-row:not([hidden])').forEach(r => { r.hidden = true; });
+  });
   // After adding a reminder we land back with ?addto=<row id>: reopen that section's field
   // and focus it, so you can add another without reaching for the "+" again.
   (function () {
