@@ -1626,6 +1626,25 @@ t('dragging a note into another folder re-files it', function () {
     eq('ToF', $folderOf(), 'a folder that is not mine is ignored');
 });
 
+t('the catch-all "Notes" group remembers where it was dragged', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'CatF'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        'view' => 'CatF', 'folder' => 'CatF', 'name' => 'Sec1'], $jar);
+    $catchBeforeSec1 = function () use ($jar) {
+        $b = req('GET', '/notes/?folder=CatF', [], $jar)['body'];
+        return strpos($b, 'section-group default-group') < strpos($b, 'data-section="Sec1"');
+    };
+    // Drag the catch-all above Sec1 (its '' comes first in the posted section order).
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
+        'order' => '[]', 'sections' => json_encode(['CatF' => ['', 'Sec1']])], $jar, true);
+    ok($catchBeforeSec1(), 'the catch-all renders before the section');
+    // And back below it.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
+        'order' => '[]', 'sections' => json_encode(['CatF' => ['Sec1', '']])], $jar, true);
+    ok(!$catchBeforeSec1(), 'and back below it');
+});
+
 t('the "Notes" catch-all name is reserved', function () {
     $jar = login('example', 'examplepassword');
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
