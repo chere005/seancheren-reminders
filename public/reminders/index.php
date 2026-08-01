@@ -1245,6 +1245,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
         // itself has moved up beside the +. ?>
   <div class="foldernav">
     <button type="button" id="doneBtn" class="showall" title="Completed" aria-label="Completed">&#9745;&#65038;</button>
+    <?php // Copy-as-Markdown is a personal tool — only Sean's account shows it. ?>
+    <?php if ($me === 'sean'): ?>
     <button type="button" id="mdShareBtn" class="showall" title="Copy as Markdown" aria-label="Copy as Markdown">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1252,6 +1254,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       </svg>
     </button>
     <textarea id="shareMdText" hidden><?= e($shareMd) ?></textarea>
+    <?php endif; ?>
     <?php // No toolbar "+ Section": a section is added from the "+" beside each folder's
           // name (edit mode), so it's always clear which folder it lands in. ?>
   </div>
