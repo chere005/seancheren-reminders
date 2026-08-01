@@ -1,7 +1,7 @@
 # Testing
 
 ```sh
-php tools/test.php              # everything (about 15 seconds)
+php tools/test.php              # everything — 132 cases, about 30 seconds
 php tools/test.php reminders    # one area, by name
 php tools/test.php --list       # the area names and their case counts
 php tools/test.php --keep       # keep the scratch data dir and the server log
@@ -145,6 +145,50 @@ it leaves the date alone; a date picked by hand wins and leaves the text verbati
 reorder, and a reorder that never mentions a habit keeps it. The Calendar remembers the
 day and the tab bar is what forgets it. The tab bar `+` uses a symmetric margin.
 
+### `security`
+Data-driven over **every mutating action in the suite**, so an action added next week is
+covered whether or not anyone remembers to write a case for it: each must refuse a POST
+with no CSRF token, refuse one with a wrong token, and — signed out entirely — write
+nothing at all. A fingerprint of everything the user owns is compared before and after,
+so "refused" means *nothing moved*, not just "returned 400". Also: no folder name can
+carry the `\x1F` the pickers split on or any other control character, nothing is ever
+written outside the data dir, one user cannot reach another's file by naming a folder
+they were never shared, and the destructive actions all need the confirmed second press.
+
+**When you add a mutating action, add it to `ALL_ACTIONS()`.** That list is the sweep.
+
+### `notes2`
+What the first pass skimmed: a note's folder, section and date through a full add → save →
+delete, with delete needing the second press; sections added, renamed and deleted per
+folder; the reserved "Notes" catch-all name; a note folder colour refusing another app's
+palette.
+
+### `calendar2`
+A repeat expanded across the month being drawn. Paging to another month. A reminder folder
+switched to Off with `rf_mode` really leaving the calendar. Adding a reminder from the day
+panel into a chosen folder and group. A stale calendar id on an event falling back.
+
+### `habits2`
+The month view's per-day count (never more done than there are habits). Week paging moving
+a whole week at a time. Deleting a section leaving its habits behind, ungrouped. The chosen
+view remembered per user.
+
+### `feed`
+The widget feed groups by day, never carries a note, and gives reminders the id their tick
+link needs. A stale `cals=` pin narrows rather than errors.
+
+### `edges`
+An unknown id is a no-op, not a crash. A malformed JSON payload is ignored rather than
+believed. Unicode and very long text survive a round trip and clip at the documented 500.
+An empty or whitespace-only add is refused. The same section name in two folders stays two
+sections, and renaming one leaves the other alone.
+
+### `lib2`
+Dates in every documented shape (`m/d`, `m/d/yy`, `m/d/yyyy`) and times (`2pm`, `2:30pm`,
+`12:05 am`). `repeat_clean()` refusing an unknown unit. `folder_clean()` collapsing
+whitespace, stripping control characters and clipping to 40. `folders_reorder()` losing
+nothing. `kind_color_css()` emitting variables, and the event blue still being a blue.
+
 ## What only eyes can check
 
 Everything below is real and none of it is automated. **Every bug reported in the session
@@ -204,6 +248,10 @@ failures only exist in standalone mode.
 **Things the harness deliberately doesn't do**
 
 - No browser: no JavaScript is executed, so anything JS-only is wiring at best.
+- Beware a marker word that also appears in the stylesheet. Asserting that the habits page
+  "contains mgrid" passed on a page with no month grid at all, because `.mgrid` is in the
+  CSS — the month view went untested for a while behind a green tick. Assert on *rendered
+  elements* (`<div class="mcell`), not on a word.
 - No screenshots and no layout assertions — nothing here measures a pixel.
 - Habit history is random per seed, so nothing asserts on its counts.
 - Aki's Bookshelf is not covered at all; it gates on one username and is its own app.
