@@ -58,7 +58,7 @@ Legend:
 | web behaviour | iOS |
 |---|---|
 | the day panel groups by day | 👁 `CalendarView`; core reads tested (`events/reminders/notes(on:)`) |
-| a day's reminders sort undated-first, oldest, **then time** | ⚠️ **gap** — iOS `sorted()` breaks date-ties by stored order, not by `minutes` |
+| a day's reminders sort undated-first, oldest, **then time** | ✅ `testCalendarDaySortsUndatedFirstThenDateThenTime` (`reminders(on:)` adds the time tiebreak) |
 | events before reminders within a day | 👁 the day panel renders events → reminders → notes |
 | an undated Calendar rider shows on today, not overdue | ✅ `testOverdueAndRidesAlong`, `testRemindersOnDayCollectsDueOverdueAndRiders` |
 | add an event from the day panel | ✅ `testEventsOnDayWithRepeatAndScope` (+ the single **+ Add** menu, this pass) |
@@ -131,13 +131,10 @@ These are genuine differences, not oversights. None is a bug; each is a scope ca
 1. **Multi-folder / multi-calendar visibility.** The web's picker has per-item show/hide with
    the three-gesture "All" master; iOS uses a single-select picker. Adding it is a real
    feature + model change (a `hidden` set), not just a test.
-2. **A calendar day's reminders don't sort by time.** `sorted()` breaks same-date ties by
-   stored order (correct for the Reminders list, which the web also does), but the web's
-   *calendar day* adds a time tiebreak. Small, could be a calendar-only sort.
-3. **No section (group) or folder reordering.** iOS reorders rows within a section, not the
+2. **No section (group) or folder reordering.** iOS reorders rows within a section, not the
    sections or folders themselves. `store.moveFolders/moveGroups` + drag UI would close it.
-4. **Delete-from-calendar unschedules on the web; iOS deletes.** Different mental model.
-5. **No text-length cap (500/200) or control-char scrub on names.** Minor input hygiene the
+3. **Delete-from-calendar unschedules on the web; iOS deletes.** Different mental model.
+4. **No text-length cap (500/200) or control-char scrub on names.** Minor input hygiene the
    web enforces server-side; a native keyboard makes it far less pressing.
 
 Deep, deliberate model differences (not gaps to "fix"): permanent Calendar/Reminders as

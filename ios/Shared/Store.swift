@@ -468,7 +468,7 @@ final class Store: ObservableObject {
     /// one rolled onto today, and the Calendar group's undated riders.
     func reminders(on date: Date, today: Date) -> [Reminder] {
         let day = date.day
-        return sorted(data.reminders.filter { r in
+        let rows = data.reminders.filter { r in
             guard !r.done else { return false }
             if r.ridesAlong { return day == today }
             guard let due = r.due else { return false }
@@ -478,7 +478,20 @@ final class Store: ObservableObject {
                 return !rule.dates(start: due, from: day, to: day).isEmpty
             }
             return false
-        })
+        }
+        // The calendar day's own order — undated riders first, then by date, then by time of
+        // day, stored order breaking the rest. The Reminders list sorts by stored order for
+        // ties (see `sorted`); a day adds a time tiebreak, matching the web's day panel.
+        return rows.sorted { a, b in
+            switch (a.due, b.due) {
+            case (nil, nil):       break
+            case (nil, _):         return true
+            case (_, nil):         return false
+            case (let x?, let y?): if x.day != y.day { return x.day < y.day }
+            }
+            if (a.minutes ?? -1) != (b.minutes ?? -1) { return (a.minutes ?? -1) < (b.minutes ?? -1) }
+            return a.order < b.order
+        }
     }
 
     func notes(on date: Date) -> [Note] {

@@ -120,6 +120,7 @@ struct ColorSwatchGrid: View {
                                 Image(systemName: "checkmark")
                                     .font(.caption.bold())
                                     .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 1)   // legible on a pale swatch
                             }
                         }
                 }
