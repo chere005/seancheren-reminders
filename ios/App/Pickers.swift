@@ -110,6 +110,28 @@ struct FolderManager: View {
     }
 }
 
+/// A section's colour swatch: a small dot left of the name that drops the palette, the
+/// same control the folder manager uses shrunk to a heading. Posts the new colour and
+/// recolours in place. Shared by Reminders, Notes and Habits.
+struct SectionColorDot: View {
+    let group: ListGroup
+    @EnvironmentObject private var store: Store
+
+    var body: some View {
+        Menu {
+            ForEach(Theme.palette.indices, id: \.self) { i in
+                Button { store.setGroupColor(group.id, to: i) } label: {
+                    Label("Colour \(i + 1)",
+                          systemImage: group.color == i ? "checkmark.circle.fill" : "circle.fill")
+                }
+            }
+        } label: {
+            Circle().fill(Theme.color(group.color)).frame(width: 11, height: 11)
+        }
+        .buttonStyle(.borderless)
+    }
+}
+
 /// A date and an optional time of day, as one row that collapses to "None".
 struct WhenPicker: View {
     @Binding var date: Date?

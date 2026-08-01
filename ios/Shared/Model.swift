@@ -127,6 +127,24 @@ struct ListGroup: Identifiable, Codable, Hashable {
     var name: String
     var kind: ItemKind
     var order = 0
+    /// A palette index, shown as a dot left of the section's name, the same swatch the
+    /// folder manager uses. Defaults by position so a new section is distinct at once.
+    var color = 0
+
+    init(id: UUID = UUID(), name: String, kind: ItemKind, order: Int = 0, color: Int = 0) {
+        self.id = id; self.name = name; self.kind = kind; self.order = order; self.color = color
+    }
+
+    // Tolerant decode — see Reminder's note. Sections written before colours existed load
+    // with colour 0 rather than failing the whole document.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id    = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name  = try c.decode(String.self, forKey: .name)
+        kind  = try c.decode(ItemKind.self, forKey: .kind)
+        order = try c.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        color = try c.decodeIfPresent(Int.self, forKey: .color) ?? 0
+    }
 }
 
 /// Which group a reminder sits in. Two of them aren't rows you can delete: the
@@ -150,6 +168,10 @@ struct Reminder: Identifiable, Codable, Hashable {
     var group: GroupRef = .inbox
     var recurrence: Recurrence?
     var order = 0
+    /// Outline depth. 0 is a top-level reminder; 1 is a subtask sitting under the row
+    /// above it. One level only, like the web. A subtask travels with its parent when the
+    /// list is sorted, so it never floats up under whatever happens to sit above it.
+    var indent = 0
 
     /// Late, and not just "hasn't happened yet today".
     func overdue(today: Date) -> Bool {
@@ -159,6 +181,26 @@ struct Reminder: Identifiable, Codable, Hashable {
 
     /// An undated item in the Calendar group isn't late — it's meant to keep showing.
     var ridesAlong: Bool { due == nil && group == .calendar }
+}
+
+extension Reminder {
+    // Tolerant decode: a suite.json written before a field existed is missing that key,
+    // and the synthesized decoder would throw on it — which would drop the user back to an
+    // empty suite. decodeIfPresent + the property's default keeps old data loading.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        id         = try c.decodeIfPresent(UUID.self,       forKey: .id) ?? id
+        text       = try c.decodeIfPresent(String.self,     forKey: .text) ?? text
+        due        = try c.decodeIfPresent(Date.self,       forKey: .due)
+        minutes    = try c.decodeIfPresent(Int.self,        forKey: .minutes)
+        done       = try c.decodeIfPresent(Bool.self,       forKey: .done) ?? done
+        folder     = try c.decodeIfPresent(UUID.self,       forKey: .folder)
+        group      = try c.decodeIfPresent(GroupRef.self,   forKey: .group) ?? group
+        recurrence = try c.decodeIfPresent(Recurrence.self, forKey: .recurrence)
+        order      = try c.decodeIfPresent(Int.self,        forKey: .order) ?? order
+        indent     = try c.decodeIfPresent(Int.self,        forKey: .indent) ?? indent
+    }
 }
 
 struct Note: Identifiable, Codable, Hashable {
@@ -220,6 +262,14 @@ struct AppData: Codable {
     /// The calendar or set the Calendar screen last had selected (nil = all).
     var lastCal: UUID?
 
+    /// The Habits month pies count every section unless it's in here; the ungrouped run
+    /// has no id, so it gets its own flag. Stored as what's *hidden*, so a section added
+    /// later counts without anyone touching this.
+    var habitHidden: Set<UUID> = []
+    var habitHideUngrouped = false
+    /// Habits opens on the view you left it on: the tick grid (false) or the month (true).
+    var habitsMonth = false
+
     /// A first run: one General folder each, one calendar, nothing in them.
     static var starter: AppData {
         var d = AppData()
@@ -242,4 +292,62 @@ struct AppData: Codable {
     }
     func folder(_ id: UUID?) -> Folder? { folders.first { $0.id == id } }
     func cal(_ id: UUID?) -> Cal? { calendars.first { $0.id == id } }
+}
+
+extension AppData {
+    // Tolerant decode — see Reminder's note. A document written before any of the prefs
+    // below existed still loads, with the field at its default, rather than resetting the
+    // whole suite to empty because one key was missing.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        reminders         = try c.decodeIfPresent([Reminder].self,   forKey: .reminders) ?? []
+        notes             = try c.decodeIfPresent([Note].self,       forKey: .notes) ?? []
+        events            = try c.decodeIfPresent([Event].self,      forKey: .events) ?? []
+        habits            = try c.decodeIfPresent([Habit].self,      forKey: .habits) ?? []
+        calendars         = try c.decodeIfPresent([Cal].self,        forKey: .calendars) ?? []
+        folders           = try c.decodeIfPresent([Folder].self,     forKey: .folders) ?? []
+        groups            = try c.decodeIfPresent([ListGroup].self,  forKey: .groups) ?? []
+        defaultFolder     = try c.decodeIfPresent([String: UUID].self, forKey: .defaultFolder) ?? [:]
+        lastFolder        = try c.decodeIfPresent([String: UUID].self, forKey: .lastFolder) ?? [:]
+        defaultCal        = try c.decodeIfPresent(UUID.self,         forKey: .defaultCal)
+        lastCal           = try c.decodeIfPresent(UUID.self,         forKey: .lastCal)
+        habitHidden       = try c.decodeIfPresent(Set<UUID>.self,    forKey: .habitHidden) ?? []
+        habitHideUngrouped = try c.decodeIfPresent(Bool.self,        forKey: .habitHideUngrouped) ?? false
+        habitsMonth       = try c.decodeIfPresent(Bool.self,         forKey: .habitsMonth) ?? false
+    }
+}
+
+// MARK: - Core helpers
+//
+// Kept here, in a file every target already compiles, so the logic layer stands on
+// Foundation alone — no SwiftUI, no view code — and `swift test` can exercise it.
+
+extension Array {
+    /// Reorder in place: the same result as SwiftUI's `move(fromOffsets:toOffset:)`, but
+    /// defined on Foundation so the core doesn't depend on SwiftUI (and can be unit-tested).
+    /// `destination` is an index into the collection *before* the moved rows are removed,
+    /// exactly as the drag callbacks hand it over.
+    mutating func reorder(fromOffsets source: IndexSet, toOffset destination: Int) {
+        let moving = source.map { self[$0] }
+        let target = destination - source.filter { $0 < destination }.count
+        for i in source.sorted(by: >) { remove(at: i) }
+        insert(contentsOf: moving, at: Swift.max(0, Swift.min(target, count)))
+    }
+}
+
+/// "today", "tomorrow", "Aug 3" — a short date, because it sits under the row's text.
+/// Lives in the core because the watch list and the Calendar summaries build it too, not
+/// only the Reminders screen.
+func dayLabel(_ date: Date, today: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDate(date, inSameDayAs: today) { return "today" }
+    if let tomorrow = cal.date(byAdding: .day, value: 1, to: today),
+       cal.isDate(date, inSameDayAs: tomorrow) { return "tomorrow" }
+    if let yesterday = cal.date(byAdding: .day, value: -1, to: today),
+       cal.isDate(date, inSameDayAs: yesterday) { return "yesterday" }
+    let f = DateFormatter()
+    f.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: today)
+        ? "MMM d" : "MMM d, yyyy"
+    return f.string(from: date)
 }

@@ -116,7 +116,16 @@ final class Store: ObservableObject {
               !data.groupList(kind).contains(where: { $0.name.caseInsensitiveCompare(clean) == .orderedSame })
         else { return }
         let order = (data.groupList(kind).map(\.order).max() ?? 0) + 1
-        data.groups.append(ListGroup(name: clean, kind: kind, order: order))
+        // Colour by position, like folders, so a new section is distinct straight away.
+        data.groups.append(ListGroup(name: clean, kind: kind, order: order,
+                                     color: data.groupList(kind).count % 10))
+        touch()
+    }
+
+    /// Recolour a section from its swatch — the same palette the folder manager uses.
+    func setGroupColor(_ id: UUID, to index: Int) {
+        guard let i = data.groups.firstIndex(where: { $0.id == id }) else { return }
+        data.groups[i].color = index
         touch()
     }
 
@@ -198,10 +207,51 @@ final class Store: ObservableObject {
         }
     }
 
+    /// A folder+group as an outline: top-level rows sorted undated-first by date (done
+    /// sinking), each carrying the indent-1 subtasks that follow it in stored order. A
+    /// subtask never sorts on its own — it travels with its parent, so it can't float up
+    /// under whatever row happens to sit above it. With no subtasks this is exactly the
+    /// flat sort, one row per block, so nothing changes for a plain list.
     func reminders(folder: UUID?, group: GroupRef) -> [Reminder] {
-        sorted(data.reminders.filter {
-            $0.group == group && (folder == nil || $0.folder == folder)
-        })
+        let rows = data.reminders
+            .filter { $0.group == group && (folder == nil || $0.folder == folder) }
+            .sorted { $0.order < $1.order }
+        var blocks: [[Reminder]] = []
+        for r in rows {
+            if r.indent == 0 || blocks.isEmpty { blocks.append([r]) }   // a new top-level block
+            else { blocks[blocks.count - 1].append(r) }                 // a subtask joins the last
+        }
+        let rank = Dictionary(uniqueKeysWithValues:
+            sorted(blocks.map { $0[0] }).enumerated().map { ($1.id, $0) })
+        return blocks
+            .sorted { (rank[$0[0].id] ?? 0) < (rank[$1[0].id] ?? 0) }
+            .flatMap { $0 }
+    }
+
+    /// Add a blank subtask directly under `parent`: same folder and group, indent 1,
+    /// slotted right after it in stored order. Returns it so the view can open it to type;
+    /// left empty, the caller deletes it again, exactly like the web.
+    @discardableResult
+    func addSubtask(under parent: Reminder) -> Reminder {
+        let child = Reminder(folder: parent.folder, group: parent.group, indent: 1)
+        var rows = data.reminders
+            .filter { $0.group == parent.group && $0.folder == parent.folder }
+            .sorted { $0.order < $1.order }
+        if let pi = rows.firstIndex(where: { $0.id == parent.id }) { rows.insert(child, at: pi + 1) }
+        else { rows.append(child) }
+        data.reminders.append(child)
+        for (i, r) in rows.enumerated() {                               // renumber to match
+            if let idx = data.reminders.firstIndex(where: { $0.id == r.id }) { data.reminders[idx].order = i }
+        }
+        touch()
+        return child
+    }
+
+    /// Lift a subtask back out to top level (the web's ‹), or push a task in.
+    func setIndent(_ reminder: Reminder, to indent: Int) {
+        guard let i = data.reminders.firstIndex(where: { $0.id == reminder.id }) else { return }
+        data.reminders[i].indent = Swift.max(0, Swift.min(1, indent))
+        touch()
     }
 
     /// Persist a drag-reorder within a group: `ordered` is the group as arranged now.
@@ -209,7 +259,7 @@ final class Store: ObservableObject {
     /// the web, where dragging within a section is largely cosmetic.
     func moveReminders(_ ordered: [Reminder], from: IndexSet, to: Int) {
         var rows = ordered
-        rows.move(fromOffsets: from, toOffset: to)
+        rows.reorder(fromOffsets: from, toOffset: to)
         for (i, r) in rows.enumerated() {
             if let idx = data.reminders.firstIndex(where: { $0.id == r.id }) { data.reminders[idx].order = i }
         }
@@ -242,7 +292,7 @@ final class Store: ObservableObject {
     /// Persist a drag-reorder: `ordered` is the group as the user just arranged it.
     func moveNotes(_ ordered: [Note], from: IndexSet, to: Int) {
         var rows = ordered
-        rows.move(fromOffsets: from, toOffset: to)
+        rows.reorder(fromOffsets: from, toOffset: to)
         for (i, n) in rows.enumerated() {
             if let idx = data.notes.firstIndex(where: { $0.id == n.id }) { data.notes[idx].order = i }
         }
@@ -380,11 +430,99 @@ final class Store: ObservableObject {
     /// Persist a drag-reorder: `ordered` is the group as the user just arranged it.
     func moveHabits(_ ordered: [Habit], from: IndexSet, to: Int) {
         var rows = ordered
-        rows.move(fromOffsets: from, toOffset: to)
+        rows.reorder(fromOffsets: from, toOffset: to)
         for (i, h) in rows.enumerated() {
             if let idx = data.habits.firstIndex(where: { $0.id == h.id }) { data.habits[idx].order = i }
         }
         touch()
+    }
+
+    // MARK: - Habits: the month view and its section filter
+    //
+    // The month pies are "how much of a day got done", which only means something over the
+    // sections you meant — so the filter decides which sections feed them. It's the suite's
+    // three-gesture picker: a box toggles one, a row makes it the only one, All is master.
+
+    /// Whether a section counts toward the pies (ungrouped is `nil`).
+    func habitSectionShown(_ group: UUID?) -> Bool {
+        if let group { return !data.habitHidden.contains(group) }
+        return !data.habitHideUngrouped
+    }
+
+    /// The box: toggle just this section.
+    func toggleHabitSection(_ group: UUID?) {
+        if let group {
+            if data.habitHidden.contains(group) { data.habitHidden.remove(group) }
+            else { data.habitHidden.insert(group) }
+        } else {
+            data.habitHideUngrouped.toggle()
+        }
+        touch()
+    }
+
+    /// The row: count only this one, everything else off.
+    func onlyHabitSection(_ group: UUID?) {
+        data.habitHidden = Set(data.groupList(.habit).map(\.id))
+        data.habitHideUngrouped = true
+        if let group { data.habitHidden.remove(group) } else { data.habitHideUngrouped = false }
+        touch()
+    }
+
+    /// The "All" master: on when every section counts.
+    var habitAllShown: Bool {
+        !data.habitHideUngrouped && data.groupList(.habit).allSatisfy { !data.habitHidden.contains($0.id) }
+    }
+    func setHabitAll(_ show: Bool) {
+        if show { data.habitHidden.removeAll(); data.habitHideUngrouped = false }
+        else { data.habitHidden = Set(data.groupList(.habit).map(\.id)); data.habitHideUngrouped = true }
+        touch()
+    }
+
+    /// The habits the pies count: those in shown sections.
+    func habitsCounted() -> [Habit] { data.habits.filter { habitSectionShown($0.group) } }
+
+    /// For a month, each day's ticks among the counted habits, broken down by section, so
+    /// a day's pie can be filled in the sections' own colours. Key is the "yyyy-MM-dd" day;
+    /// value maps a section (nil = ungrouped) to how many of its habits were ticked.
+    func habitMonthFill(_ month: Date) -> [String: [UUID?: Int]] {
+        let prefix = String(month.startOfMonth.key.prefix(7))          // "yyyy-MM"
+        var out: [String: [UUID?: Int]] = [:]
+        for h in habitsCounted() {
+            for key in h.marks where key.hasPrefix(prefix) {
+                out[key, default: [:]][h.group, default: 0] += 1
+            }
+        }
+        return out
+    }
+
+    // MARK: - Copy as Markdown
+
+    /// The reminders in a folder (all of them, on "All") as Markdown: a heading per group,
+    /// each row a checkbox with its date/time/repeat, subtasks indented — the web's
+    /// "Copy as Markdown", from a hidden textarea there and the share sheet here.
+    func markdown(folder: UUID?, includeDone: Bool = false) -> String {
+        let today = Date().day
+        var out: [String] = []
+        func emit(_ ref: GroupRef, _ title: String) {
+            let rows = reminders(folder: folder, group: ref).filter { includeDone || !$0.done }
+            guard !rows.isEmpty else { return }
+            out.append("## \(title)")
+            for r in rows {
+                let box = r.done ? "[x]" : "[ ]"
+                var line = String(repeating: "  ", count: r.indent) + "- \(box) \(r.text)"
+                var meta: [String] = []
+                if let due = r.due { meta.append(dayLabel(due, today: today)) }
+                if let m = r.minutes { meta.append(timeLabel(m)) }
+                if let rule = r.recurrence { meta.append(rule.label) }
+                if !meta.isEmpty { line += " (" + meta.joined(separator: " · ") + ")" }
+                out.append(line)
+            }
+            out.append("")
+        }
+        emit(.calendar, "Calendar")
+        emit(.inbox, "Reminders")
+        for g in data.groupList(.reminder) { emit(.group(g.id), g.name) }
+        return out.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 
     // MARK: - The watch's list
