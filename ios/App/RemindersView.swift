@@ -13,6 +13,7 @@ struct RemindersView: View {
     // The inline "type it and hit return" row, which belongs to one group at a time.
     @State private var drafting: GroupRef?
     @State private var draft = ""
+    @State private var showSettings = false
     @FocusState private var draftFocused: Bool
 
     private var today: Date { Date().day }
@@ -46,12 +47,17 @@ struct RemindersView: View {
                         }
                         ShareLink("Share as Markdown",
                                   item: store.markdown(folder: folder, includeDone: showCompleted))
+                        Divider()
+                        // Settings has no tab of its own — it lives here, the way the site
+                        // keeps it in the user menu rather than the app bar.
+                        Button("Settings", systemImage: "gearshape") { showSettings = true }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
             }
             .sheet(item: $editing) { ReminderDetail(reminder: $0) }
+            .sheet(isPresented: $showSettings) { SettingsView() }
             .alert("Rename group", isPresented: Binding(get: { renaming != nil },
                                                         set: { if !$0 { renaming = nil } })) {
                 RenameField(group: renaming) { renaming = nil }

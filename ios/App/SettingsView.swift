@@ -5,6 +5,7 @@ import SwiftUI
 /// a two-press erase.
 struct SettingsView: View {
     @EnvironmentObject private var store: Store
+    @Environment(\.dismiss) private var dismiss
     @State private var armed = false
 
     var body: some View {
@@ -34,6 +35,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
     }
 
