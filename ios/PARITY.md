@@ -40,7 +40,7 @@ Legend:
 | add / delete a folder, items fall back | ✅ `testAddFolderDedupesAndColoursByPosition`, `testDeleteFolderMovesItemsToFallbackNeverTheLast` |
 | the permanent folders can't be deleted | 🟰 iOS models Calendar/Reminders as permanent **groups** (`GroupRef.calendar/.inbox`), not folders; the "never the last folder" guard is tested |
 | a folder colour must come from the palette | 🟰 iOS colours are palette **indices** — off-palette is impossible by construction |
-| picker box / row / All visibility (three gestures) | ⚠️ **gap** — iOS folder picker is single-select (All / one folder), no per-folder show/hide |
+| picker box / row / All visibility (three gestures) | ✅ `testFolderVisibilityThreeGestures`, `testHiddenFolderDropsOutOfTheListAndWatch` — the picker toggles/only/All over `hiddenFolders`; the list, Markdown and watch read `remindersShown` |
 | the default folder is where a new item lands on All | ✅ `testTargetFolder` |
 | the folder heading wears its colour as a wash | 👁 rendering |
 
@@ -51,7 +51,7 @@ Legend:
 | a note carries folder, section **and date**, can be deleted | ✅ `testNoteCarriesFolderGroupAndDate`, `testNotesOnDay` (date **added** this pass) |
 | note sections add/rename/delete per folder | ✅ shares the group machinery — `testGroupAddRenameDeleteEmptiesToInbox` |
 | a note body is sanitised (`rt_sanitize`, allowlist) | 🟰 iOS notes are **plain text** — nothing is rendered, so nothing to sanitise |
-| the "Notes" catch-all name is reserved | 🟰 iOS catch-all is the `nil` group, not a named row — no name to collide |
+| the "Notes" catch-all name is reserved | ✅ `testReservedGroupNamesAreRefused` (`isReservedGroupName` guards add/rename for Notes/Reminders/Calendar/Habits) |
 | a note folder colour from the notes palette | 🟰 index-based |
 
 ### 7. calendar
@@ -63,9 +63,9 @@ Legend:
 | an undated Calendar rider shows on today, not overdue | ✅ `testOverdueAndRidesAlong`, `testRemindersOnDayCollectsDueOverdueAndRiders` |
 | add an event from the day panel | ✅ `testEventsOnDayWithRepeatAndScope` (+ the single **+ Add** menu, this pass) |
 | edit / delete a calendar item (event deleted outright) | 👁 via `EventDetail`; `store.delete` covered elsewhere |
-| deleting a reminder/note from the calendar only unschedules it | ⚠️ **gap** — iOS deletes it from its list (no unschedule-in-place) |
+| deleting a reminder/note from the calendar only unschedules it | ✅ `testDeletingFromCalendarUnschedulesButKeepsTheItem` — day-panel long-press → "Remove from this day" (`store.unschedule`) |
 | calendars: add, recolour, default, delete | ✅ `testCalendarAddSetScopeAndDelete` (recolour/default are view actions) |
-| tapping a calendar row leaves only it showing | 🟰 iOS calendar scope is single-select (`calSel`), like the folder picker |
+| tapping a calendar row leaves only it showing | ✅ `testCalendarVisibilityThreeGestures` — the calendar picker is the same three gestures over `hiddenCals`; a saved set applies as "show only its calendars" |
 | ticking a reminder from the calendar rolls a repeat | ✅ `testToggleFinishesAPlainReminderButRollsARepeat` (shared `store.toggle`) |
 
 ### 8. habits
@@ -75,7 +75,7 @@ Legend:
 | habits add / rename / delete | ✅ add+toggle tested; rename via `updateHabit`, delete via `deleteHabit` |
 | a section colour from the palette, echoed back | ✅ `testSectionColoursByPositionThenBySetter` (+ the fixed swatch picker + `testUngroupedHabitColour`) |
 | both views render and draw real cells | 👁 rendering |
-| the section manager / reorder sections without disturbing habits | ⚠️ **gap** — iOS has no section (group) reordering |
+| the section manager / reorder sections without disturbing habits | ✅ `testMoveGroupsReordersWithoutDisturbingRows` (`store.moveGroups`); the reorder gesture in-app is by-eye |
 | the last section is undeletable | 🟰 iOS always keeps the `nil` "Habits" bucket, so there is always a section |
 | deleting a section leaves its habits ungrouped | ✅ **added** `testDeletingAHabitSectionLeavesItsHabitsUngrouped` |
 | month view counts a day against ticked habits | ✅ `testHabitMonthFillCountsBySection` |
@@ -104,8 +104,8 @@ Legend:
 | times parse in every documented shape (9am, 12:05am…) | ✅ **strengthened** `testParseTimeAndDate` |
 | dates parse in every documented shape | ✅ `testParseTimeAndDate`, `testBareDateIsNextOccurrence` |
 | a repeat spec is cleaned or refused | 🟰 iOS `Recurrence.Unit` is an enum — an unknown unit can't exist |
-| folder names are cleaned (trim, collapse, strip control, clip 40) | ⚠️ **gap** — iOS `addFolder`/`addGroup` only trim ends |
-| folders reorder and keep every folder | ⚠️ **gap** — no folder reordering in iOS |
+| folder names are cleaned (trim, collapse, strip control, clip 40) | ✅ `testCleanNameTrimsCollapsesStripsAndClips` (`cleanName`, used by add/rename) |
+| folders reorder and keep every folder | ✅ `testMoveFoldersKeepsEveryFolder` (`store.moveFolders`; drag in the folder manager's Edit) |
 | folder tint / plus-SVG / kind-CSS / escaping-on-output | ⛔ web rendering & XSS — N/A to a native app |
 
 ### 20. edges
@@ -125,17 +125,16 @@ Sections **1 seeding-parity, 2 auth, 3 storage/encryption, 10 sharing, 11 widget
 doesn't do. The watch hand-off is the native analogue of the widget and is exercised by
 `testWatchListHasOpenItemsInGroupsAndDropsEmpties`.
 
-## Open gaps (⚠️) — decisions for later
-These are genuine differences, not oversights. None is a bug; each is a scope call:
+## Open gaps (⚠️) — the last remaining
+Most gaps are now closed (visibility, reordering, unschedule, name hygiene, reserved names —
+see the tables above). What's left:
 
-1. **Multi-folder / multi-calendar visibility.** The web's picker has per-item show/hide with
-   the three-gesture "All" master; iOS uses a single-select picker. Adding it is a real
-   feature + model change (a `hidden` set), not just a test.
-2. **No section (group) or folder reordering.** iOS reorders rows within a section, not the
-   sections or folders themselves. `store.moveFolders/moveGroups` + drag UI would close it.
-3. **Delete-from-calendar unschedules on the web; iOS deletes.** Different mental model.
-4. **No text-length cap (500/200) or control-char scrub on names.** Minor input hygiene the
-   web enforces server-side; a native keyboard makes it far less pressing.
+1. **Per-folder calendar mode (`rf_mode`).** The web can switch a reminder folder to
+   Dated-only or Off *for the calendar* independently of the Reminders list. iOS shows every
+   folder's reminders on the calendar. (A folder hidden in the Reminders picker still shows
+   on the calendar — the two filters are separate on the web too.)
+2. **Text-length caps.** The web clips reminder text to 500 and note titles to 200; iOS
+   stores what you type. Native input makes it far less pressing than server-side storage.
 
 Deep, deliberate model differences (not gaps to "fix"): permanent Calendar/Reminders as
 **groups** not folders; **global** sections rather than per-folder; **plain-text** notes;

@@ -146,7 +146,7 @@ final class Store: ObservableObject {
     func folderName(_ id: UUID?) -> String { data.folder(id)?.name ?? "All" }
 
     func addFolder(_ name: String, kind: ItemKind) {
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean = cleanName(name)
         guard !clean.isEmpty,
               !data.folderList(kind).contains(where: { $0.name.caseInsensitiveCompare(clean) == .orderedSame })
         else { return }
@@ -186,11 +186,71 @@ final class Store: ObservableObject {
         viewing ?? data.defaultFolder[kind.rawValue] ?? data.folderList(kind).first?.id
     }
 
+    /// Persist a drag-reorder of a kind's folders (which order by array position, not an
+    /// `order` field), splicing the new order back without disturbing the other kind's rows —
+    /// the web's `folders_reorder`, which keeps every folder.
+    func moveFolders(_ kind: ItemKind, from source: IndexSet, to destination: Int) {
+        var list = data.folderList(kind)
+        list.reorder(fromOffsets: source, toOffset: destination)
+        var next = list.makeIterator()
+        data.folders = data.folders.map { $0.kind == kind ? (next.next() ?? $0) : $0 }
+        touch()
+    }
+
+    // MARK: - Folder visibility (the three-gesture picker)
+    //
+    // Stored as what's hidden, per kind: the box toggles one, a row shows only one, "All" is
+    // the master — the web's folder_vis / folder_vis_only / folder_vis_all.
+
+    /// Whether a folder is currently shown.
+    func folderShown(_ id: UUID, kind: ItemKind) -> Bool {
+        !(data.hiddenFolders[kind.rawValue] ?? []).contains(id)
+    }
+
+    /// The box: toggle just this folder.
+    func toggleFolder(_ id: UUID, kind: ItemKind) {
+        var hidden = data.hiddenFolders[kind.rawValue] ?? []
+        if let i = hidden.firstIndex(of: id) { hidden.remove(at: i) } else { hidden.append(id) }
+        data.hiddenFolders[kind.rawValue] = hidden
+        touch()
+    }
+
+    /// The row: show only this folder, hide the rest.
+    func showOnlyFolder(_ id: UUID, kind: ItemKind) {
+        data.hiddenFolders[kind.rawValue] = data.folderList(kind).map(\.id).filter { $0 != id }
+        touch()
+    }
+
+    /// The "All" master: on only when no folder of this kind is hidden.
+    func foldersAllShown(_ kind: ItemKind) -> Bool {
+        let hidden = Set(data.hiddenFolders[kind.rawValue] ?? [])
+        return data.folderList(kind).allSatisfy { !hidden.contains($0.id) }
+    }
+    func setFoldersAll(_ show: Bool, kind: ItemKind) {
+        data.hiddenFolders[kind.rawValue] = show ? [] : data.folderList(kind).map(\.id)
+        touch()
+    }
+
+    /// The folders on show, in list order — used to filter the list and to decide where a new
+    /// item lands when exactly one is showing.
+    func shownFolders(_ kind: ItemKind) -> [Folder] {
+        let hidden = Set(data.hiddenFolders[kind.rawValue] ?? [])
+        return data.folderList(kind).filter { !hidden.contains($0.id) }
+    }
+
+    /// Where a new item lands from the list: the one folder on show, else the default — the
+    /// web files it in the folder you're focused on, or the default when several show.
+    func addTarget(_ kind: ItemKind) -> UUID? {
+        let shown = shownFolders(kind)
+        if shown.count == 1 { return shown[0].id }
+        return data.defaultFolder[kind.rawValue] ?? data.folderList(kind).first?.id
+    }
+
     // MARK: - Groups
 
     func addGroup(_ name: String, kind: ItemKind) {
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty,
+        let clean = cleanName(name)
+        guard !clean.isEmpty, !isReservedGroupName(clean, kind: kind),
               !data.groupList(kind).contains(where: { $0.name.caseInsensitiveCompare(clean) == .orderedSame })
         else { return }
         let order = (data.groupList(kind).map(\.order).max() ?? 0) + 1
@@ -214,13 +274,26 @@ final class Store: ObservableObject {
     }
 
     func renameGroup(_ id: UUID, to name: String) {
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean = cleanName(name)
         guard !clean.isEmpty, let i = data.groups.firstIndex(where: { $0.id == id }) else { return }
         let kind = data.groups[i].kind
-        guard !data.groupList(kind).contains(where: {
-            $0.id != id && $0.name.caseInsensitiveCompare(clean) == .orderedSame
-        }) else { return }
+        guard !isReservedGroupName(clean, kind: kind),
+              !data.groupList(kind).contains(where: {
+                  $0.id != id && $0.name.caseInsensitiveCompare(clean) == .orderedSame
+              }) else { return }
         data.groups[i].name = clean
+        touch()
+    }
+
+    /// Persist a drag-reorder of a kind's sections — the web reorders sections in its
+    /// manager; here the same result renumbers each section's `order`, moving no habits or
+    /// rows with them.
+    func moveGroups(_ kind: ItemKind, from source: IndexSet, to destination: Int) {
+        var list = data.groupList(kind)
+        list.reorder(fromOffsets: source, toOffset: destination)
+        for (i, g) in list.enumerated() {
+            if let idx = data.groups.firstIndex(where: { $0.id == g.id }) { data.groups[idx].order = i }
+        }
         touch()
     }
 
@@ -284,6 +357,14 @@ final class Store: ObservableObject {
         touch()
     }
 
+    /// Take a reminder off the calendar without deleting it — the web's "delete from the
+    /// calendar" for a dated reminder: the date comes off, the row stays in its own list.
+    func unschedule(_ reminder: Reminder) {
+        guard let i = data.reminders.firstIndex(where: { $0.id == reminder.id }) else { return }
+        data.reminders[i].due = nil
+        touch()
+    }
+
     /// Display order inside a group: undated first, then by date, stored order breaking
     /// ties. Completed items sink to the bottom.
     func sorted(_ rows: [Reminder]) -> [Reminder] {
@@ -317,6 +398,18 @@ final class Store: ObservableObject {
         return blocks
             .sorted { (rank[$0[0].id] ?? 0) < (rank[$1[0].id] ?? 0) }
             .flatMap { $0 }
+    }
+
+    /// The reminders the list shows in a section: one focused folder, or — when `folder` is
+    /// nil (the "All" view) — every folder that isn't hidden. The list, Copy-as-Markdown and
+    /// the watch all read this, so a hidden folder is hidden everywhere the web hides it.
+    func remindersShown(folder: UUID?, group: GroupRef) -> [Reminder] {
+        if let folder { return reminders(folder: folder, group: group) }
+        let hidden = Set(data.hiddenFolders[ItemKind.reminder.rawValue] ?? [])
+        return reminders(folder: nil, group: group).filter { r in
+            guard let f = r.folder else { return true }
+            return !hidden.contains(f)
+        }
     }
 
     /// Add a blank subtask directly under `parent`: same folder and group, indent 1,
@@ -373,11 +466,29 @@ final class Store: ObservableObject {
     }
     func delete(_ note: Note)  { data.notes.removeAll { $0.id == note.id }; touch() }
 
+    /// Take a note off the calendar without deleting it — its `date` comes off, the note stays.
+    func unschedule(_ note: Note) {
+        guard let i = data.notes.firstIndex(where: { $0.id == note.id }) else { return }
+        data.notes[i].date = nil
+        touch()
+    }
+
     /// Notes in a folder+group, in drag order (stored `order`), like the web suite.
     func notes(folder: UUID?, group: UUID?) -> [Note] {
         data.notes
             .filter { $0.group == group && (folder == nil || $0.folder == folder) }
             .sorted { $0.order < $1.order }
+    }
+
+    /// The notes the list shows in a group: one focused folder, or every non-hidden folder on
+    /// "All" — the notes twin of `remindersShown`.
+    func notesShown(folder: UUID?, group: UUID?) -> [Note] {
+        if let folder { return notes(folder: folder, group: group) }
+        let hidden = Set(data.hiddenFolders[ItemKind.note.rawValue] ?? [])
+        return notes(folder: nil, group: group).filter { n in
+            guard let f = n.folder else { return true }
+            return !hidden.contains(f)
+        }
     }
 
     /// Persist a drag-reorder: `ordered` is the group as the user just arranged it.
@@ -445,6 +556,49 @@ final class Store: ObservableObject {
         guard let selection, let c = data.cal(selection) else { return nil }
         if let m = c.members { return Set(m).intersection(Set(calendarsOnly.map(\.id))) }
         return [selection]
+    }
+
+    // MARK: - Calendar visibility (the three-gesture picker)
+    //
+    // The calendar's twin of folder visibility, over the web's `hidden_cals`.
+
+    /// Whether a calendar is currently shown.
+    func calShown(_ id: UUID) -> Bool { !data.hiddenCals.contains(id) }
+
+    /// The box: toggle just this calendar.
+    func toggleCal(_ id: UUID) {
+        if let i = data.hiddenCals.firstIndex(of: id) { data.hiddenCals.remove(at: i) }
+        else { data.hiddenCals.append(id) }
+        touch()
+    }
+
+    /// The row: show only this calendar.
+    func showOnlyCal(_ id: UUID) { showOnlyCalendars([id]) }
+
+    /// Show only the given calendars, hiding the rest — the row gesture, and how a saved set
+    /// (a named group of calendars) applies in the visibility model.
+    func showOnlyCalendars(_ ids: [UUID]) {
+        let keep = Set(ids)
+        data.hiddenCals = calendarsOnly.map(\.id).filter { !keep.contains($0) }
+        touch()
+    }
+
+    /// The "All" master: on only when no calendar is hidden.
+    func calsAllShown() -> Bool {
+        let hidden = Set(data.hiddenCals)
+        return calendarsOnly.allSatisfy { !hidden.contains($0.id) }
+    }
+    func setCalsAll(_ show: Bool) {
+        data.hiddenCals = show ? [] : calendarsOnly.map(\.id)
+        touch()
+    }
+
+    /// The visible-calendar filter for the grid and day panel: nil when everything shows (no
+    /// filtering), otherwise the ids still on. Stale hidden ids are ignored.
+    var shownCalScope: Set<UUID>? {
+        let all = Set(calendarsOnly.map(\.id))
+        let hidden = Set(data.hiddenCals).intersection(all)
+        return hidden.isEmpty ? nil : all.subtracting(hidden)
     }
 
     /// Events on one day, repeats expanded, optionally narrowed to a calendar scope. An
@@ -608,7 +762,7 @@ final class Store: ObservableObject {
         let today = Date().day
         var out: [String] = []
         func emit(_ ref: GroupRef, _ title: String) {
-            let rows = reminders(folder: folder, group: ref).filter { includeDone || !$0.done }
+            let rows = remindersShown(folder: folder, group: ref).filter { includeDone || !$0.done }
             guard !rows.isEmpty else { return }
             out.append("## \(title)")
             for r in rows {
@@ -637,7 +791,7 @@ final class Store: ObservableObject {
     func watchList() -> WatchList {
         let today = Date().day
         func items(_ ref: GroupRef) -> [WatchItem] {
-            reminders(folder: nil, group: ref)
+            remindersShown(folder: nil, group: ref)
                 .filter { !$0.done }
                 .map { r in
                     var bits: [String] = []

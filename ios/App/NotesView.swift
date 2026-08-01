@@ -6,10 +6,8 @@ import SwiftUI
 struct NotesView: View {
     @EnvironmentObject private var store: Store
 
-    @State private var folder: UUID?
     @State private var editing: Note?
     @State private var renaming: ListGroup?
-    @State private var restored = false
 
     var body: some View {
         NavigationStack {
@@ -23,7 +21,7 @@ struct NotesView: View {
             .navigationTitle("Notes")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    FolderMenu(kind: .note, selection: $folder)
+                    FolderMenu(kind: .note)
                 }
                 ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -41,21 +39,11 @@ struct NotesView: View {
                 RenameGroupField(group: renaming, kind: .note) { renaming = nil }
             }
         }
-        .onAppear {
-            guard !restored else { return }
-            folder = store.data.lastFolder[ItemKind.note.rawValue]
-            restored = true
-        }
-        .onChange(of: folder) {
-            guard restored else { return }
-            store.data.lastFolder[ItemKind.note.rawValue] = folder
-            store.touch()
-        }
     }
 
     @ViewBuilder
     private func section(_ group: UUID?, title: String, model: ListGroup? = nil) -> some View {
-        let rows = store.notes(folder: folder, group: group)
+        let rows = store.notesShown(folder: nil, group: group)
         Section {
             ForEach(rows) { row($0) }
                 .onMove { store.moveNotes(rows, from: $0, to: $1) }
@@ -107,7 +95,7 @@ struct NotesView: View {
     }
 
     private func newNote(group: UUID?) {
-        let note = Note(folder: store.target(.note, viewing: folder), group: group)
+        let note = Note(folder: store.addTarget(.note), group: group)
         store.add(note)
         editing = note
     }

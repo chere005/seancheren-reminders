@@ -28,6 +28,11 @@ thing that happens to look the same; changing one doesn't touch the other.
   an optional day (`DateOnlyPicker`), which puts it on the calendar under that date; the
   title is never date-parsed, unlike a reminder's.
 
+Folders and calendars use the suite's **three-gesture visibility** picker — the ticks are
+what's on screen: "All" is the master, a folder/calendar's submenu toggles it or shows only
+it, and a saved calendar set applies as "show only these". Folders reorder in the manager's
+Edit; names are cleaned on the way in (`cleanName`) and can't take a permanent heading's name.
+
 Everything the site suite does that makes sense on a phone is reimplemented natively:
 folders and groups, repeats (with month/year day-clamping), the undated-first ordering,
 the slash-only US-order text parser (`Shared/Parse.swift`), the two-press delete, plus

@@ -22,17 +22,15 @@ struct CalendarView: View {
     @AppStorage("calFoldReminders") private var foldReminders = false
     @AppStorage("calFoldNotes") private var foldNotes = false
 
-    // Week vs month view (remembered), and which calendar/set the view is scoped to.
+    // Week vs month view (remembered). Which calendars show is the three-gesture visibility.
     @AppStorage("calWeekMode") private var weekMode = false
-    @State private var calSel: UUID?
-    @State private var restored = false
 
     private let cal = Calendar.current
     private var today: Date { Date().day }
     private let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
 
-    /// The set of calendar ids in scope (nil = all), from the current selection.
-    private var scope: Set<UUID>? { store.calScope(calSel) }
+    /// The set of calendar ids in scope (nil = all show), from the visibility picker.
+    private var scope: Set<UUID>? { store.shownCalScope }
 
     var body: some View {
         NavigationStack {
@@ -64,36 +62,43 @@ struct CalendarView: View {
             .sheet(item: $editingNote) { NoteDetail(note: $0) }
             .sheet(isPresented: $managing) { CalendarManager() }
         }
-        .onAppear {
-            guard !restored else { return }
-            calSel = store.data.lastCal
-            restored = true
-        }
-        .onChange(of: calSel) {
-            guard restored else { return }
-            store.data.lastCal = calSel
-            store.touch()
-        }
     }
 
-    /// The calendar/set filter: All, a single calendar, or a saved set.
+    /// The calendar filter, the suite's three gestures: tick "All", toggle one calendar or
+    /// show only it (its submenu), or apply a saved set (show only its calendars). The ticks
+    /// are what's drawn, like the web's `hidden_cals`.
     private var scopeMenu: some View {
         Menu {
-            Picker("Calendar", selection: $calSel) {
-                Text("All calendars").tag(UUID?.none)
-                ForEach(store.calendarsOnly) { c in Text(c.name).tag(UUID?.some(c.id)) }
-                if !store.calSets.isEmpty {
-                    Divider()
-                    ForEach(store.calSets) { s in Text(s.name).tag(UUID?.some(s.id)) }
+            Button { store.setCalsAll(!store.calsAllShown()) } label: {
+                Label("All calendars", systemImage: store.calsAllShown() ? "checkmark.circle.fill" : "circle")
+            }
+            Divider()
+            ForEach(store.calendarsOnly) { c in
+                Menu {
+                    Button { store.toggleCal(c.id) } label: {
+                        Label(store.calShown(c.id) ? "Showing" : "Hidden",
+                              systemImage: store.calShown(c.id) ? "checkmark.circle.fill" : "circle")
+                    }
+                    Button("Show only this") { store.showOnlyCal(c.id) }
+                } label: {
+                    Text(c.name)
                 }
             }
-            .pickerStyle(.inline)
+            if !store.calSets.isEmpty {
+                Divider()
+                ForEach(store.calSets) { s in
+                    Button(s.name) { store.showOnlyCalendars(s.members ?? []) }
+                }
+            }
             Divider()
             Button("Calendars…", systemImage: "calendar") { managing = true }
         } label: {
-            PickerDot(color: store.data.cal(calSel).map { Theme.color($0.color) })
+            // One calendar on show wears its colour; several (or none) show the all-colours dot.
+            PickerDot(color: shownCals.count == 1 ? Theme.color(shownCals[0].color) : nil)
         }
     }
+
+    private var shownCals: [Cal] { store.calendarsOnly.filter { store.calShown($0.id) } }
 
     // MARK: - Month header and grid
 
@@ -277,6 +282,15 @@ struct CalendarView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editingReminder = r }
+        .contextMenu {
+            // A dated reminder rides the calendar; "remove from this day" takes the date off
+            // and keeps the row in its list — the web's delete-from-calendar. Deleting outright
+            // stays behind the two-press in the detail.
+            if r.due != nil {
+                Button("Remove from this day", systemImage: "calendar.badge.minus") { store.unschedule(r) }
+            }
+            Button("Edit", systemImage: "pencil") { editingReminder = r }
+        }
     }
 
     private func noteRow(_ n: Note) -> some View {
@@ -287,6 +301,10 @@ struct CalendarView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editingNote = n }
+        .contextMenu {
+            Button("Remove from this day", systemImage: "calendar.badge.minus") { store.unschedule(n) }
+            Button("Edit", systemImage: "pencil") { editingNote = n }
+        }
     }
 
     // MARK: - Actions

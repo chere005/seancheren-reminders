@@ -1,26 +1,38 @@
 import SwiftUI
 
-/// The folder picker that sits in a list's title bar: a round dot wearing the current
-/// folder's colour, dropping a menu of all of them with All at the top.
+/// The folder picker in a list's title bar: a colour dot dropping the three-gesture
+/// visibility menu — the ticks are what's on screen, like the web. "All" is the master
+/// (tick shows the lot, untick hides it); each folder's submenu toggles just it or shows
+/// only it. The last row opens the folder manager.
 struct FolderMenu: View {
     let kind: ItemKind
-    @Binding var selection: UUID?
     @State private var managing = false
     @EnvironmentObject private var store: Store
 
     var body: some View {
         Menu {
-            Picker("Folder", selection: $selection) {
-                Text("All").tag(UUID?.none)
-                ForEach(store.data.folderList(kind)) { folder in
-                    Text(folder.name).tag(UUID?.some(folder.id))
+            Button { store.setFoldersAll(!store.foldersAllShown(kind), kind: kind) } label: {
+                Label("All", systemImage: store.foldersAllShown(kind) ? "checkmark.circle.fill" : "circle")
+            }
+            Divider()
+            ForEach(store.data.folderList(kind)) { folder in
+                Menu {
+                    Button { store.toggleFolder(folder.id, kind: kind) } label: {
+                        Label(store.folderShown(folder.id, kind: kind) ? "Showing" : "Hidden",
+                              systemImage: store.folderShown(folder.id, kind: kind)
+                                  ? "checkmark.circle.fill" : "circle")
+                    }
+                    Button("Show only this") { store.showOnlyFolder(folder.id, kind: kind) }
+                } label: {
+                    Text(folder.name)
                 }
             }
-            .pickerStyle(.inline)
             Divider()
             Button("Folders…", systemImage: "folder") { managing = true }
         } label: {
-            PickerDot(color: store.data.folder(selection).map { Theme.color($0.color) })
+            // One folder on show wears its colour; several (or none) show the all-colours dot.
+            PickerDot(color: store.shownFolders(kind).count == 1
+                      ? Theme.color(store.shownFolders(kind)[0].color) : nil)
         }
         .sheet(isPresented: $managing) { FolderManager(kind: kind) }
     }
@@ -72,14 +84,19 @@ struct FolderManager: View {
                         .contentShape(Rectangle())
                         .onTapGesture { setDefault(folder) }
                     }
+                    .onMove { store.moveFolders(kind, from: $0, to: $1) }
                 } footer: {
-                    Text("Tap a folder to make it where new items land. Deleting one moves "
-                         + "its items to the first folder rather than throwing them away.")
+                    Text("Tap a folder to make it where new items land, or drag to reorder in "
+                         + "Edit. Deleting one moves its items to the first folder rather than "
+                         + "throwing them away.")
                 }
             }
             .navigationTitle("Folders")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { EditButton() }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
     }
 
