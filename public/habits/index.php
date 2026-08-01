@@ -36,6 +36,29 @@ function habit_section_color(array $s, int $i): string
 }
 
 /**
+ * The "+ Habit" that closes each run of habits, adding into that section. It's a grid
+ * child spanning every column, left-aligned under the names, and edit mode only — the
+ * same button-that-becomes-a-field the rest of the suite uses, one per section so a new
+ * habit lands where you were looking rather than in a footer far below.
+ */
+function render_habit_add(string $section, string $csrf): void
+{
+    $id = 'addh-' . ($section === '' ? 'none' : $section);
+    ?>
+    <div class="habitadd">
+      <button type="button" class="newsecbtn addhabit" data-target="<?= e($id) ?>">+ Habit</button>
+      <form method="post" action="" class="newsection" id="<?= e($id) ?>" hidden
+            onsubmit="return this.name.value.trim()!==''">
+        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+        <input type="hidden" name="action" value="add_habit">
+        <input type="hidden" name="section" value="<?= e($section) ?>">
+        <input type="text" name="name" placeholder="+ Habit" maxlength="40" autocomplete="off">
+      </form>
+    </div>
+    <?php
+}
+
+/**
  * Render one habit's name bubble + its day cells into the grid.
  *
  * $color is the colour of the section the habit sits in, carried into the row as a --hc
@@ -537,12 +560,19 @@ foreach ($habitItems as $h) {
 
     /* "+ Section" at the bottom of the habits, the same button-that-becomes-a-field the
        other apps use. Edit mode only, like every other structural control here. */
-    .secfoot { margin: 1.1rem 0 0; display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+    /* + Section sits at the very bottom, on the left: it's the last thing you'd reach
+       for, not something to hunt for in the middle of the page. */
+    .secfoot { margin: 1.4rem 0 0; display: flex; gap: 0.5rem; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
     .secfoot .newsection { margin: 0; }
     body:not(.editing) .secfoot { display: none; }
-    /* With no Edit button, edit mode is reached by holding a habit or a section — so an
-       empty list would have nothing to hold and no way to add the first one. The add
-       buttons stay out on an empty list for exactly that reason. */
+    /* + Habit closes each run of habits, inside the grid and spanning it, so it lines up
+       under the names rather than floating among the day columns. */
+    .habitadd { grid-column: 1 / -1; display: none; margin: 0.15rem 0 0.5rem; }
+    body.editing .habitadd { display: flex; align-items: center; gap: 0.5rem; }
+    .habitadd .newsection { margin: 0; }
+    /* With no Edit button, edit mode is reached by holding a habit or a section — an
+       empty list has nothing to hold, so both ways in stay out on one. */
+    body:not(.editing) .grid.empty-list .habitadd { display: flex; }
     body:not(.editing) .secfoot.always { display: flex; }
     /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */
     .secfoot button.newsecbtn {
@@ -623,7 +653,7 @@ foreach ($habitItems as $h) {
   <?php elseif (!$habitItems && !$sections): ?>
     <p class="empty">No habits yet — add one below, then tap a day to mark it done.</p>
   <?php else: ?>
-    <div class="grid" id="wGrid">
+    <div class="grid<?= (!$habitItems && !$sections) ? ' empty-list' : '' ?>" id="wGrid">
       <div class="corner"></div>
       <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
         <div class="colhead <?= $i < $extraDays ? 'wide-only' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>">
@@ -633,6 +663,7 @@ foreach ($habitItems as $h) {
 
       <?php // Ungrouped habits belong to no section, so they keep the app's own colour. ?>
       <?php foreach ($ungrouped as $h) render_habit_row($h, $days, $today, $csrf, $extraDays); ?>
+      <?php render_habit_add('', $csrf); ?>
 
       <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
         <div class="hsection" data-section="<?= e($s['id']) ?>">
@@ -662,21 +693,16 @@ foreach ($habitItems as $h) {
           </form>
         </div>
         <?php foreach ($bySection($s['id']) as $h) render_habit_row($h, $days, $today, $csrf, $extraDays, $scol); ?>
+        <?php render_habit_add((string) $s['id'], $csrf); ?>
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
 
   <?php // + Section sits under the habits, where you'd add one. ?>
   <?php if ($hView !== 'month'): ?>
+    <?php // + Habit now closes each section up in the grid, where the habit will land.
+          // All that is left down here is + Section, at the very bottom on the left. ?>
     <div class="secfoot<?= (!$habitItems && !$sections) ? ' always' : '' ?>">
-      <?php // + Habit and + Section, both buttons-that-become-a-field (edit mode only). ?>
-      <button type="button" class="newsecbtn" id="newHabitBtn">+ Habit</button>
-      <form method="post" action="" class="newsection" id="newHabitForm" hidden
-            onsubmit="return this.name.value.trim()!==''">
-        <input type="hidden" name="csrf" value="<?= $csrf ?>">
-        <input type="hidden" name="action" value="add_habit">
-        <input type="text" name="name" placeholder="+ Habit" maxlength="40" autocomplete="off">
-      </form>
       <button type="button" class="newsecbtn" id="newSecBtn">+ Section</button>
       <form method="post" action="" class="newsection" id="newSecForm" hidden
             onsubmit="return this.name.value.trim()!==''">
@@ -802,8 +828,9 @@ foreach ($habitItems as $h) {
   document.addEventListener('pointercancel', clearLp);
 
   // ----- "+ Habit" / "+ Section" each swap themselves for a name field, as elsewhere -----
-  const wireAdd = (btnId, formId) => {
-    const btn = document.getElementById(btnId), form = document.getElementById(formId);
+  const wireAdd = (btnRef, formRef) => {
+    const btn  = typeof btnRef  === 'string' ? document.getElementById(btnRef)  : btnRef;
+    const form = typeof formRef === 'string' ? document.getElementById(formRef) : formRef;
     if (!btn || !form) { return; }
     const field = form.querySelector('input[name=name]');
     btn.addEventListener('click', () => { btn.hidden = true; form.hidden = false; field.focus(); });
@@ -812,8 +839,11 @@ foreach ($habitItems as $h) {
     });
     field.addEventListener('keydown', e => { if (e.key === 'Escape') { field.value = ''; field.blur(); } });
   };
-  wireAdd('newHabitBtn', 'newHabitForm');
   wireAdd('newSecBtn', 'newSecForm');
+  // One "+ Habit" per section, so they are wired by data-target rather than by id.
+  document.querySelectorAll('.addhabit[data-target]').forEach(btn => {
+    wireAdd(btn, document.getElementById(btn.dataset.target));
+  });
 
   // ----- Drag to reorder habits and sections (edit mode) -----
   // Same bargain as the Reminders drag: nothing moves until the drop, and the only
