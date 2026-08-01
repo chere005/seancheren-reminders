@@ -1245,6 +1245,34 @@ t('a reorder that never mentions a habit keeps it rather than dropping it', func
        'everything the drag never mentioned is still there');
 });
 
+t('wiring: the habits drag drops against a line, between rows', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/habits/', [], $jar)['body'];
+    has('drop-line', $b, 'the same line the other apps drop against');
+    has('grid-column: 1 / -1', $b, 'spanning every column, so it sits between rows');
+    has('blockOf', $b, 'a section travels with the habits under it');
+});
+
+t("a habit's row carries its section's colour", function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/habits/', [], $jar)['body'];
+    $names = preg_match_all('/class="hname" style="--hc:#[0-9a-f]{6}"/', $b);
+    $cells = preg_match_all('/class="cell[^"]*" style="--hc:#[0-9a-f]{6}"/', $b);
+    ok($names > 0, 'the name bubbles are tinted');
+    ok($cells > $names, 'and so is every day square on those rows');
+    preg_match_all('/--hc:(#[0-9a-f]{6})/', $b, $m);
+    $used = array_values(array_unique($m[1]));
+    foreach ($used as $c) { ok(in_array($c, app_palette('habits', true), true), "$c is a palette colour"); }
+    ok(count($used) > 1, 'two sections should not share one colour by default');
+});
+
+t('wiring: tapping away leaves edit mode in habits', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/habits/', [], $jar)['body'];
+    has('setEdit(false)', $b, 'there is a way out that is not a button');
+    hasnt('id="editBtn"', $b, 'and the Edit pencil is gone');
+});
+
 t('wiring: the Calendar remembers the day, and the tab bar is what forgets it', function () {
     $jar = login('example', 'examplepassword');
     $cal = req('GET', '/calendar/', [], $jar)['body'];
