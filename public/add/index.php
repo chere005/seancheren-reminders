@@ -46,8 +46,13 @@ function add_default_cal(array $cfg, array $ids): string
     return in_array($d, $ids, true) ? $d : (string) ($ids[0] ?? '');
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
-    && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    // A bad token used to fall straight through to the render, so a stale page looked
+    // like it had added your line when it had done nothing at all. Refuse it out loud,
+    // the same 400 every other page in the suite answers with.
+    if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+        http_response_code(400); exit('Bad request (invalid CSRF token).');
+    }
     $text = trim((string) ($_POST['text'] ?? ''));
     $act  = (string) ($_POST['action'] ?? '');
     // "Vet 8/3 2pm" -> text "Vet", date Aug 3, time 14:00. An explicit date/time field

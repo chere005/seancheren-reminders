@@ -333,7 +333,14 @@ function folders_save(string $dir, array $data): void
 /** Clean a user-supplied folder name; returns '' if invalid. */
 function folder_clean(string $name): string
 {
-    $name = trim(preg_replace('/\s+/', ' ', $name));
+    // Control characters go first, \x1F above all: the Calendar's add window packs
+    // "folder\x1Fgroup" into one <option> value and splits on it, so a folder whose name
+    // contained one would tear that apart and land the item somewhere else. The rest are
+    // dropped for the same reason a newline in a folder name helps nobody.
+    // Whitespace first, so a tab or a newline collapses to a space rather than closing
+    // the gap between two words; then anything else control-ish simply goes.
+    $name = preg_replace('/\s+/u', ' ', $name);
+    $name = trim(preg_replace('/[\x00-\x1F\x7F]/u', '', $name));
     return mb_substr($name, 0, 40);
 }
 
