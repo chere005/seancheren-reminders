@@ -772,13 +772,15 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
        empty list has nothing to hold, so both ways in stay out on one. */
     body:not(.editing) .grid.empty-list .habitadd { display: flex; }
     body:not(.editing) .secfoot.always { display: flex; }
-    /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */
-    .secfoot button.newsecbtn {
+    /* Same grey outlined pill as "+ Section" on Notes and Reminders — worn by both
+       + Section (in .secfoot) and + Habit (in the grid's .habitadd), so they match rather
+       than the + Habit falling back to a raw browser button. */
+    button.newsecbtn {
       height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
       color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center; line-height: 1;
     }
-    .secfoot button.newsecbtn:hover { border-color: #888; color: #fff; }
+    button.newsecbtn:hover { border-color: #888; color: #fff; }
 <?= folder_nav_styles() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
