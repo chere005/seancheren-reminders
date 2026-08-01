@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,8 +27,16 @@ import androidx.compose.ui.unit.sp
 // the cousin of lib/chrome.php's top bar. The app's name on the left, its own controls
 // gathered on the right.
 
+/** Lets the shared TopBar open Settings without every screen plumbing a callback. */
+val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> { {} }
+
 @Composable
-fun TopBar(title: String, trailing: @Composable RowScope.() -> Unit = {}) {
+fun TopBar(
+    title: String,
+    showSettingsGear: Boolean = true,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    val openSettings = LocalOpenSettings.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -37,6 +46,18 @@ fun TopBar(title: String, trailing: @Composable RowScope.() -> Unit = {}) {
         Text(title, color = TextColor, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.weight(1f))
         trailing()
+        if (showSettingsGear) {
+            Spacer(Modifier.size(4.dp))
+            Text(
+                "⚙",
+                color = Muted,
+                fontSize = 20.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { openSettings() }
+                    .padding(6.dp),
+            )
+        }
     }
     HorizontalDivider(color = Hairline, thickness = 1.dp)
 }

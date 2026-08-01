@@ -18,14 +18,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Settings — the cousin of ios/App/SettingsView.swift. */
+/** Settings — the cousin of ios/App/SettingsView.swift. Opened from the top-right gear. */
 @Composable
-fun SettingsScreen(vm: SuiteViewModel) {
+fun SettingsScreen(vm: SuiteViewModel, onClose: () -> Unit) {
     val store = vm.store
     var eraseArmed by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        TopBar("Settings")
+        TopBar("Settings", showSettingsGear = false) {
+            Pill("Done", primary = true) { onClose() }
+        }
         Column(
             Modifier
                 .weight(1f)
