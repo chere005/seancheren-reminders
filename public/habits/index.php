@@ -502,6 +502,10 @@ foreach ($habitItems as $h) {
     .secfoot { margin: 1.1rem 0 0; display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap; }
     .secfoot .newsection { margin: 0; }
     body:not(.editing) .secfoot { display: none; }
+    /* With no Edit button, edit mode is reached by holding a habit or a section — so an
+       empty list would have nothing to hold and no way to add the first one. The add
+       buttons stay out on an empty list for exactly that reason. */
+    body:not(.editing) .secfoot.always { display: flex; }
     /* Same grey outlined "+ Section" pill as Notes and Reminders, for consistency. */
     .secfoot button.newsecbtn {
       height: 32px; padding: 0 0.9rem; background: none; border: 1px solid #333;
@@ -523,11 +527,12 @@ foreach ($habitItems as $h) {
       </div>
     </div>
     <?php
-      // The Edit pencil rides on the right, gathered by the ⋮.
-      $titleControls = '<button type="button" id="editBtn" class="titlebtn edit-toggle" title="Edit"'
-                     . ' aria-label="Edit">&#9998;&#65038;</button>';
+      // No Edit pencil: holding a habit's name or a section's gets you into edit mode,
+      // the same gesture as everywhere else in the suite. Habits was the last app still
+      // carrying the button, and two ways in is one too many.
+      $titleControls = '';
     ?>
-    <?= render_user_menu(false, 'editBtn', '', false, $titleControls) ?>
+    <?= render_user_menu(false, '', '', false, $titleControls) ?>
   </header>
 
   <?php // Week or month, and the arrows that step whichever one is showing. ?>
@@ -578,7 +583,7 @@ foreach ($habitItems as $h) {
     <p class="mlegend">Each day is filled in proportion to how many of your
       <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?> were ticked.</p>
   <?php elseif (!$habitItems && !$sections): ?>
-    <p class="empty">No habits yet. Tap Edit to add one, then tap a day to mark it done.</p>
+    <p class="empty">No habits yet — add one below, then tap a day to mark it done.</p>
   <?php else: ?>
     <div class="grid" id="wGrid">
       <div class="corner"></div>
@@ -624,7 +629,7 @@ foreach ($habitItems as $h) {
 
   <?php // + Section sits under the habits, where you'd add one. ?>
   <?php if ($hView !== 'month'): ?>
-    <div class="secfoot">
+    <div class="secfoot<?= (!$habitItems && !$sections) ? ' always' : '' ?>">
       <?php // + Habit and + Section, both buttons-that-become-a-field (edit mode only). ?>
       <button type="button" class="newsecbtn" id="newHabitBtn">+ Habit</button>
       <form method="post" action="" class="newsection" id="newHabitForm" hidden
@@ -650,11 +655,13 @@ foreach ($habitItems as $h) {
   const CSRF = '<?= $csrf ?>';
 
   // Edit mode (persisted, like the other tabs).
+  // The Edit pencil is gone — the gesture is the way in — but chrome_script() still
+  // looks for #editBtn, so everything here has to cope with it not being there.
   const editBtn = document.getElementById('editBtn');
   const setEdit = (on) => document.body.classList.toggle('editing', on);
   // Always starts off; a structural change redirects back with ?edit=1 to keep it on.
   setEdit(new URLSearchParams(location.search).get('edit') === '1');
-  editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing')));
+  if (editBtn) { editBtn.addEventListener('click', () => setEdit(!document.body.classList.contains('editing'))); }
 
   // Tap a cell -> toggle that day for the habit (no reload).
   document.querySelectorAll('.cell').forEach(cell => {
@@ -702,7 +709,14 @@ foreach ($habitItems as $h) {
     });
     inp.addEventListener('blur', () => commit(true));
   }
+  // Opening a section's name is what the gesture on a section head is for.
+  const openSectionName = head => {
+    const f = head && head.querySelector('.sectitle');
+    if (f) { setTimeout(() => { f.focus(); try { f.select(); } catch (_) {} }, 0); }
+  };
   document.addEventListener('dblclick', e => {
+    const head = e.target.closest('.hsection');
+    if (head) { if (!editing()) setEdit(true); openSectionName(head); return; }
     const box = e.target.closest('.hname'); if (!box) return;
     if (!editing()) setEdit(true);
     startRename(box);
@@ -718,14 +732,15 @@ foreach ($habitItems as $h) {
   const clearLp = () => { if (lpT) { clearTimeout(lpT); lpT = null; } };
   document.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse') return;
-    const box = e.target.closest('.hname'); if (!box) return;
-    if (e.target.closest('.del, button, form')) return;
+    const box = e.target.closest('.hname, .hsection'); if (!box) return;
+    if (e.target.closest('.del, .hdrag, button, form, input')) return;
     lpBox = box; lpX = e.clientX; lpY = e.clientY;
     lpT = setTimeout(() => {
       lpT = null;
       if (navigator.vibrate) navigator.vibrate(12);
       if (!editing()) setEdit(true);
-      startRename(lpBox);
+      if (lpBox.classList.contains('hsection')) { openSectionName(lpBox); }
+      else { startRename(lpBox); }
     }, 500);
   });
   document.addEventListener('pointermove', e => {
