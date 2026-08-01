@@ -529,6 +529,44 @@ t('Copy as Markdown shows only for the sean account', function () {
         "sean's account keeps the Copy as Markdown button");
 });
 
+t('the section adders show without entering edit mode', function () {
+    // The harness runs no JS, so this guards the *rule*: the + that adds a section (folder
+    // heads in Reminders/Notes) and the + Habit on a Habits section header are not gated on
+    // body.editing, so they show out of edit mode. The gesture itself is a by-eye check.
+    $jar = login('example', 'examplepassword');
+    foreach (['/reminders/', '/notes/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('.fsec-add {', $b, "$p ships the folder-head +");
+        ok(strpos($b, 'body.editing .fsec-add') === false, "$p folder-head + is not gated on edit mode");
+    }
+    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    has('.hsec-add {', $h, 'habits ships the per-section + Habit');
+    ok(strpos($h, 'body.editing .hsec-add') === false, 'the + Habit is not gated on edit mode');
+});
+
+t('holding to edit takes no text selection — the rule is ungated', function () {
+    $jar = login('example', 'examplepassword');
+    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    has('.hname, .hsection { -webkit-user-select: none', $h, 'habits names/sections take no selection');
+    $r = req('GET', '/reminders/', [], $jar)['body'];
+    has('li, .section-head, .folder-head { -webkit-touch-callout: none', $r, 'reminders rows/heads, ungated');
+    $n = req('GET', '/notes/', [], $jar)['body'];
+    has('.section-head, .folder-head { -webkit-touch-callout: none', $n, 'notes heads, ungated');
+    ok(strpos($n, 'body.editing .section-head { -webkit-touch-callout') === false, 'the old edit-gated rule is gone');
+    $c = req('GET', '/calendar/', [], $jar)['body'];
+    has('Holding an item to enter edit mode must not paint', $c, 'the calendar day items take no selection');
+});
+
+t('picker dropdowns clamp horizontal overflow and wrap long names', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/reminders/', [], $jar)['body'];   // shared .folderpick-menu (also the Habits filter)
+    has('overflow-y: auto; overflow-x: hidden;', $r, 'the folder menu pins overflow-x');
+    has('.fpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere;', $r, 'and its names wrap');
+    has('.folderpick-opt .fshared-badge {', $r, 'the shared badge is defined');
+    $c = req('GET', '/calendar/', [], $jar)['body'];
+    has('overflow-y: auto; overflow-x: hidden;', $c, 'the calendar menu pins overflow-x');
+});
+
 // ---------------------------------------------------------------- 5. folders
 area('folders');
 
@@ -887,6 +925,30 @@ t('habits: add, rename, delete', function () {
     req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_habit',
         'id' => $h['id'], 'confirm' => '1'], $jar);
     ok(!in_array('Test habit renamed', array_column(stored('habits', 'example'), 'name'), true));
+});
+
+t('a habit lands in the chosen section, or the first section by default', function () {
+    $jar  = login('example', 'examplepassword');
+    $secs = fn() => array_values(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') === 'section'));
+    // Make a target section of our own (add_section appends, so it isn't the first).
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_section', 'name' => 'ChosenSec', 'mgr' => '1'], $jar);
+    $chosenSec = null;
+    foreach ($secs() as $s) { if (($s['name'] ?? '') === 'ChosenSec') { $chosenSec = (string) $s['id']; } }
+    $first = (string) $secs()[0]['id'];
+    ok($chosenSec !== null && $chosenSec !== $first, 'a target section exists that is not the first');
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_habit',
+        'name' => 'IntoChosen', 'section' => $chosenSec], $jar);
+    $chosen = null;
+    foreach (stored('habits', 'example') as $x) { if (($x['name'] ?? '') === 'IntoChosen') { $chosen = $x; } }
+    ok($chosen !== null, 'created');
+    eq($chosenSec, (string) ($chosen['section'] ?? ''), 'in the section whose + was used');
+    // An empty/invalid section falls back to the first section — never ungrouped.
+    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_habit',
+        'name' => 'IntoDefault', 'section' => ''], $jar);
+    $def = null;
+    foreach (stored('habits', 'example') as $x) { if (($x['name'] ?? '') === 'IntoDefault') { $def = $x; } }
+    ok($def !== null, 'created');
+    eq($first, (string) ($def['section'] ?? ''), 'an empty section falls back to the first, not ungrouped');
 });
 
 t('a section colour must come from the palette, and the answer says what stuck', function () {
