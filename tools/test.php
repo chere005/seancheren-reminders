@@ -448,6 +448,53 @@ t('sections: add, rename, delete', function () {
     ok(!in_array('Testsec2', $names, true), 'deleted');
 });
 
+t('every reminder folder keeps a real default section, and the last one is undeletable', function () {
+    // The unnamed "Reminders" catch-all is gone: every folder opens with a real default
+    // section named General, renameable, and undeletable while it's the only one.
+    $jar   = login('example', 'examplepassword');
+    $rsec  = fn($folder, $name) => (bool) array_filter(stored('reminders', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $folder && ($x['name'] ?? '') === $name);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshR'], $jar);
+    $b = req('GET', '/reminders/?folder=FreshR', [], $jar)['body'];
+    ok($rsec('FreshR', 'General'), 'the folder is seeded with a General section');
+    hasnt('default-group', $b, 'and no unnamed catch-all group is rendered');
+    // A reminder added with a blank section lands in that real default, not a nameless catch-all.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'FreshR',
+        'folder' => 'FreshR', 'section' => '', 'text' => 'lands in General'], $jar);
+    $r = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'lands in General') { $r = $x; } }
+    eq('General', $r['section'] ?? null, 'a blank section resolves to the folder default');
+    // Rename the default, then try to delete the (now only) section — it must survive.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'FreshR',
+        'folder' => 'FreshR', 'name' => 'General', 'newname' => 'Chores'], $jar);
+    ok($rsec('FreshR', 'Chores'), 'the default section renamed in place');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_section', 'view' => 'FreshR',
+        'folder' => 'FreshR', 'name' => 'Chores', 'confirm' => '1'], $jar);
+    ok($rsec('FreshR', 'Chores'), 'the folder never loses its only section');
+});
+
+t('the Manage-folders "Default for new items" picker sets folder and section together', function () {
+    $jar = login('example', 'examplepassword');
+    // Make a folder with a known section, then point the default at that folder+section.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DefF'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+        'view' => 'All', 'folder' => 'DefF', 'name' => 'Chosen'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
+        'view' => 'All', 'fs' => "DefF\x1FChosen"], $jar);
+    eq('DefF', folder_default_get(datadir(), 'reminders', 'example'), 'the default folder moved');
+    eq('Chosen', folder_default_section_get(datadir(), 'reminders', 'example'), 'and its section');
+    // The picker renders in the manager, listing that folder's real sections.
+    $b = req('GET', '/reminders/', [], $jar)['body'];
+    has('name="fs"', $b, 'the manager carries the Default-for-new-items select');
+    has('action" value="set_default_section"', $b, 'wired to set_default_section');
+    // An unknown section for the folder is coerced to a real one, never stored blind.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
+        'view' => 'All', 'fs' => "DefF\x1FGhost"], $jar);
+    $got = folder_default_section_get(datadir(), 'reminders', 'example');
+    ok(in_array($got, ['Chosen', 'General'], true), 'a bogus section coerces to a real one in the folder');
+    ok($got !== 'Ghost', 'the unknown section was not stored');
+});
+
 t('the subtask + makes a child under its parent, not an indent on the row', function () {
     $jar = login('example', 'examplepassword');
     $parent = rowBy('example', 'Return the library books');   // dated, in Home/Errands
@@ -724,6 +771,40 @@ t('note folders and sections behave like the reminders ones', function () {
     ok(!in_array('Testnotes', folders_load(datadir(), 'example')['notes'], true));
 });
 
+t('a note folder renames in place, carrying its notes and its prefs', function () {
+    $jar = login('example', 'examplepassword');
+    $post = fn($p) => req('POST', '/notes/', array_merge(['csrf' => csrf($jar, '/notes/')], $p), $jar);
+    $pal  = app_palette('notes');
+    $post(['action' => 'add_folder', 'view' => 'All', 'name' => 'Renyme']);
+    $post(['action' => 'set_folder_color', 'view' => 'All', 'name' => 'Renyme', 'color' => $pal[2]]);
+    $post(['action' => 'set_default_folder', 'view' => 'All', 'name' => 'Renyme']);
+    $post(['action' => 'add', 'view' => 'Renyme', 'folder' => 'Renyme', 'section' => '']);
+    // The note we just dropped into it (add sets no title, so find it by folder).
+    $id = '';
+    foreach (stored('notes', 'example') as $n) {
+        if (($n['type'] ?? '') !== 'section' && ($n['folder'] ?? '') === 'Renyme') { $id = $n['id']; }
+    }
+    ok($id !== '', 'a note landed in the folder');
+    // The edit-mode / manager rename action.
+    $post(['action' => 'rename_folder', 'view' => 'Renyme', 'name' => 'Renyme', 'newname' => 'Reborn']);
+    $f = folders_load(datadir(), 'example');
+    ok(in_array('Reborn', $f['notes'], true) && !in_array('Renyme', $f['notes'], true), 'the folder took the new name');
+    eq($pal[2], $f['colors']['notes']['Reborn'] ?? '', 'its colour came across');
+    eq('Reborn', $f['default']['notes'] ?? '', 'the default-folder pref followed');
+    $moved = '';
+    foreach (stored('notes', 'example') as $n) { if (($n['id'] ?? '') === $id) { $moved = $n['folder'] ?? ''; } }
+    eq('Reborn', $moved, 'the note in it moved with the rename');
+    // The permanent folder is not renameable, and nothing may take a fixed name.
+    ok(!folders_rename(datadir(), 'notes', 'General', 'Misc'), 'the fixed folder is not renameable');
+    ok(!folders_rename(datadir(), 'notes', 'Reborn', 'General'), 'a rename onto a fixed name is refused');
+    // The list heading is an editable field in the list view (out of edit mode a plain label).
+    has('class="folder-label foldertitle', req('GET', '/notes/?folder=All', [], $jar)['body'],
+        'the folder heading renders as a rename field');
+    // Tidy up so later tests see the usual default.
+    $post(['action' => 'set_default_folder', 'view' => 'All', 'name' => 'General']);
+    $post(['action' => 'delete_folder', 'view' => 'All', 'name' => 'Reborn', 'confirm' => '1']);
+});
+
 // ---------------------------------------------------------------- 7. calendar
 area('calendar');
 
@@ -732,6 +813,31 @@ t('the day panel payload groups by day', function () {
     $r = req('GET', '/calendar/', [], $jar);
     eq(200, $r['status']);
     ok(preg_match('/\{"\d{4}-\d{2}-\d{2}":/', $r['body']) === 1, 'items are keyed by date');
+});
+
+t('the add/edit modal hides Time and Repeat behind + buttons', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calendar/', [], $jar)['body'];
+    has('id="mAddTime"', $b, 'a + Time button reveals the time field');
+    has('id="mAddRepeat"', $b, 'a + Repeat button reveals the repeat field');
+    // Both fields ship hidden by default.
+    ok(preg_match('/id="mTimeRow"[^>]*\shidden/', $b) === 1, 'the time row starts hidden');
+    ok(preg_match('/id="mRepRow"[^>]*\shidden/', $b) === 1, 'the repeat row starts hidden');
+    // The count input sits inside the repeat row, before the unit selector.
+    ok(strpos($b, 'id="mRepN"') < strpos($b, 'id="mRepUnit"'), 'the every-N count comes before the unit select');
+});
+
+t('the calendar draws a dot legend keyed by owner and kind', function () {
+    // example has events, dated reminders and dated notes seeded, so its own row lists all
+    // three kinds; each kind's glyph precedes its calendar/folder dots.
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
+    eq(200, $r['status']);
+    has('<div class="cal-legend"', $r['body'], 'the legend renders');
+    has('class="cleg-ico cleg-event"', $r['body'], 'events are led by the calendar glyph');
+    has('class="cleg-ico cleg-reminder"', $r['body'], 'reminders by the checkbox glyph');
+    has('class="cleg-ico cleg-note"', $r['body'], 'notes by the page glyph');
+    ok(preg_match_all('/class="cleg-dot"/', $r['body']) >= 1, 'each item carries a colour dot');
 });
 
 t("a day's reminders sort undated first, then oldest, then by time", function () {
@@ -981,6 +1087,26 @@ t('both habit views render, and draw actual cells', function () {
     $r = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     ok(preg_match_all('/<div class="mcell/', $r['body']) >= 28, 'the month grid has a cell per day');
+    // The colour key: a dot-and-name legend of the counted sections, matching the pies.
+    has('<ul class="mleg"', $r['body'], 'the month view carries a section colour legend');
+    ok(preg_match_all('/<span class="mleg-dot"/', $r['body']) >= 1, 'the legend draws a colour dot per section');
+    $sec = '';
+    foreach (stored('habits', 'example') as $it) { if (($it['type'] ?? '') === 'section') { $sec = (string) $it['name']; break; } }
+    has($sec, $r['body'], 'a section name appears in the legend');
+});
+
+t('the collapse-all button ships on each list, and habit sections carry a collapse chevron', function () {
+    $jar = login('example', 'examplepassword');
+    // Reminders: the button rides in the toolbar; Notes: above the top folder.
+    has('id="collapseAllBtn"', req('GET', '/reminders/', [], $jar)['body'], 'reminders has collapse-all');
+    has('id="collapseAllBtn"', req('GET', '/notes/', [], $jar)['body'], 'notes has collapse-all');
+    // Habits: its own collapse-all above the sections, and each section header a chevron.
+    $h = req('GET', '/habits/?v=week&w=0', [], $jar)['body'];
+    has('id="hCollapseAll"', $h, 'habits week view has collapse-all');
+    ok(preg_match_all('/<div class="hsection"[^>]*>\s*<button[^>]*class="sec-collapse"/', $h) >= 1,
+       'each habit section header carries a collapse chevron');
+    // The shared folder-collapse-all script is wired.
+    has('foldercollapsed:', req('GET', '/reminders/', [], $jar)['body'], 'the collapse-all script is present');
 });
 
 t('the section manager is on the page — a Manage sections row and its window', function () {
@@ -1074,8 +1200,15 @@ t('a destination that does not exist falls back instead of being taken on trust'
     $jar = login('example', 'examplepassword');
     req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_reminder',
         'text' => 'Bogus folder', 'folder' => 'Nope', 'section' => 'Nope'], $jar);
-    eq(folder_fallback('reminders'), rowBy('example', 'Bogus folder')['folder']);
-    eq('', rowBy('example', 'Bogus folder')['section']);
+    $fb = folder_fallback('reminders');
+    eq($fb, rowBy('example', 'Bogus folder')['folder']);
+    // An unknown section no longer becomes a nameless catch-all — it lands in the fallback
+    // folder's real default section (which must actually exist there).
+    $sec = rowBy('example', 'Bogus folder')['section'];
+    ok($sec !== '', 'the section falls back to a real one, not the empty catch-all');
+    $secExists = (bool) array_filter(stored('reminders', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $fb && ($x['name'] ?? '') === $sec);
+    ok($secExists, 'and that section really exists in the fallback folder');
 
     req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_event',
         'text' => 'Bogus cal', 'cal' => 'nosuchcal'], $jar);
@@ -1369,10 +1502,13 @@ t('renaming a section from the list works in Notes as well as Reminders', functi
         $names = [];
         foreach (stored($base, 'example') as $it) { if (($it['type'] ?? '') === 'section') { $names[] = $it['name']; } }
         ok(in_array($to, $names, true), "$page rename should have stuck");
-        // and the rows that named it follow it, rather than being orphaned
+        // and the rows that named it follow it, rather than being orphaned. Sections are
+        // per-folder (every folder now has its own "General"), so a rename only re-points
+        // its own folder's rows — check just those.
         foreach (stored($base, 'example') as $it) {
             if (($it['type'] ?? '') === 'section') { continue; }
-            ok(($it['section'] ?? '') !== $sec['name'], "$page: no row still points at the old name");
+            if (($it['folder'] ?? '') !== ($sec['folder'] ?? '')) { continue; }
+            ok(($it['section'] ?? '') !== $sec['name'], "$page: no row in its folder still points at the old name");
         }
     }
 });
@@ -1572,13 +1708,13 @@ function ALL_ACTIONS(): array
     return [
         '/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
-                          'add_folder', 'delete_folder', 'set_default_folder', 'set_folder_color',
-                          'folder_vis', 'folder_vis_all', 'folder_vis_only', 'reorder_folders',
-                          'share_set', 'change_password', 'set_theme'],
-        '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
-                          'reorder', 'add_folder', 'delete_folder', 'set_default_folder',
+                          'add_folder', 'delete_folder', 'set_default_folder', 'set_default_section',
                           'set_folder_color', 'folder_vis', 'folder_vis_all', 'folder_vis_only',
-                          'reorder_folders', 'share_set'],
+                          'reorder_folders', 'share_set', 'change_password', 'set_theme'],
+        '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
+                          'reorder', 'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
+                          'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
+                          'folder_vis_only', 'reorder_folders', 'share_set'],
         '/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
                           'toggle_reminder', 'cal_add', 'cal_color', 'cal_default', 'cal_delete',
                           'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
@@ -1797,15 +1933,19 @@ t('dragging a note section reorders it within its folder', function () {
             'view' => 'DragNotes', 'folder' => 'DragNotes', 'name' => $nm], $jar);
     }
     $a = note_sec_id('DragNotes', 'Alpha'); $b = note_sec_id('DragNotes', 'Beta');
-    $order = fn() => array_column(array_values(array_filter(stored('notes', 'example'),
-        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DragNotes')), 'name');
+    // The folder also carries its default "General" section (every folder does now), so
+    // compare just the relative order of the two we're dragging, not the whole run.
+    $g = note_sec_id('DragNotes', 'General');
+    $order = fn() => array_values(array_filter(array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DragNotes')), 'name'),
+        fn($n) => $n === 'Alpha' || $n === 'Beta'));
 
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
-        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$a, $b]])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$a, $b, $g]])], $jar, true);
     eq(['Alpha', 'Beta'], $order(), 'the map sets the section order');
 
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
-        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$b, $a]])], $jar, true);
+        'order' => '[]', 'sections' => json_encode(['DragNotes' => [$b, $a, $g]])], $jar, true);
     eq(['Beta', 'Alpha'], $order(), 'and dragging the other way flips it');
 });
 
@@ -1856,35 +1996,33 @@ t('dragging a note into another folder re-files it', function () {
     eq('ToF', $folderOf(), 'a folder that is not mine is ignored');
 });
 
-t('the catch-all "Notes" group remembers where it was dragged', function () {
+t('a fresh note folder gets a real, renameable default "General" section, no catch-all', function () {
+    // The unnamed "Notes" catch-all is gone: every folder now opens with a real default
+    // section named General (renameable, and undeletable while it's the only one).
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'CatF'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
-        'view' => 'CatF', 'folder' => 'CatF', 'name' => 'Sec1'], $jar);
-    $sid = note_sec_id('CatF', 'Sec1');
-    $catchBeforeSec1 = function () use ($jar) {
-        $b = req('GET', '/notes/?folder=CatF', [], $jar)['body'];
-        return strpos($b, 'section-group default-group') < strpos($b, 'data-section="Sec1"');
-    };
-    // Drag the catch-all above Sec1 (its '' comes first in the posted section order).
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
-        'order' => '[]', 'sections' => json_encode(['CatF' => ['', $sid]])], $jar, true);
-    ok($catchBeforeSec1(), 'the catch-all renders before the section');
-    // And back below it.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'CatF',
-        'order' => '[]', 'sections' => json_encode(['CatF' => [$sid, '']])], $jar, true);
-    ok(!$catchBeforeSec1(), 'and back below it');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshN'], $jar);
+    $b = req('GET', '/notes/?folder=FreshN', [], $jar)['body'];
+    ok(note_sec_id('FreshN', 'General') !== null, 'the folder is seeded with a General section');
+    hasnt('section-group default-group', $b, 'and no unnamed catch-all group is rendered');
+    // It renames like any other section (in place, re-pointing its notes).
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section', 'view' => 'FreshN',
+        'folder' => 'FreshN', 'name' => 'General', 'newname' => 'Ideas'], $jar);
+    ok(note_sec_id('FreshN', 'Ideas') !== null, 'the default section renamed');
+    // The last section in a folder can't be deleted (it always keeps at least one).
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section', 'view' => 'FreshN',
+        'folder' => 'FreshN', 'name' => 'Ideas', 'confirm' => '1'], $jar);
+    ok(note_sec_id('FreshN', 'Ideas') !== null, 'the folder never loses its only section');
 });
 
-t('the "Notes" catch-all name is reserved', function () {
+t('"Notes" is an ordinary section name now, not a reserved catch-all', function () {
     $jar = login('example', 'examplepassword');
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
         'view' => 'All', 'folder' => 'General', 'name' => 'Notes'], $jar);
     $n = 0;
     foreach (stored('notes', 'example') as $x) {
-        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'Notes') { $n++; }
+        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'Notes' && ($x['folder'] ?? '') === 'General') { $n++; }
     }
-    eq(0, $n, 'a section may not be called Notes — that is the catch-all');
+    eq(1, $n, 'a section may be called Notes now — there is no catch-all to clash with');
 });
 
 t('a note folder colour comes from the notes palette', function () {
@@ -2257,6 +2395,34 @@ t('folder names are cleaned on the way in', function () {
     hasnt("\x1F", folder_clean("a\x1Fb"), 'the picker separator cannot survive');
     ok(!preg_match('/[\x00-\x1F\x7F]/', folder_clean("a\x00b\x07c")), 'no control characters survive');
     eq(40, mb_strlen(folder_clean(str_repeat('x', 80))), 'clipped to 40');
+});
+
+t('sections_normalize guarantees a real section per folder and re-homes loose items', function () {
+    // A folder with no section gets a default "General"; a loose or unknown-section item is
+    // re-homed into its folder's first section.
+    $out = sections_normalize([
+        ['id' => 'r1', 'text' => 'loose', 'folder' => 'Work', 'section' => ''],
+        ['id' => 'r2', 'text' => 'stray', 'folder' => 'Work', 'section' => 'Ghost'],
+    ], ['Work', 'Home'], $ch);
+    ok($ch, 'it reports having changed something');
+    $secs = array_values(array_filter($out, fn($x) => ($x['type'] ?? '') === 'section'));
+    eq(['General', 'General'], array_column($secs, 'name'), 'each folder gets one default section');
+    eq(['Work', 'Home'], array_column($secs, 'folder'), 'one per folder passed in');
+    foreach ($out as $x) {
+        if (($x['type'] ?? '') === 'section') { continue; }
+        eq('General', $x['section'], 'the loose/unknown item re-homed into the default');
+    }
+    // Idempotent: a normalised list comes back unchanged.
+    $again = sections_normalize($out, ['Work', 'Home'], $ch2);
+    ok(!$ch2, 'a normalised list is left untouched');
+    eq(count($out), count($again), 'and nothing is duplicated');
+    // An existing named section is kept as the folder's first; no spurious default added.
+    $keep = sections_normalize([
+        ['id' => 's1', 'type' => 'section', 'name' => 'Alpha', 'folder' => 'Work'],
+        ['id' => 'r1', 'text' => 'x', 'folder' => 'Work', 'section' => 'Alpha'],
+    ], ['Work'], $ch3);
+    ok(!$ch3, 'a folder that already has a section is left alone');
+    eq(1, count(array_filter($keep, fn($x) => ($x['type'] ?? '') === 'section')), 'no extra default section');
 });
 
 t('folders reorder and keep every folder', function () {
@@ -2853,8 +3019,14 @@ t('a quick add lands on today, in the fallback folder', function () {
     $r = rowBy('example', 'quick added reminder');
     ok($r !== null, 'it was written');
     eq(date('Y-m-d'), $r['due'] ?? null, 'due today');
-    eq(folder_fallback('reminders'), $r['folder'] ?? null, 'in the fallback folder');
-    eq('', $r['section'] ?? null, 'and no section');
+    $fb = folder_fallback('reminders');
+    eq($fb, $r['folder'] ?? null, 'in the fallback folder');
+    // Every reminder sits in a real section now — the quick add lands in the fallback
+    // folder's default section (which really exists), not a nameless catch-all.
+    ok(($r['section'] ?? '') !== '', 'in a real section, not the empty catch-all');
+    $secExists = (bool) array_filter(stored('reminders', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $fb && ($x['name'] ?? '') === ($r['section'] ?? ''));
+    ok($secExists, 'and that section exists in the fallback folder');
 });
 
 t('a quick add reads the date and time out of the line', function () {

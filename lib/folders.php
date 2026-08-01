@@ -383,6 +383,29 @@ function folder_default_set(string $dir, string $type, string $name): void
 }
 
 /**
+ * The section within the default folder that new items land in when none is chosen — the
+ * other half of "Default Folder/Section". Sections live in the items file, not here, so the
+ * name is stored raw and the caller (which has the section list) validates it, falling back
+ * to the folder's first section. Empty means "the folder's first section".
+ */
+function folder_default_section_get(string $dir, string $type, ?string $user = null): string
+{
+    return (string) (folders_load($dir, $user)['default_section'][$type] ?? '');
+}
+
+/** Set the default folder *and* its section together, from the Manage-folders picker. The
+ *  folder is validated here; the section is validated by the caller against real sections. */
+function folder_default_section_set(string $dir, string $type, string $folder, string $section): void
+{
+    if (!in_array($type, ['reminders', 'notes'], true)) { return; }
+    $data = folders_load($dir);
+    if (!in_array($folder, $data[$type] ?? [], true)) { return; }
+    $data['default'][$type]         = $folder;
+    $data['default_section'][$type] = $section;
+    folders_save($dir, $data);
+}
+
+/**
  * The folder view you were last on, so the app opens where you left it.
  * Stored raw (it may be a "@partner:Folder" shared view) and re-validated by the
  * caller, which is the only place that knows what's still legal to show.
@@ -403,6 +426,51 @@ function folder_last_set(string $dir, string $type, string $view): void
     }
     $data['last'][$type] = $view;
     folders_save($dir, $data);
+}
+
+/**
+ * Rename a folder, carrying every reference to it in this file across to the new name:
+ * the list itself (keeping its place), its colour, its hidden flag, the drag order, the
+ * catch-all slot, and the default/last-view prefs. A permanent folder can't be renamed —
+ * its name *is* its identity, since folders_fixed()/folder_fallback() name it literally —
+ * and an empty, unchanged or already-taken name is refused. Returns whether the rename
+ * happened, so a caller doesn't re-point its own data file (where the items name the
+ * folder) on a no-op. The items live in the app's data file, so re-pointing those is the
+ * caller's job — this only touches the folders file.
+ */
+function folders_rename(string $dir, string $type, string $old, string $new): bool
+{
+    $new = folder_clean($new);
+    if (!in_array($type, ['reminders', 'notes'], true) || $new === '' || $old === $new
+        || folder_is_fixed($type, $old) || folder_is_fixed($type, $new)) {
+        return false;
+    }
+    $data = folders_load($dir);
+    $list = $data[$type] ?? [];
+    if (!in_array($old, $list, true) || in_array($new, $list, true)) {
+        return false;   // old must exist, new must not (matching how they're stored)
+    }
+    $swap = fn($f) => $f === $old ? $new : $f;
+    $data[$type] = array_map($swap, $list);
+    // Colour, hidden flag, order and catch-all are all keyed by name — move each across.
+    if (isset($data['colors'][$type][$old])) {
+        $data['colors'][$type][$new] = $data['colors'][$type][$old];
+        unset($data['colors'][$type][$old]);
+    }
+    if (is_array($data['hidden'][$type] ?? null)) {
+        $data['hidden'][$type] = array_map($swap, $data['hidden'][$type]);
+    }
+    if (is_array($data['order'][$type] ?? null)) {
+        $data['order'][$type] = array_map($swap, $data['order'][$type]);
+    }
+    if (isset($data['catchall'][$type][$old])) {
+        $data['catchall'][$type][$new] = $data['catchall'][$type][$old];
+        unset($data['catchall'][$type][$old]);
+    }
+    if ((string) ($data['default'][$type] ?? '') === $old) { $data['default'][$type] = $new; }
+    if ((string) ($data['last'][$type] ?? '') === $old)    { $data['last'][$type] = $new; }
+    folders_save($dir, $data);
+    return true;
 }
 
 function folders_delete(string $dir, string $type, string $name): void
@@ -612,11 +680,13 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
  */
 function render_folder_modal(array $rows, string $csrf, string $view = 'All',
                              string $extraButton = '', array $palette = [],
-                             array $sharedPalette = [], string $type = 'reminders'): void
+                             array $sharedPalette = [], string $type = 'reminders',
+                             bool $allowRename = false, array $sectionsByFolder = [],
+                             string $defaultFolder = '', string $defaultSection = ''): void
 {
     $csrf  = htmlspecialchars($csrf, ENT_QUOTES);
     $vw    = htmlspecialchars($view, ENT_QUOTES);
-    $fixed = folders_fixed($type);   // the permanent ones carry no delete ×
+    $fixed = folders_fixed($type);   // the permanent ones carry no delete × and no rename
     if (!$palette) { $palette = app_palette($type); }
     if (!$sharedPalette) { $sharedPalette = app_palette($type, true); }
     ?>
@@ -658,7 +728,23 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
                   <?php endforeach; ?>
                 </form>
               </details>
-              <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
+              <?php // The name is a plain span, or — when rename is on and this is my own
+                    // non-permanent folder — an editable field that posts rename_folder on
+                    // Enter or blur and reopens the manager (fm=1). Shared and fixed rows
+                    // stay plain, since neither is mine to rename. ?>
+              <?php if ($allowRename && !$shared && !in_array($key, $fixed, true)): ?>
+                <form method="post" action="" class="frename-form">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="action" value="rename_folder">
+                  <input type="hidden" name="view" value="<?= $vw ?>">
+                  <input type="hidden" name="fm" value="1">
+                  <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
+                  <input class="fname frename" name="newname" value="<?= htmlspecialchars($r['label'], ENT_QUOTES) ?>"
+                         maxlength="40" autocomplete="off" aria-label="Folder name">
+                </form>
+              <?php else: ?>
+                <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
+              <?php endif; ?>
               <?php if ($shared): ?>
                 <span class="fshared-badge" title="Shared by <?= htmlspecialchars($r['partner'], ENT_QUOTES) ?>"><?= htmlspecialchars($r['partner'], ENT_QUOTES) ?></span>
               <?php elseif (!in_array($key, $fixed, true)): ?>
@@ -674,6 +760,28 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
             </li>
           <?php endforeach; ?>
         </ul>
+        <?php // Default Folder/Section: where a new item lands when you're viewing "All" and
+              // don't pick a spot. The same folder→section list the Add app offers, real
+              // sections only. Changing it posts set_default_section and reopens the manager. ?>
+        <?php if ($sectionsByFolder): ?>
+          <form class="fdefrow" method="post" action="">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="set_default_section">
+            <input type="hidden" name="view" value="<?= $vw ?>">
+            <label for="fDefSel">Default for new items</label>
+            <select name="fs" id="fDefSel" onchange="this.form.submit()">
+              <?php foreach ($sectionsByFolder as $fname => $secs): ?>
+                <optgroup label="<?= htmlspecialchars((string) $fname, ENT_QUOTES) ?>">
+                  <?php foreach ($secs as $sname): ?>
+                    <?php $val = $fname . "\x1F" . $sname;
+                          $sel = ($fname === $defaultFolder && $sname === $defaultSection); ?>
+                    <option value="<?= htmlspecialchars($val, ENT_QUOTES) ?>"<?= $sel ? ' selected' : '' ?>><?= htmlspecialchars((string) $sname, ENT_QUOTES) ?></option>
+                  <?php endforeach; ?>
+                </optgroup>
+              <?php endforeach; ?>
+            </select>
+          </form>
+        <?php endif; ?>
         <p class="fhint">Deleting a folder keeps its items — they move to <?= htmlspecialchars($fixed[0], ENT_QUOTES) ?>.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
@@ -879,6 +987,14 @@ function folder_nav_styles(): string
       border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
     }
     .foldermodal .defrow select:focus { outline: none; border-color: #888; }
+    /* Default Folder/Section picker: a full-width labelled select under the folder list. */
+    .foldermodal .fdefrow { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
+    .foldermodal .fdefrow label { font-size: 0.8rem; color: #999; }
+    .foldermodal .fdefrow select {
+      width: 100%; padding: 0.55rem 0.7rem; background: #222; border: 1px solid #3a3a3a;
+      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+    }
+    .foldermodal .fdefrow select:focus { outline: none; border-color: #888; }
     .foldermodal .fhint { color: #777; font-size: 0.78rem; margin: 0.8rem 0 0; }
     .foldermodal .frow { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.1rem; }
     .foldermodal .fdone {

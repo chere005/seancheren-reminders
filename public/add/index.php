@@ -71,22 +71,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $fTime = preg_match('/^\d{2}:\d{2}$/', (string) ($_POST['time'] ?? '')) ? $_POST['time'] : null;
     $date  = $fDate ?? $pdate;                       // may be null: reminders/notes need no date
     $time  = $fTime ?? $ptime;
+    // Optional repeat, from the "+ Repeat" panel: a unit picks it up, blank leaves it once.
+    $repeat = repeat_clean((string) ($_POST['repeat_unit'] ?? ''), (int) ($_POST['repeat_n'] ?? 1));
     $flash = '';
     if ($text !== '' && $act === 'add_reminder') {
         // A reminder has no default date — undated is fine (it just isn't on the calendar).
-        // Folder and section come from their own dropdowns and are each re-validated.
+        // Folder and section come from their own dropdowns and are each re-validated; a
+        // blank or unknown section lands in the folder's real default (there's no catch-all).
         $rFolders = folders_load($cfg['data_dir'])['reminders'];
         $rFolder  = (string) ($_POST['folder'] ?? '');
         if (!in_array($rFolder, $rFolders, true)) { $rFolder = folder_fallback('reminders'); }
         $rSection = (string) ($_POST['section'] ?? '');
         $f = user_data_file($cfg['data_dir'], 'reminders');
-        $l = reminders_folder_migrate(store_read($f));
+        $l = sections_normalize(reminders_folder_migrate(store_read($f)), $rFolders);
+        $firstSec = sections_first_by_folder($l);
         $secOk = false;
         foreach ($l as $it) { if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $rFolder
             && (string) ($it['name'] ?? '') === $rSection) { $secOk = true; break; } }
-        if (!$secOk) { $rSection = ''; }
+        if (!$secOk) { $rSection = $firstSec[$rFolder] ?? SECTION_DEFAULT_NAME; }
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
-                'due' => $date ?? '', 'time' => $time, 'done' => false,
+                'due' => $date ?? '', 'time' => $time, 'done' => false, 'repeat' => $repeat,
                 'folder' => $rFolder, 'section' => $rSection, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Reminder added' . ($date ? ' · ' . date('D, M j', strtotime($date)) : '');
@@ -99,7 +103,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         $f = user_data_file($cfg['data_dir'], 'events');
         $l = store_read($f);
         $l[] = ['id' => bin2hex(random_bytes(6)), 'text' => mb_substr($ptext, 0, 500),
-                'date' => $date ?? $today, 'time' => $time, 'cal' => $eCal, 'created' => time()];
+                'date' => $date ?? $today, 'time' => $time, 'cal' => $eCal, 'repeat' => $repeat, 'created' => time()];
         store_write($f, array_values($l));
         $flash = 'Event added' . ($time ? ' · ' . date('g:ia', strtotime($time)) : '');
     } elseif ($text !== '' && $act === 'add_note') {
@@ -110,11 +114,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (!in_array($nFolder, $nFolders, true)) { $nFolder = FOLDER_DEFAULT; }
         $nSection = (string) ($_POST['nsection'] ?? '');
         $f = user_data_file($cfg['data_dir'], 'notes');
-        $l = store_read($f);
+        $l = sections_normalize(store_read($f), $nFolders);
+        $firstSec = sections_first_by_folder($l);
         $secOk = false;
         foreach ($l as $it) { if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $nFolder
             && (string) ($it['name'] ?? '') === $nSection) { $secOk = true; break; } }
-        if (!$secOk) { $nSection = ''; }
+        if (!$secOk) { $nSection = $firstSec[$nFolder] ?? SECTION_DEFAULT_NAME; }
         $l[] = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($ptext, 0, 200),
                 'body' => '', 'folder' => $nFolder, 'section' => $nSection,
                 'date' => $date ?? '', 'created' => time()];
@@ -126,15 +131,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 $flash = isset($_GET['ok']) ? (string) $_GET['ok'] : '';
 
-// Folder/section choices for a reminder: each folder with its sections (the catch-all shown
-// as "Reminders"). Kept as a map so the Section dropdown can be filtered to the chosen folder.
+// Folder/section choices for a reminder: each folder with its real sections. There's no
+// unnamed catch-all any more — every folder has at least a default section (normalised in,
+// so a folder that has never been opened still lists its "General"). Kept as a map so the
+// Section dropdown can follow the chosen folder.
 $remFolders = folders_load($cfg['data_dir'])['reminders'];
 $remDef     = folder_default_get($cfg['data_dir'], 'reminders');
 if (!in_array($remDef, $remFolders, true)) { $remDef = $remFolders[0] ?? folder_fallback('reminders'); }
-$myRem      = reminders_folder_migrate(store_read(user_data_file($cfg['data_dir'], 'reminders')));
-$remSecs    = [];   // folder => [[value, label], …], value '' = the catch-all
+$myRem      = sections_normalize(reminders_folder_migrate(store_read(user_data_file($cfg['data_dir'], 'reminders'))), $remFolders);
+$remSecs    = [];   // folder => [[value, label], …]
 foreach ($remFolders as $mf) {
-    $remSecs[$mf] = [['', 'Reminders']];
+    $remSecs[$mf] = [];
     foreach ($myRem as $it) {
         if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $mf) {
             $nm = (string) ($it['name'] ?? '');
@@ -143,14 +150,14 @@ foreach ($remFolders as $mf) {
     }
 }
 
-// The same thing for notes, which have their own folders and their own catch-all name.
+// The same thing for notes, which have their own folders.
 $noteFolders = folders_load($cfg['data_dir'])['notes'];
 $noteDef     = folder_default_get($cfg['data_dir'], 'notes');
 if (!in_array($noteDef, $noteFolders, true)) { $noteDef = $noteFolders[0] ?? FOLDER_DEFAULT; }
-$myNotes     = store_read(user_data_file($cfg['data_dir'], 'notes'));
+$myNotes     = sections_normalize(store_read(user_data_file($cfg['data_dir'], 'notes')), $noteFolders);
 $noteSecs    = [];
 foreach ($noteFolders as $nf) {
-    $noteSecs[$nf] = [['', 'Notes']];
+    $noteSecs[$nf] = [];
     foreach ($myNotes as $it) {
         if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? FOLDER_DEFAULT) === $nf) {
             $nm = (string) ($it['name'] ?? '');
@@ -158,6 +165,16 @@ foreach ($noteFolders as $nf) {
         }
     }
 }
+
+// The default section within each app's default folder, so the Section dropdown opens on
+// the same spot the Manage-folders "Default for new items" picker names. Validated to a
+// real section, else the folder's first.
+$remDefSecRaw  = folder_default_section_get($cfg['data_dir'], 'reminders');
+$remDefSec     = in_array($remDefSecRaw, array_column($remSecs[$remDef] ?? [], 0), true)
+    ? $remDefSecRaw : (string) ($remSecs[$remDef][0][0] ?? '');
+$noteDefSecRaw = folder_default_section_get($cfg['data_dir'], 'notes');
+$noteDefSec    = in_array($noteDefSecRaw, array_column($noteSecs[$noteDef] ?? [], 0), true)
+    ? $noteDefSecRaw : (string) ($noteSecs[$noteDef][0][0] ?? '');
 
 // And the calendars an event can land in.
 $calList = add_calendars($cfg);
@@ -212,6 +229,11 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
     .revrow select, .revrow input { padding: 0.6rem 0.7rem; background: #1a1a1a; border: 1px solid #333;
       border-radius: 8px; color: #eee; font-size: 16px; font-family: inherit; }
     .revrow select:focus, .revrow input:focus { outline: none; border-color: #888; }
+    /* Repeat row: the "every N" count sits narrow on the left, the unit fills the rest, both
+       on one line so the two read as a single control (the count aligned to the selector). */
+    .rprow .rpnum { flex: 0 0 auto; }
+    .rprow .rpnum input { width: 4.5rem; }
+    .rprow .rpunit { flex: 1; }
     /* Done: the primary action, green, sitting under the options and above the syntax notes. */
     .donerow { margin-top: 1.25rem; }
     .donebtn { width: 100%; padding: 0.85rem; background: var(--accent); color: var(--accent-ink);
@@ -295,6 +317,22 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
       <label>Time <input type="time" name="time"></label>
     </div>
 
+    <?php // Optional repeat (reminders and events only — notes don't repeat): "every N unit".
+          // The count sits left of the unit, both on one line so they read as one control. ?>
+    <button type="button" class="revbtn" id="rpToggle">+ Repeat</button>
+    <div class="revrow rprow" id="rpRow" hidden>
+      <label class="rpnum">Every <input type="number" name="repeat_n" min="1" max="99" value="1" inputmode="numeric"></label>
+      <label class="rpunit">Unit
+        <select name="repeat_unit">
+          <option value="">— (once)</option>
+          <option value="day">days</option>
+          <option value="week">weeks</option>
+          <option value="month">months</option>
+          <option value="year">years</option>
+        </select>
+      </label>
+    </div>
+
     <div class="donerow"><button type="submit" class="donebtn">Done</button></div>
   </form>
 
@@ -315,6 +353,20 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
       if(b&&r){ b.addEventListener('click',function(){ r.hidden=false; b.hidden=true;
         var el=r.querySelector('select,input'); if(el) el.focus(); }); }
     })();
+    // + Repeat: its own pill and row, opened the same way. It stays open across type
+    // changes, but the whole control hides for notes (a note never repeats).
+    var rpOpen=false;
+    (function(){
+      var b=document.getElementById('rpToggle'), r=document.getElementById('rpRow');
+      if(b&&r){ b.addEventListener('click',function(){ rpOpen=true; r.hidden=false; b.hidden=true;
+        var el=r.querySelector('input'); if(el) el.focus(); }); }
+    })();
+    function paintRepeat(){
+      var isNote=act.value==='add_note';
+      var b=document.getElementById('rpToggle'), r=document.getElementById('rpRow'), u=document.querySelector('select[name=repeat_unit]');
+      if(isNote){ if(b) b.hidden=true; if(r) r.hidden=true; if(u) u.value=''; }   // notes never repeat
+      else { if(r) r.hidden=!rpOpen; if(b) b.hidden=rpOpen; }
+    }
 
     var REM_SECS  = <?= json_encode($remSecs) ?>;
     var NOTE_SECS = <?= json_encode($noteSecs) ?>;
@@ -349,23 +401,28 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
       act.value=a;
       [].forEach.call(sel.querySelectorAll('.qb'),function(q){ q.classList.toggle('sel',q.dataset.act===a); });
       paint();
+      paintRepeat();
     }
     sel.addEventListener('click',function(e){ var q=e.target.closest('.qb'); if(q) setType(q.dataset.act); });
 
-    // Each Section dropdown follows its own Folder dropdown.
-    function wireSecs(folderId, sectionId, map, fallback){
+    // Each Section dropdown follows its own Folder dropdown. On the default folder it opens
+    // on the stored default section (matching the Manage-folders picker); on any other
+    // folder it just shows that folder's first section.
+    function wireSecs(folderId, sectionId, map, fallback, defFolder, defSec){
       var f=document.getElementById(folderId), s=document.getElementById(sectionId);
       if(!f||!s) return;
       var fill=function(){
         var opts=map[f.value]||[['',fallback]];
         s.innerHTML='';
         opts.forEach(function(o){ var op=document.createElement('option'); op.value=o[0]; op.textContent=o[1]; s.appendChild(op); });
+        if(f.value===defFolder && defSec){ s.value=defSec; }
       };
       f.addEventListener('change',fill); fill();
     }
-    wireSecs('fFolder','fSection',REM_SECS,'Reminders');
-    wireSecs('nFolder','nSection',NOTE_SECS,'Notes');
+    wireSecs('fFolder','fSection',REM_SECS,'General',<?= json_encode($remDef) ?>,<?= json_encode($remDefSec) ?>);
+    wireSecs('nFolder','nSection',NOTE_SECS,'General',<?= json_encode($noteDef) ?>,<?= json_encode($noteDefSec) ?>);
     paint();
+    paintRepeat();
   })();</script>
 </div>
 <?php render_tabbar('add'); ?>

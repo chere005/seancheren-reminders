@@ -93,7 +93,15 @@ it done. Inline text edit. Delete needs the confirmed second press. Sections add
 and delete. The subtask `+` creates a child under its parent — same folder, same section,
 `indent` 1, empty, focused on return — and does **not** indent the row it was pressed on.
 A subtask lifts back out. A section can never be indented. `clear_done` removes only the
-ticked rows. The rendered list is undated-first.
+ticked rows. The rendered list is undated-first. **Required real sections (no catch-all):**
+a fresh folder is seeded with a real, renameable default section (`General`), a blank/unknown
+section on add resolves to the folder's first, and the folder's last section can't be
+deleted — covered for both Reminders and Notes, plus `sections_normalize()` as a unit
+(default per folder, re-home loose, idempotent). The **Manage-folders "Default for new
+items"** picker sets folder+section together (`set_default_section`) and coerces a bogus
+section to a real one. The **collapse-all** button ships in the toolbar. *(By eye: the
+collapse-all toggle actually folds/expands, the toolbar↔first-divider gap matches the gap
+above the toolbar, and the folder-head rename field in edit mode.)*
 
 ### `folders`
 Add and delete, with a deleted folder's items falling back rather than being destroyed.
@@ -106,7 +114,12 @@ a wash and no longer carries a dot.
 Adding opens the editor. A body is sanitised on the way in — `<script>`, event handlers
 and tags off the allowlist are stripped, allowed tags survive. `rt_sanitize()` keeps only
 `rt-*` classes. An old plain-text note is escaped rather than rendered. Folders behave
-like the reminders ones.
+like the reminders ones — including the required-real-sections model (a fresh folder gets a
+renameable `General`, "Notes" is an ordinary name now, the last section is undeletable) and
+the Default-for-new-items picker. **Folder rename** works from the list heading (edit mode)
+*and* the Manage-folders window; `folders_rename()` carries colour/hidden/order/default
+across and refuses a fixed/duplicate/empty name. *(By eye: both rename fields commit on
+Enter/blur; the collapse-all button above the top folder.)*
 
 ### `calendar`
 The day payload is keyed by date. Within a day: events first in time order, then
@@ -114,7 +127,12 @@ reminders, then notes; a day's reminders are undated-first, then oldest, then by
 undated Calendar-folder reminder rides on today and is **not** flagged overdue. Adding,
 editing and deleting an item from the day panel, with delete needing the second press.
 Calendars add, recolour, default and delete. A calendar row tap leaves only it showing and
-`All` puts them back. Ticking a repeat from the calendar rolls it.
+`All` puts them back. Ticking a repeat from the calendar rolls it. The **dot legend** renders
+under the grid, keyed by owner and kind (calendar/checkbox/page glyph before each kind's
+dots). The **add/edit modal** hides Time and Repeat behind **+ Time** / **+ Repeat** buttons
+(both start hidden), with the repeat count before its unit selector. *(By eye: the day-panel
+reminder picker lists real sections and lands new reminders in one; the + buttons reveal
+their fields and the × folds them; the modal legend colours match the day dots.)*
 
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
@@ -129,11 +147,17 @@ rather than a stored ghost (there is no "Ungrouped" key any more). It sits by th
 switch in **both** views; filtering changes the pies and the legend, but only the month pies —
 the week grid still holds every habit whatever the filter says. Each day's pie is drawn in its
 **sections' own colours** (a conic-gradient of section-coloured slices), never the flat accent.
+The month view also draws a **section colour legend** (a dot and name per counted section).
+*(By eye: sections collapse from the header chevron and the collapse-all button folds/expands
+them all; the collapse-all sits above the top section, aligned with the back button.)*
 
 ### `add`
 A reminder lands in the chosen folder and section, an event in the chosen calendar, a
 note in the chosen note folder. A destination that doesn't exist falls back instead of
-being taken on trust. The line is parsed for a date and time.
+being taken on trust — an unknown section now resolves to the folder's real default (which
+must exist), not a nameless catch-all. The line is parsed for a date and time. *(By eye: the
+section dropdowns list real sections and open on the stored default; the **+ Repeat** control
+reveals its aligned count/unit and is hidden for notes.)*
 
 ### `sharing`
 `SHARE_PAIRS` is right and a stranger has no partner. A partner's shared folder shows and

@@ -133,7 +133,7 @@ function render_habit_row(array $h, array $days, string $today, string $csrf, in
         </div>
         <?php foreach ($days as $i => $d): $done = !empty($h['done'][$d]); ?>
           <button class="cell <?= $i < $extra ? 'wide-only' : '' ?> <?= $done ? 'done' : '' ?> <?= $d === $today ? 'today' : ($d > $today ? 'ahead' : '') ?>"<?= $hc ?>
-                  data-id="<?= e($h['id']) ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
+                  data-id="<?= e($h['id']) ?>" data-section="<?= e($h['section'] ?? '') ?>" data-date="<?= $d ?>" aria-label="<?= e(($h['name'] ?? '') . ' ' . $d) ?>"></button>
         <?php endforeach;
 }
 
@@ -472,9 +472,14 @@ foreach ($monthItems as $h) {
 // matches the picker's, so a section shows the same colour in the pie, the menu and its
 // own header.
 $secColors = [];
+$secNames  = [];   // same key -> the section's name, for the month legend
 $sci = 0;
 foreach ($habits as $it) {
-    if (is_section($it)) { $secColors[(string) $it['id']] = habit_section_color($it, $sci); $sci++; }
+    if (is_section($it)) {
+        $secColors[(string) $it['id']] = habit_section_color($it, $sci);
+        $secNames[(string) $it['id']]  = (string) ($it['name'] ?? 'Section');
+        $sci++;
+    }
 }
 
 /**
@@ -790,6 +795,14 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: #b9a7f5; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #2c2540;
     }
     .hsection .hslabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Collapse-all bar above the top section, left-aligned under the back button. */
+    .hbar { display: flex; justify-content: flex-start; margin: 0.1rem 0 0.6rem; }
+    /* The section's collapse chevron picks up the section's violet; it points down when
+       open, right when the section is folded. Its rows leave the grid entirely when folded. */
+    .hsection .sec-collapse { color: #6a5f8c; }
+    .hsection .sec-collapse:hover { color: #b9a7f5; }
+    .hsection.collapsed .sec-collapse { transform: rotate(0deg); }
+    .hname.hrow-folded, .cell.hrow-folded { display: none; }
     /* Holding a habit or a section to enter edit mode must not paint the text blue as if it
        were being selected — so the names don't take a selection. The rename fields (real
        inputs) opt back in, so you can still select while typing. */
@@ -946,7 +959,15 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: var(--accent-ink); font-weight: 700; background: var(--accent);
       border-radius: 999px; padding: 0.1rem 0.4rem;
     }
-    .mlegend { margin-top: 0.9rem; font-size: 0.78rem; color: #666; text-align: center; }
+    /* The section colour key under the month grid: a dot and name per counted section,
+       wrapping and centred, in the same order the pie slices are drawn. */
+    .mleg {
+      list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-wrap: wrap;
+      justify-content: center; gap: 0.4rem 0.9rem;
+    }
+    .mleg li { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #ccc; }
+    .mleg-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; }
+    .mlegend { margin-top: 0.7rem; font-size: 0.78rem; color: #666; text-align: center; }
 
 <?= folder_nav_styles() ?>
 <?= tabbar_styles() ?>
@@ -1033,11 +1054,23 @@ function render_habit_section_modal(array $sections, string $csrf): void
         </div>
       <?php endfor; ?>
     </div>
+    <?php // A key to the pie colours: each counted section with its own dot, in the same
+          // order the slices are drawn, so you can read a day's pie back to its sections. ?>
+    <?php if ($mShown): ?>
+      <ul class="mleg" aria-label="Section colours">
+        <?php foreach ($mShown as $key): ?>
+          <li><span class="mleg-dot" style="background:<?= e($secColors[$key] ?? '#8b7fd4') ?>"></span><?= e($secNames[$key] ?? 'Section') ?></li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
     <p class="mlegend">Each day is filled in proportion to how many of
       <?= $mFiltered ? 'the' : 'your' ?> <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?>
       <?= $mFiltered ? 'in the ' . count($mShown) . ' section' . (count($mShown) === 1 ? '' : 's')
                        . " you're counting" : '' ?> were ticked.</p>
   <?php else: ?>
+    <?php // Collapse-all sits above the top section, at the left edge (under the back
+          // button); it folds every section's habits away, or expands them on a second press. ?>
+    <div class="hbar"><?= collapse_all_button('', 'hCollapseAll') ?></div>
     <div class="grid" id="wGrid">
       <div class="corner"></div>
       <?php foreach ($days as $i => $d): $ts = strtotime($d); ?>
@@ -1050,6 +1083,9 @@ function render_habit_section_modal(array $sections, string $csrf): void
             // adds one, so there is no ungrouped run. ?>
       <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); ?>
         <div class="hsection" data-section="<?= e($s['id']) ?>">
+          <?php // Collapse chevron (out of edit mode; the drag handle takes its slot while
+                // editing) — folds this section's habits away, remembered per page. ?>
+          <?= section_collapse_button() ?>
           <span class="hdrag" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <?php // The section's colour. Out of edit mode it's just a dot; in edit mode the
                 // dot opens the palette under it, exactly as a folder's swatch does. It's
@@ -1387,6 +1423,41 @@ function render_habit_section_modal(array $sections, string $csrf): void
       if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy)) { return; }
       location.href = (dx < 0 ? next : prev).getAttribute('href');
     }, { passive: true });
+  })();
+
+  // Collapse habit sections (week view). The grid is flat, so folding a section hides its
+  // habit rows — the name bubbles and their day cells, both tagged with the section id —
+  // while its header stays put. Remembered per page; the collapse-all button folds every
+  // section or, on a second press, expands them all.
+  (function () {
+    var grid = document.getElementById('wGrid'); if (!grid) { return; }
+    var KEY = 'habitcollapsed:' + location.pathname;
+    function load() { try { return new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (_) { return new Set(); } }
+    function save(s) { try { localStorage.setItem(KEY, JSON.stringify([].slice.call(s))); } catch (_) {} }
+    var state = load();
+    function apply() {
+      document.querySelectorAll('.hsection').forEach(function (h) { h.classList.toggle('collapsed', state.has(h.dataset.section)); });
+      grid.querySelectorAll('.hname, .cell').forEach(function (el) { el.classList.toggle('hrow-folded', state.has(el.dataset.section)); });
+      var cab = document.getElementById('hCollapseAll'), secs = document.querySelectorAll('.hsection');
+      if (cab) { cab.classList.toggle('all-collapsed', secs.length > 0 && [].every.call(secs, function (h) { return state.has(h.dataset.section); })); }
+    }
+    document.addEventListener('click', function (e) {
+      var chev = e.target.closest && e.target.closest('.hsection .sec-collapse');
+      if (chev) {
+        e.preventDefault(); e.stopPropagation();
+        var id = chev.closest('.hsection').dataset.section;
+        if (state.has(id)) { state.delete(id); } else { state.add(id); }
+        save(state); apply(); return;
+      }
+      if (e.target.closest && e.target.closest('#hCollapseAll')) {
+        e.preventDefault(); e.stopPropagation();
+        var all = [].slice.call(document.querySelectorAll('.hsection'));
+        var collapse = all.some(function (h) { return !state.has(h.dataset.section); });
+        all.forEach(function (h) { if (collapse) { state.add(h.dataset.section); } else { state.delete(h.dataset.section); } });
+        save(state); apply();
+      }
+    });
+    apply();
   })();
 </script>
 <?= chrome_script() ?>
