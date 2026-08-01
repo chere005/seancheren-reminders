@@ -290,11 +290,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Nothing destructive happens without the confirmed second press.
     if (in_array($_POST['action'], ['delete_habit', 'delete_section'], true)
         && empty($_POST['confirm'])) {
-        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?edit=1');
+        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . (empty($_POST['mgr']) ? '?edit=1' : ''));
         exit;
     }
 
     $stay = '?edit=1';   // these are all edit-mode controls; hand edit mode back
+    if (!empty($_POST['mgr'])) { $stay = ''; }   // …except the section manager, which is its own window
     if ($_POST['action'] === 'add_habit') {
         $name = trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? '')));
         $section = (string) ($_POST['section'] ?? '');
@@ -325,11 +326,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             save_habits($dataFile, $habits);
         }
     } elseif ($_POST['action'] === 'delete_section') {
+        // At least one section always stays — the manager guarantees you never end up
+        // with none, the way the folder manager pins its last folder. Deleting one drops
+        // its habits back to ungrouped rather than throwing them away.
         $id = (string) ($_POST['id'] ?? '');
-        $habits = array_values(array_filter($habits, fn($it) => !(is_section($it) && ($it['id'] ?? '') === $id)));
-        foreach ($habits as &$it) { if (($it['section'] ?? '') === $id) { $it['section'] = ''; } }
-        unset($it);
-        save_habits($dataFile, $habits);
+        $secCount = count(array_filter($habits, 'is_section'));
+        if ($secCount > 1) {
+            $habits = array_values(array_filter($habits, fn($it) => !(is_section($it) && ($it['id'] ?? '') === $id)));
+            foreach ($habits as &$it) { if (($it['section'] ?? '') === $id) { $it['section'] = ''; } }
+            unset($it);
+            save_habits($dataFile, $habits);
+        }
     } elseif ($_POST['action'] === 'delete_habit') {
         $id = (string) ($_POST['id'] ?? '');
         $habits = array_values(array_filter($habits, fn($h) => is_section($h) || ($h['id'] ?? '') !== $id));
@@ -484,6 +491,11 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
             <span class="fpick-name"><?= e($name) ?></span>
           </button>
         <?php endforeach; ?>
+        <?php // The last row opens the section manager, the way the folder pickers' last
+              // row opens theirs; it isn't a .msec-opt, so the filter handler ignores it. ?>
+        <button type="button" class="folderpick-opt folderpick-manage" id="habitSecMgr">
+          <span class="fpick-gear" aria-hidden="true"><?= folder_icon_svg() ?></span><span>Manage sections</span>
+        </button>
       </div>
     </div>
     <script>(function(){
@@ -524,6 +536,133 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
         else if (viaBox) { post({ csrf: CSRF, action: 'msec_vis', name: box.dataset.key, show: onNow ? '' : '1' }); }
         else { post({ csrf: CSRF, action: 'msec_only', name: box.dataset.key }); }
       });
+    })();</script>
+    <?php
+}
+
+/**
+ * The section manager — the window the filter dropdown's "Manage sections" row opens.
+ * It borrows the folder manager's look (.foldermodal and friends, already on the page via
+ * folder_nav_styles()) and its shape: an add row with a green +, a draggable list of rows
+ * each carrying a colour swatch, the name and a delete ×, then Done. Add and delete are
+ * plain POST→redirect (they carry mgr=1 so they don't flip on edit mode and reopen the
+ * window rather than closing it); recolour and reorder post in the background so the
+ * window stays put. At least one section always stays, so the last row shows no ×.
+ */
+function render_habit_section_modal(array $sections, string $csrf): void
+{
+    $csrf = htmlspecialchars($csrf, ENT_QUOTES);
+    $only = count($sections) < 2;   // the last section is undeletable
+    ?>
+    <div class="modal-backdrop" id="hsecModal">
+      <div class="foldermodal">
+        <h2>Sections</h2>
+        <form class="addrow" method="post" action="" onsubmit="return this.name.value.trim()!==''">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <input type="hidden" name="action" value="add_section">
+          <input type="hidden" name="mgr" value="1">
+          <input type="text" name="name" placeholder="New section" maxlength="40" autocomplete="off">
+          <button type="submit" class="plus" title="Add section" aria-label="Add section"><?= plus_icon_svg(18, 3) ?></button>
+        </form>
+        <ul class="flist" id="hsecReorder">
+          <?php foreach ($sections as $si => $s): $scol = habit_section_color($s, $si); $sid = (string) ($s['id'] ?? ''); ?>
+            <li data-section="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
+              <span class="fhandle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
+              <details class="fcolor">
+                <summary style="background:<?= htmlspecialchars($scol, ENT_QUOTES) ?>" title="Colour"></summary>
+                <form class="fswatches" method="post" action="">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="action" value="set_section_color">
+                  <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
+                  <?php foreach (habits_palette() as $col): ?>
+                    <button type="submit" name="color" value="<?= htmlspecialchars($col, ENT_QUOTES) ?>"
+                            style="background:<?= htmlspecialchars($col, ENT_QUOTES) ?>" title="<?= htmlspecialchars($col, ENT_QUOTES) ?>"></button>
+                  <?php endforeach; ?>
+                </form>
+              </details>
+              <span class="fname"><?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?></span>
+              <?php if (!$only): ?>
+                <form method="post" action="" style="display:inline">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="action" value="delete_section">
+                  <input type="hidden" name="mgr" value="1">
+                  <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
+                  <button type="submit" class="fdel needs-confirm" title="Delete section">&times;</button>
+                </form>
+              <?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <?php if (!$sections): ?>
+          <p class="fhint">No sections yet — add one above. Ungrouped habits sit under the grid.</p>
+        <?php else: ?>
+          <p class="fhint">Drag a row to reorder. At least one section stays — the last can't be removed.</p>
+        <?php endif; ?>
+        <div class="frow"><button type="button" class="fdone" id="hsecDone">Done</button></div>
+      </div>
+    </div>
+    <script>(function(){
+      var b = document.getElementById('habitSecMgr'), m = document.getElementById('hsecModal'),
+          d = document.getElementById('hsecDone'), menu = document.getElementById('msecMenu');
+      if (!b || !m) { return; }
+      var CSRF = <?= json_encode($csrf) ?>, dirty = false;
+      var open  = function () { m.classList.add('open'); var i = m.querySelector('.addrow input[type=text]'); if (i) i.focus(); };
+      var close = function () { if (dirty) { location.reload(); return; } m.classList.remove('open'); };
+      // Opening from the filter dropdown: fold that menu away behind the window.
+      b.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (menu) { menu.hidden = true; var mb = document.getElementById('msecBtn'); if (mb) mb.setAttribute('aria-expanded', 'false'); }
+        open();
+      });
+      // Add/delete reload the page; remember the window was open so it comes back rather
+      // than folding away — the same trick msec_* uses for the filter menu.
+      m.addEventListener('submit', function () { try { sessionStorage.setItem('hsecOpen', '1'); } catch (_) {} });
+      try { if (sessionStorage.getItem('hsecOpen') === '1') { sessionStorage.removeItem('hsecOpen'); open(); } } catch (_) {}
+      if (d) d.addEventListener('click', close);
+      m.addEventListener('click', function (e) { if (e.target === m) close(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && m.classList.contains('open')) close(); });
+
+      // A swatch recolours in the background, so the window stays open.
+      m.addEventListener('click', function (e) {
+        var sw = e.target.closest('.fswatches button[name=color]'); if (!sw) return;
+        e.preventDefault();
+        var col = sw.value, det = sw.closest('details'), f = sw.form;
+        var body = new URLSearchParams(new FormData(f)); body.set('color', col);
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body }).catch(function () {});
+        var sum = det && det.querySelector('summary'); if (sum) sum.style.background = col;
+        if (det) det.open = false;
+      });
+
+      // Drag a row by its handle to reorder the sections; on drop, POST the new order
+      // through the ordinary reorder action (empty habit order = leave the habits be).
+      var list = document.getElementById('hsecReorder'); if (!list) return;
+      var drag = null;
+      var clr  = function () { list.querySelectorAll('.fdrop-before,.fdrop-after').forEach(function (li) { li.classList.remove('fdrop-before', 'fdrop-after'); }); };
+      var rows = function () { return [].slice.call(list.querySelectorAll('li')); };
+      list.addEventListener('pointerdown', function (e) {
+        var h = e.target.closest('.fhandle'); if (!h) return;
+        drag = h.closest('li'); if (!drag) return;
+        e.preventDefault(); drag.classList.add('dragging'); h.setPointerCapture(e.pointerId);
+      });
+      list.addEventListener('pointermove', function (e) {
+        if (!drag) return; e.preventDefault(); clr();
+        var y = e.clientY, tgt = null, after = false;
+        rows().forEach(function (li) { if (li === drag) return; var r = li.getBoundingClientRect(); if (y >= r.top) { tgt = li; after = y > (r.top + r.height / 2); } });
+        if (tgt) tgt.classList.add(after ? 'fdrop-after' : 'fdrop-before');
+      });
+      var drop = function () {
+        if (!drag) return;
+        var mk = list.querySelector('.fdrop-before,.fdrop-after'), moved = false;
+        if (mk) { if (mk.classList.contains('fdrop-after')) mk.after(drag); else mk.before(drag); moved = true; }
+        clr(); drag.classList.remove('dragging'); drag = null; if (!moved) return;
+        var order = rows().map(function (li) { return li.dataset.section; });
+        var body = new URLSearchParams(); body.set('csrf', CSRF); body.set('action', 'reorder');
+        body.set('order', '[]'); body.set('sections', JSON.stringify(order));
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body }).catch(function () {});
+        dirty = true;
+      };
+      list.addEventListener('pointerup', drop);
+      list.addEventListener('pointercancel', function () { clr(); if (drag) { drag.classList.remove('dragging'); drag = null; } });
     })();</script>
     <?php
 }
@@ -934,6 +1073,7 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
   <?php endif; ?>
 </div>
 
+<?php render_habit_section_modal($sections, $csrf); ?>
 
 <?php render_tabbar('habits'); ?>
 <script>
