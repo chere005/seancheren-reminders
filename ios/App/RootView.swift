@@ -41,6 +41,7 @@ struct AddView: View {
     @State private var reminderGroup: GroupRef = .inbox
     @State private var noteFolder: UUID?
     @State private var noteGroup: UUID?
+    @State private var noteDate: Date?
     @State private var calendar: UUID?
     @State private var eventDate = Date().day
     @State private var flashed = false
@@ -95,6 +96,7 @@ struct AddView: View {
                     Text("Notes").tag(UUID?.none)
                     ForEach(store.data.groupList(.note)) { g in Text(g.name).tag(UUID?.some(g.id)) }
                 }
+                DateOnlyPicker(date: $noteDate)   // optional — a dated note rides the calendar
             }
         case .event:
             Section {
@@ -135,7 +137,7 @@ struct AddView: View {
             store.add(Reminder(text: p.text, due: p.date, minutes: p.minutes,
                                folder: reminderFolder, group: reminderGroup))
         case .note:
-            store.add(Note(title: raw, folder: noteFolder, group: noteGroup))
+            store.add(Note(title: raw, date: noteDate?.day, folder: noteFolder, group: noteGroup))
         case .event:
             let p = parseWhen(raw)                     // a typed date wins over the picker
             store.add(Event(text: p.text, date: p.date ?? eventDate, minutes: p.minutes, cal: calendar))

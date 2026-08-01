@@ -91,6 +91,11 @@ struct NotesView: View {
             if !preview.isEmpty {
                 Text(preview).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
+            if let date = note.date {
+                Text(dayLabel(date, today: Date().day))
+                    .font(.caption2)
+                    .foregroundStyle(Theme.note)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { editing = note }
@@ -130,6 +135,9 @@ struct NoteDetail: View {
                         .font(.body)
                 }
 
+                // A note can carry a day, which puts it on the calendar; off by default.
+                Section { DateOnlyPicker(date: $draft.date) }
+
                 Section {
                     Picker("Folder", selection: $draft.folder) {
                         ForEach(store.data.folderList(.note)) { folder in
@@ -159,7 +167,11 @@ struct NoteDetail: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { store.update(draft); dismiss() }
+                    Button("Done") {
+                        draft.date = draft.date?.day     // keep it day-granular
+                        store.update(draft)
+                        dismiss()
+                    }
                 }
             }
         }

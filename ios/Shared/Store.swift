@@ -207,6 +207,12 @@ final class Store: ObservableObject {
         touch()
     }
 
+    /// Recolour the ungrouped "Habits" bucket, which has no section row of its own.
+    func setUngroupedHabitColor(_ index: Int) {
+        data.habitUngroupedColor = index
+        touch()
+    }
+
     func renameGroup(_ id: UUID, to name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, let i = data.groups.firstIndex(where: { $0.id == id }) else { return }
@@ -268,6 +274,13 @@ final class Store: ObservableObject {
 
     func delete(_ reminder: Reminder) {
         data.reminders.removeAll { $0.id == reminder.id }
+        touch()
+    }
+
+    /// Remove the ticked reminders — the web's "clear completed". Scoped to the folder in
+    /// view, or every folder on "All". Open rows are untouched.
+    func clearDone(folder: UUID?) {
+        data.reminders.removeAll { $0.done && (folder == nil || $0.folder == folder) }
         touch()
     }
 

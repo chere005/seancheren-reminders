@@ -269,6 +269,9 @@ struct AppData: Codable {
     var habitHideUngrouped = false
     /// Habits opens on the view you left it on: the tick grid (false) or the month (true).
     var habitsMonth = false
+    /// The ungrouped "Habits" bucket has no section row to hang a colour on, so its palette
+    /// index lives here — every habits section then carries a colour, dot and pie alike.
+    var habitUngroupedColor = 3
 
     /// A first run: one General folder each, one calendar, nothing in them.
     static var starter: AppData {
@@ -315,6 +318,7 @@ extension AppData {
         habitHidden       = try c.decodeIfPresent(Set<UUID>.self,    forKey: .habitHidden) ?? []
         habitHideUngrouped = try c.decodeIfPresent(Bool.self,        forKey: .habitHideUngrouped) ?? false
         habitsMonth       = try c.decodeIfPresent(Bool.self,         forKey: .habitsMonth) ?? false
+        habitUngroupedColor = try c.decodeIfPresent(Int.self,        forKey: .habitUngroupedColor) ?? 3
     }
 }
 

@@ -8,6 +8,7 @@ struct RemindersView: View {
     @State private var editing: Reminder?
     @State private var renaming: ListGroup?
     @State private var arming: UUID?
+    @State private var confirmClear = false
     @State private var restored = false
 
     // The inline "type it and hit return" row, which belongs to one group at a time.
@@ -37,6 +38,9 @@ struct RemindersView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Toggle("Completed", systemImage: "checkmark.square", isOn: $showCompleted)
+                        Button("Clear completed", systemImage: "trash", role: .destructive) {
+                            confirmClear = true
+                        }
                         Button("New group", systemImage: "plus") { store.addGroup("Group", kind: .reminder) }
                         Divider()
                         // "Copy as Markdown" — the visible list to the clipboard, the same
@@ -58,6 +62,10 @@ struct RemindersView: View {
             }
             .sheet(item: $editing) { ReminderDetail(reminder: $0) }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .confirmationDialog("Delete every completed reminder\(folder == nil ? "" : " here")?",
+                                isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("Clear completed", role: .destructive) { store.clearDone(folder: folder) }
+            }
             .alert("Rename group", isPresented: Binding(get: { renaming != nil },
                                                         set: { if !$0 { renaming = nil } })) {
                 RenameField(group: renaming) { renaming = nil }

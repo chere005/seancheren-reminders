@@ -41,6 +41,12 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         do {
             let bytes = try JSONEncoder().encode(list)
             try session.updateApplicationContext([WatchLink.listKey: bytes])
+            // Application-context delivery is unreliable in the simulator (the classic
+            // "application context is nil" on the watch). A user-info transfer is queued and
+            // delivered reliably, so send one too; cancel any still in flight first so only
+            // the latest is queued — keeping the "here's the current list" semantics.
+            session.outstandingUserInfoTransfers.forEach { $0.cancel() }
+            session.transferUserInfo([WatchLink.listKey: bytes])
         } catch {
             // Surface it — a swallowed error here is exactly why "application context is
             // nil" on the watch is so hard to chase.
