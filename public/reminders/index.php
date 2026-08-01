@@ -371,7 +371,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     }
     if ($_POST['action'] === 'set_default_folder') {
         folder_default_set($cfg['data_dir'], 'reminders', (string) ($_POST['name'] ?? ''));
-        header('Location: ' . $editBack . '&fm=1');
+        // Reopen the manager, but don't force edit mode — a manage action only stays in edit
+        // if you were already in it (the form carries `edit` then).
+        header('Location: ' . $backUrl . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
         exit;
     }
     // The Manage-folders "Default for new items" picker sets the default folder and its
@@ -388,7 +390,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (!in_array($dSection, $secs, true)) { $dSection = $secs[0] ?? SECTION_DEFAULT_NAME; }
             folder_default_section_set($cfg['data_dir'], 'reminders', $dFolder, $dSection);
         }
-        header('Location: ' . $editBack . '&fm=1');
+        header('Location: ' . $backUrl . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
         exit;
     }
     // The show/hide box on a folder row in the picker (AJAX; the page reloads itself).
@@ -443,17 +445,40 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         header('Location: ' . $editBack);
         exit;
     }
+    if ($_POST['action'] === 'rename_folder') {
+        // Rename one of my own (non-permanent) folders and carry every reminder and section
+        // that named it across. folders_rename() refuses a fixed/duplicate/empty name and
+        // reports whether it ran, so a no-op doesn't rewrite the reminders file.
+        $old  = (string) ($_POST['name'] ?? '');
+        $new  = folder_clean((string) ($_POST['newname'] ?? ''));
+        $done = folders_rename($cfg['data_dir'], 'reminders', $old, $new);
+        if ($done) {
+            $list = load_reminders($dataFile);
+            foreach ($list as &$r) {
+                if (($r['folder'] ?? folder_fallback('reminders')) === $old) { $r['folder'] = $new; }
+            }
+            unset($r);
+            save_reminders($dataFile, $list);
+        }
+        $vw = (string) ($_POST['view'] ?? 'All');
+        if ($done && $vw === $old) { $vw = $new; }
+        // From the manager (fm): reopen it without forcing edit mode. From the list heading
+        // (in edit mode): stay in edit, since that's where the field lives.
+        $extra = !empty($_POST['fm']) ? '&fm=1' : '&edit=1';
+        header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . $extra);
+        exit;
+    }
     if ($_POST['action'] === 'delete_folder') {
         $name = (string) ($_POST['name'] ?? '');
         folders_delete($cfg['data_dir'], 'reminders', $name);
-        // Move that folder's reminders back to the permanent catch-all.
+        // Move that folder's reminders to the fallback folder.
         $list = load_reminders($dataFile);
         foreach ($list as &$r) {
             if (!is_section($r) && ($r['folder'] ?? '') === $name) { $r['folder'] = folder_fallback('reminders'); }
         }
         unset($r);
         save_reminders($dataFile, $list);
-        header('Location: ' . _self_path() . '?folder=All&edit=1&fm=1');
+        header('Location: ' . _self_path() . '?folder=All' . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
         exit;
     }
 
@@ -1144,6 +1169,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem;
       border-bottom: 1px solid #222;
     }
+    /* No divider under the last row of a section. When completed rows are hidden, the last
+       *open* row is the real last one, so drop its divider too — an open row with no open
+       row after it. (:has() degrades to just the last-child rule on older browsers.) */
+    ul.rlist > li:last-child { border-bottom: none; }
+    body:not(.show-done) ul.rlist > li:not(.done):not(:has(~ li:not(.done))) { border-bottom: none; }
     li.done .text { color: #666; text-decoration: line-through; }
     ul.rlist { display: flex; flex-direction: column; }
     li.done { order: 1; }   /* when shown, completed items sink below the open ones */
@@ -1152,6 +1182,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        and the highlight starts during the hold, before body.editing is set, so this stays
        ungated. The edit field (.textedit) opts back in, so you can still select while typing. */
     li, .section-head, .folder-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .section-head input, .folder-head input { -webkit-user-select: text; user-select: text; }
     body.editing .text { cursor: text; }
     .textedit {
       flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: #222; border: 1px solid #4a4a4a;
@@ -1306,7 +1337,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
         $defSec    = in_array($defSecRaw, $modalSecs[$defFolder] ?? [], true)
             ? $defSecRaw : ($modalSecs[$defFolder][0] ?? SECTION_DEFAULT_NAME);
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('reminders'),
-                            app_palette('reminders', true), 'reminders', false, $modalSecs, $defFolder, $defSec);
+                            app_palette('reminders', true), 'reminders', true, $modalSecs, $defFolder, $defSec);
       } ?>
   <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
 
@@ -1333,8 +1364,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
           <div class="folder-head">
             <?= folder_collapse_button() ?>
             <?php // The folder's own colour is the wash behind its name, where it used to
-                  // be a dot beside it — the same colour its entry wears in the picker. ?>
-            <div class="folder-label" style="background:<?= e(folder_tint($folderDotColor($sfolder))) ?>"><?= e($sfolder) ?></div>
+                  // be a dot beside it — the same colour its entry wears in the picker. The
+                  // name is renameable in place in edit mode; the permanent Reminders/Calendar
+                  // (named by identity) and a partner's shared folder are not. ?>
+            <?= folder_title_html($sfolder, $csrf, $view, folder_tint($folderDotColor($sfolder)),
+                                  $isShared || folder_is_fixed('reminders', $sfolder)) ?>
             <?php // Edit-mode only: a "+" just right of the folder's name that reveals an
                   // inline section-name field (below), so a folder with no sections of its
                   // own — like the permanent Reminders/Calendar — can get its first. ?>

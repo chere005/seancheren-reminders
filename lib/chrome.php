@@ -650,7 +650,12 @@ function folder_rename_script(): string
     var cs = getComputedStyle(i);
     ruler.style.font = cs.font; ruler.style.letterSpacing = cs.letterSpacing;
     ruler.textContent = i.value || ' ';
-    i.style.width = (ruler.offsetWidth + 4) + 'px';
+    // The folder name wears .folder-label's horizontal padding, and box-sizing is
+    // border-box, so the set width must include that padding and the border or the name
+    // clips inside its wash. Measure the text, then add the chrome around it.
+    var pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+            + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+    i.style.width = (ruler.offsetWidth + pad + 2) + 'px';
   }
   function fitAll() { document.querySelectorAll('input.foldertitle').forEach(fit); }
   document.addEventListener('input', function (e) {
