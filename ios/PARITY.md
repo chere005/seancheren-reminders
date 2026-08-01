@@ -59,7 +59,7 @@ Legend:
 |---|---|
 | the day panel groups by day | 👁 `CalendarView`; core reads tested (`events/reminders/notes(on:)`) |
 | a day's reminders sort undated-first, oldest, **then time** | ✅ `testCalendarDaySortsUndatedFirstThenDateThenTime` (`reminders(on:)` adds the time tiebreak) |
-| events before reminders within a day | 👁 the day panel renders events → reminders → notes |
+| events before reminders within a day | 👁 the day panel renders collapsible kind groups — Events → Reminders → Notes — the web's `.dp-group`, folded state remembered per kind |
 | an undated Calendar rider shows on today, not overdue | ✅ `testOverdueAndRidesAlong`, `testRemindersOnDayCollectsDueOverdueAndRiders` |
 | add an event from the day panel | ✅ `testEventsOnDayWithRepeatAndScope` (+ the single **+ Add** menu, this pass) |
 | edit / delete a calendar item (event deleted outright) | 👁 via `EventDetail`; `store.delete` covered elsewhere |
