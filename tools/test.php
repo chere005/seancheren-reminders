@@ -908,19 +908,25 @@ t('the manager reorders sections without disturbing the habits', function () {
 });
 
 t('the last section is undeletable — at least one always stays', function () {
-    $jar = login('example', 'examplepassword');
-    $onlySecs = fn() => array_values(array_filter(stored('habits', 'example'),
+    // A dedicated throwaway account, so depleting its sections can't disturb example's.
+    ensure_account('hsecmgr', 'hsecmgrpass');
+    $jar = login('hsecmgr', 'hsecmgrpass');
+    $secs = fn() => array_values(array_filter(stored('habits', 'hsecmgr'),
         fn($x) => ($x['type'] ?? '') === 'section'));
-    // Delete down to a single section; that one then refuses to go.
-    $list = $onlySecs();
-    for ($i = 0; $i < count($list) - 1; $i++) {
-        req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
-            'id' => $list[$i]['id'], 'confirm' => '1', 'mgr' => '1'], $jar);
-    }
-    eq(1, count($onlySecs()), 'down to one section');
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
-        'id' => $onlySecs()[0]['id'], 'confirm' => '1', 'mgr' => '1'], $jar);
-    eq(1, count($onlySecs()), 'the last section stays put');
+    $add = fn($n) => req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'),
+        'action' => 'add_section', 'name' => $n, 'mgr' => '1'], $jar);
+    $del = fn($id) => req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'),
+        'action' => 'delete_section', 'id' => $id, 'confirm' => '1', 'mgr' => '1'], $jar);
+
+    $add('Solo');
+    eq(1, count($secs()), 'one section exists');
+    $del($secs()[0]['id']);
+    eq(1, count($secs()), 'the last section refuses to be deleted');
+    // With two, either can go — the guard only pins the final one.
+    $add('Second');
+    eq(2, count($secs()), 'now there are two');
+    $del($secs()[0]['id']);
+    eq(1, count($secs()), 'one of two deletes, leaving one');
 });
 
 // ---------------------------------------------------------------- 9. the Add app
@@ -1378,7 +1384,7 @@ t("a habit's row carries its section's colour", function () {
     ok(count($used) > 1, 'two sections should not share one colour by default');
 });
 
-t('a + Habit closes every section, and + Section sits alone at the bottom', function () {
+t('a + Habit closes every section, and sections are managed from the dropdown', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/habits/?v=week', [], $jar)['body'];
     $adds = preg_match_all('/class="habitadd"/', $b);
@@ -1388,19 +1394,20 @@ t('a + Habit closes every section, and + Section sits alone at the bottom', func
     preg_match_all('/name="section" value="([^"]*)"/', $b, $m);
     ok(in_array('', $m[1], true), 'the ungrouped one adds with no section');
     eq(count(array_unique($m[1])), count($m[1]), 'and no two target the same place');
-    // The footer keeps only + Section now.
-    eq(1, substr_count($b, 'id="newSecBtn"'), '+ Section is still there');
-    eq(0, substr_count($b, 'id="newHabitBtn"'), 'and + Habit has left the footer');
-    has('justify-content: flex-start', $b, 'the footer is left-justified');
+    // The "+ Section" button and its footer are gone — sections are added, reordered and
+    // recoloured from the "Manage sections" window in the filter dropdown instead.
+    eq(0, substr_count($b, 'id="newSecBtn"'), 'the + Section button is gone');
+    eq(0, substr_count($b, 'class="secfoot'), 'and so is its footer');
+    has('id="habitSecMgr"', $b, 'Manage sections rides in the filter dropdown instead');
 });
 
-t('an empty habits list still offers both ways to start', function () {
+t('an empty habits list still offers a way to start', function () {
     $jar = login('freshy', 'freshpassword');
     $b = req('GET', '/habits/?v=week', [], $jar)['body'];
     has('empty-list', $b, 'the grid says it is empty');
-    has('secfoot always', $b, 'so + Section stays out of edit mode');
     ok(preg_match('/body:not\(\.editing\) \.grid\.empty-list \.habitadd/', $b) === 1,
-       'and so does + Habit — there is nothing to long-press to get into edit mode');
+       '+ Habit shows without edit mode — there is nothing to long-press to get into it');
+    has('id="habitSecMgr"', $b, 'and a first section starts from Manage sections in the dropdown');
 });
 
 t('wiring: tapping away leaves edit mode in habits', function () {
@@ -1623,6 +1630,40 @@ t('note sections add, rename and delete per folder', function () {
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section',
         'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Afters', 'confirm' => '1'], $jar);
     ok(!in_array('Afters', $names(), true), 'deleted');
+});
+
+t('a section added from a folder head lands in that folder, not the default', function () {
+    // The + Section button is gone from the top of Reminders and Notes; each folder head
+    // carries its own "+", which posts add_section with that folder. On "All" the section
+    // must follow the posted folder rather than falling to the default folder.
+    $jar = login('example', 'examplepassword');
+    // Reminders: the folder head "+" ships in the page, and its section files by folder.
+    $rb = req('GET', '/reminders/', [], $jar)['body'];
+    eq(0, substr_count($rb, 'id="newSecBtn"'), 'reminders has no top + Section');
+    has('class="fsec-add"', $rb, 'reminders folder heads carry a +');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadR'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+        'view' => 'All', 'folder' => 'HeadR', 'name' => 'FromHeadR'], $jar);
+    $rsec = null;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'FromHeadR') { $rsec = $x; }
+    }
+    ok($rsec !== null, 'the reminders section was created');
+    eq('HeadR', $rsec['folder'] ?? null, 'and it landed in the folder whose + was used');
+
+    // Notes: same — the top + Section is gone, folder heads carry the +, add follows folder.
+    $nb = req('GET', '/notes/', [], $jar)['body'];
+    eq(0, substr_count($nb, 'id="newSecBtn"'), 'notes has no top + Section');
+    has('class="fsec-add"', $nb, 'notes folder heads carry a +');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadN'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        'view' => 'All', 'folder' => 'HeadN', 'name' => 'FromHeadN'], $jar);
+    $nsec = null;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'FromHeadN') { $nsec = $x; }
+    }
+    ok($nsec !== null, 'the notes section was created');
+    eq('HeadN', $nsec['folder'] ?? null, 'and it landed in the folder whose + was used');
 });
 
 /** The id of a note section by folder + name, or null. */
