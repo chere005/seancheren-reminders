@@ -39,6 +39,7 @@ require_once $root . '/lib/folders.php';
 require_once $root . '/lib/sharing.php';
 require_once $root . '/lib/richtext.php';
 require_once $root . '/lib/palette.php';
+require_once $root . '/lib/site.php';
 
 // ---------------------------------------------------------------- tiny test framework
 
@@ -171,6 +172,9 @@ function showAll(array $jar): void
     req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
         'show' => '1', 'keys' => implode("\x1F", $keys)], $jar, true);
 }
+
+/** htmlspecialchars, for asserting on rendered text. */
+function e_test(string $s): string { return htmlspecialchars($s, ENT_QUOTES); }
 
 /** One reminder by its text, or null. */
 function rowBy(string $user, string $text): ?array
@@ -1388,7 +1392,7 @@ function ALL_ACTIONS(): array
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
                           'add_folder', 'delete_folder', 'set_default_folder', 'set_folder_color',
                           'folder_vis', 'folder_vis_all', 'folder_vis_only', 'reorder_folders',
-                          'share_set', 'change_password'],
+                          'share_set', 'change_password', 'set_theme'],
         '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
                           'reorder', 'add_folder', 'delete_folder', 'set_default_folder',
                           'set_folder_color', 'folder_vis', 'folder_vis_all', 'folder_vis_only',
@@ -1398,8 +1402,12 @@ function ALL_ACTIONS(): array
                           'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
                           'folder_vis', 'share_set'],
         '/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
-                          'add_section', 'rename_section', 'delete_habit', 'delete_section'],
+                          'add_section', 'rename_section', 'delete_habit', 'delete_section',
+                          'msec_vis', 'msec_only', 'msec_all'],
         '/add/'       => ['add_reminder', 'add_event', 'add_note'],
+        // quick.php is the one page the widget can reach that writes, so it is in here
+        // too: a tick or an add with no token has to be as dead as anywhere else.
+        '/calendar/quick.php' => ['tick', 'add_reminder', 'add_event'],
     ];
 }
 
@@ -1407,7 +1415,8 @@ function ALL_ACTIONS(): array
 function snapshot(string $user = 'example'): string
 {
     $out = '';
-    foreach (['reminders', 'notes', 'events', 'calendars', 'habits', 'folders', 'calprefs', 'shares'] as $b) {
+    foreach (['reminders', 'notes', 'events', 'calendars', 'habits', 'folders', 'calprefs',
+              'shares', 'prefs'] as $b) {
         $out .= $b . '=' . json_encode(stored($b, $user)) . '|';
     }
     return md5($out);
@@ -1683,6 +1692,66 @@ t('deleting a section leaves its habits behind, ungrouped', function () {
     }
 });
 
+t('the month view\'s section filter has the suite\'s three gestures', function () {
+    $jar = login('example', 'examplepassword');
+    $secs = array_values(array_filter(stored('habits', 'example'), fn($h) => ($h['type'] ?? '') === 'section'));
+    ok(count($secs) >= 1, 'there is at least one section to filter');
+    $one = (string) $secs[0]['id'];
+    $all = array_merge(['~none'], array_map(fn($s) => (string) $s['id'], $secs));
+    $post = function (array $p) use ($jar) {
+        return json_decode(req('POST', '/habits/', $p + ['csrf' => csrf($jar, '/habits/')], $jar, true)['body'], true);
+    };
+
+    // The box toggles one.
+    eq([$one], $post(['action' => 'msec_vis', 'name' => $one, 'show' => ''])['hidden'] ?? null,
+       'unticking hides that section');
+    eq([], $post(['action' => 'msec_vis', 'name' => $one, 'show' => '1'])['hidden'] ?? null,
+       'and ticking it puts it back');
+
+    // A row tap makes it the only one counted.
+    $hidden = $post(['action' => 'msec_only', 'name' => $one])['hidden'] ?? null;
+    eq(count($all) - 1, count($hidden), 'everything but the one tapped is hidden');
+    ok(!in_array($one, $hidden, true), 'and the one tapped is counted');
+
+    // "All" shows everything, then hides everything.
+    eq([], $post(['action' => 'msec_all', 'show' => '1'])['hidden'] ?? null, 'All on');
+    eq(count($all), count($post(['action' => 'msec_all', 'show' => ''])['hidden'] ?? []), 'All off');
+
+    // A section that isn't there is a no-op, not a stored ghost.
+    $was = $post(['action' => 'msec_all', 'show' => '1'])['hidden'] ?? null;
+    eq($was, $post(['action' => 'msec_only', 'name' => 'no-such-section'])['hidden'] ?? null,
+       'an unknown key changes nothing');
+});
+
+t('the filter changes the pies and nothing else', function () {
+    $jar = login('example', 'examplepassword');
+    $secs = array_values(array_filter(stored('habits', 'example'), fn($h) => ($h['type'] ?? '') === 'section'));
+    $one  = (string) $secs[0]['id'];
+    $csrf = csrf($jar, '/habits/');
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
+
+    $before = req('GET', '/habits/?v=month', [], $jar)['body'];
+    preg_match('/of (\d+) on \d{4}/', $before, $m);
+    $wholeTotal = (int) ($m[1] ?? 0);
+    ok($wholeTotal > 0, 'the month counts every habit to begin with');
+    has('id="msecBtn"', $before, 'and the picker is in the top bar');
+
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => $one], $jar, true);
+    $after = req('GET', '/habits/?v=month', [], $jar)['body'];
+    preg_match('/of (\d+) on \d{4}/', $after, $m2);
+    ok((int) ($m2[1] ?? 0) < $wholeTotal, 'filtering to one section counts fewer habits');
+    has("you're counting", $after, 'and the legend says so');
+
+    // The week grid is a different question and must be untouched by it.
+    $week = req('GET', '/habits/?v=week', [], $jar)['body'];
+    hasnt('id="msecBtn"', $week, 'the week view has nothing to filter, so no picker');
+    foreach (stored('habits', 'example') as $h) {
+        if (($h['type'] ?? '') === 'section') { continue; }
+        has(e_test((string) $h['name']), $week, 'every habit is still in the week grid');
+    }
+    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
+});
+
 t('the chosen view is remembered per user', function () {
     $jar = login('example', 'examplepassword');
     req('GET', '/habits/?m=' . date('Y-m'), [], $jar);
@@ -1851,6 +1920,685 @@ t('the kind palette is emitted as variables, not literals', function () {
     $css = kind_color_css();
     foreach (['--k-reminder', '--k-event', '--k-note', '--k-overdue'] as $v) { has($v, $css); }
     has('#60a5fa', $css, 'the event blue is a blue, not the old cyan');
+});
+
+// ---------------------------------------------------------------- the /test/ mirror, for real
+// The unit checks in `test-instance` prove suite_base() prefixes a link. These prove the
+// whole arrangement: two instances of the same source served side by side the way
+// deploy.sh lays them out — public/ + public/test/, lib/ + lib-test/, a config.php each
+// and a data directory each. What matters is that they cannot see one another. A row
+// added in the sandbox must not turn up in production, and no link may cross between
+// them, or a tap in /test/ quietly drops you into the real app.
+area('instance');
+
+/** A request against an arbitrary port. Same rules as req(): redirects are never followed. */
+function hreq(int $port, string $method, string $path, array $post = [], ?array &$jar = null): array
+{
+    $headers = ["Host: 127.0.0.1:$port", 'Connection: close'];
+    if ($jar) {
+        $bits = [];
+        foreach ($jar as $k => $v) { $bits[] = "$k=$v"; }
+        $headers[] = 'Cookie: ' . implode('; ', $bits);
+    }
+    $body = '';
+    if ($method === 'POST') {
+        $body = http_build_query($post);
+        $headers[] = 'Content-Type: application/x-www-form-urlencoded';
+        $headers[] = 'Content-Length: ' . strlen($body);
+    }
+    $ctx = stream_context_create(['http' => ['method' => $method, 'header' => implode("\r\n", $headers),
+        'content' => $body, 'ignore_errors' => true, 'follow_location' => 0, 'timeout' => 15]]);
+    $out = @file_get_contents("http://127.0.0.1:$port" . $path, false, $ctx);
+    $hdr = $http_response_header ?? [];
+    $res = ['status' => 0, 'location' => null, 'body' => (string) $out];
+    foreach ($hdr as $i => $h) {
+        if ($i === 0 && preg_match('#HTTP/\S+\s+(\d{3})#', $h, $m)) { $res['status'] = (int) $m[1]; }
+        if (stripos($h, 'Location:') === 0) { $res['location'] = trim(substr($h, 9)); }
+        if (stripos($h, 'Set-Cookie:') === 0 && preg_match('/^Set-Cookie:\s*([^=]+)=([^;]*)/i', $h, $m)) {
+            if ($jar !== null) { $jar[trim($m[1])] = $m[2]; }
+        }
+    }
+    return $res;
+}
+
+/**
+ * Build the two-instance sandbox once and boot a server over it. Deliberately built
+ * from *files*, not from the environment: neither SUITE_DATA_DIR nor SUITE_BASE is
+ * passed to this server, so each instance has to find its data and its prefix the way
+ * the live one does — from the config.php in its own lib directory.
+ */
+function instance_boot(): array
+{
+    static $I = null;
+    if ($I !== null) { return $I; }
+    global $root, $scratch;
+
+    $box = $scratch . '/box';
+    @mkdir($box, 0700, true);
+    // public/ and public/test/ are the same tree, exactly as deploy.sh pushes them.
+    foreach ([['lib', 'lib'], ['lib', 'lib-test'], ['public', 'public'], ['public', 'public/test']] as [$from, $to]) {
+        exec('cp -R ' . escapeshellarg($root . '/' . $from) . ' ' . escapeshellarg($box . '/' . $to), $o, $rc);
+        if ($rc !== 0) { throw new RuntimeException("could not lay out $to"); }
+    }
+    // A data dir each, both starting from the same seeded account set — so a difference
+    // between them later can only have been written by one of the two instances.
+    foreach (['data', 'data-test'] as $d) {
+        @mkdir($box . '/' . $d, 0700, true);
+        foreach (glob($scratch . '/*.json') ?: [] as $f) { copy($f, $box . '/' . $d . '/' . basename($f)); }
+        if (is_file($scratch . '/.datakey')) { copy($scratch . '/.datakey', $box . '/' . $d . '/.datakey'); }
+    }
+    $conf = function (string $dir, string $base) use ($box) {
+        file_put_contents($box . '/' . $dir . '/config.php',
+            "<?php return ['users' => [], 'data_dir' => " . var_export($box . '/' . ($dir === 'lib' ? 'data' : 'data-test'), true)
+            . ", 'base' => " . var_export($base, true) . ", 'timezone' => 'America/Chicago'];\n");
+    };
+    $conf('lib', '');
+    $conf('lib-test', '/test');
+
+    $sock = stream_socket_server('tcp://127.0.0.1:0', $e1, $e2);
+    $port = (int) explode(':', stream_socket_get_name($sock, false))[1];
+    fclose($sock);
+    $desc = [1 => ['file', '/dev/null', 'w'], 2 => ['file', $box . '/server.log', 'w']];
+    // env -u: the sandbox must not inherit the outer run's SUITE_* overrides, or both
+    // instances would silently share the outer scratch dir and every check below would
+    // pass for the wrong reason.
+    $srv = proc_open('env -u SUITE_DATA_DIR -u SUITE_BASE php -d display_errors=1 -d error_reporting=E_ALL'
+        . ' -S 127.0.0.1:' . $port . ' -t ' . escapeshellarg($box . '/public'), $desc, $pipes);
+    register_shutdown_function(function () use ($srv) {
+        if (is_resource($srv)) { proc_terminate($srv); proc_close($srv); }
+    });
+    for ($i = 0; $i < 100; $i++) {
+        $c = @fsockopen('127.0.0.1', $port, $x, $y, 0.2);
+        if ($c) { fclose($c); break; }
+        usleep(100000);
+    }
+    return $I = ['port' => $port, 'box' => $box];
+}
+
+/** Sign in on the sandbox, on either instance. */
+function instance_login(int $port, string $pfx, string $user = 'example', string $pass = 'examplepassword'): array
+{
+    $jar = [];
+    hreq($port, 'GET', $pfx . '/reminders/', [], $jar);
+    $r = hreq($port, 'POST', $pfx . '/reminders/', ['username' => $user, 'password' => $pass], $jar);
+    if ($r['status'] !== 302) { throw new RuntimeException("$pfx login did not redirect ({$r['status']})"); }
+    return [$jar, $r];
+}
+
+/** Reminders stored by one of the sandbox's two instances. */
+function instance_rows(string $box, string $which, string $user = 'example'): array
+{
+    $l = store_read($box . '/' . $which . '/reminders-' . $user . '.json');
+    return array_values(array_filter($l, fn($r) => ($r['type'] ?? '') !== 'section'));
+}
+
+t('both instances come up from their own config, with no environment help', function () {
+    ['port' => $p] = instance_boot();
+    foreach (['' => 'production', '/test' => 'the sandbox'] as $pfx => $what) {
+        $r = hreq($p, 'GET', ($pfx ?: '') . '/reminders/');
+        eq(200, $r['status'], "$what should answer");
+        has('Sign in', $r['body'], "$what should show the login form");
+        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$what is quiet"); }
+    }
+});
+
+t('the sandbox prefixes every cross-app link and production has none', function () {
+    ['port' => $p] = instance_boot();
+    [$jar] = instance_login($p, '/test');
+    $b = hreq($p, 'GET', '/test/reminders/', [], $jar)['body'];
+    foreach (['/test/reminders/', '/test/calendar/', '/test/notes/', '/test/habits/', '/test/add/'] as $l) {
+        has('href="' . $l . '"', $b, 'the sandbox tab bar stays inside /test');
+    }
+    // The killer: an unprefixed absolute app link in a /test/ page is a door back into
+    // production, and it would look like it worked.
+    ok(!preg_match('#href="/(reminders|calendar|notes|habits|add)/"#', $b),
+       'no unprefixed cross-app link may leak out of /test/');
+
+    [$pjar] = instance_login($p, '');
+    $pb = hreq($p, 'GET', '/reminders/', [], $pjar)['body'];
+    has('href="/reminders/"', $pb, 'production links are unprefixed');
+    hasnt('/test/', $pb, 'and production carries no trace of the sandbox');
+});
+
+t('signing in lands you inside the instance you signed in to', function () {
+    ['port' => $p] = instance_boot();
+    [, $t] = instance_login($p, '/test');
+    eq('/test/calendar/', $t['location'], 'the sandbox login lands in the sandbox');
+    [, $r] = instance_login($p, '');
+    eq('/calendar/', $r['location'], 'production stays in production');
+});
+
+t('a row added in the sandbox never reaches production', function () {
+    ['port' => $p, 'box' => $box] = instance_boot();
+    [$jar] = instance_login($p, '/test');
+    $g = hreq($p, 'GET', '/test/reminders/', [], $jar);
+    preg_match('/name="csrf" value="([^"]+)"/', $g['body'], $m);
+    ok(!empty($m[1]), 'the sandbox page carries a token');
+    hreq($p, 'POST', '/test/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
+        'text' => 'sandbox-only row', 'folder' => 'Reminders', 'section' => ''], $jar);
+
+    $inTest = array_column(instance_rows($box, 'data-test'), 'text');
+    $inProd = array_column(instance_rows($box, 'data'), 'text');
+    ok(in_array('sandbox-only row', $inTest, true), 'it landed in the sandbox data dir');
+    ok(!in_array('sandbox-only row', $inProd, true), 'and NOT in production');
+});
+
+t('a row added in production never reaches the sandbox', function () {
+    ['port' => $p, 'box' => $box] = instance_boot();
+    [$jar] = instance_login($p, '');
+    $g = hreq($p, 'GET', '/reminders/', [], $jar);
+    preg_match('/name="csrf" value="([^"]+)"/', $g['body'], $m);
+    hreq($p, 'POST', '/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
+        'text' => 'production-only row', 'folder' => 'Reminders', 'section' => ''], $jar);
+
+    ok(in_array('production-only row', array_column(instance_rows($box, 'data'), 'text'), true),
+       'it landed in production');
+    ok(!in_array('production-only row', array_column(instance_rows($box, 'data-test'), 'text'), true),
+       'and NOT in the sandbox');
+});
+
+t('every page under /test/ loads lib-test, not lib', function () {
+    ['port' => $p] = instance_boot();
+    [$jar] = instance_login($p, '/test');
+    // If a page's preamble were missed out, it would load lib/ — whose config has no
+    // base — and its links would come out unprefixed while everything else looked fine.
+    foreach (['/test/reminders/', '/test/notes/', '/test/calendar/', '/test/habits/', '/test/add/'] as $path) {
+        $r = hreq($p, 'GET', $path, [], $jar);
+        eq(200, $r['status'], "$path renders");
+        has('href="/test/calendar/"', $r['body'], "$path was served by the sandbox instance");
+        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$path is quiet"); }
+    }
+});
+
+t('the sandbox writes nowhere near the outer run, let alone data/', function () use ($root) {
+    ['box' => $box] = instance_boot();
+    ok(strpos($box, sys_get_temp_dir()) === 0, 'the sandbox lives under the temp dir');
+    ok(!is_dir($root . '/data') || count(glob($root . '/data/reminders-*.json') ?: []) === 0
+       || !in_array('sandbox-only row', array_column(
+            store_read($root . '/data/reminders-example.json') ?: [], 'text'), true),
+       'the repo data dir is untouched');
+});
+
+// ---------------------------------------------------------------- sign-up
+// Anyone can make an account from the login page. Emailing is switched off, so the code
+// is fixed at SIGNUP_CODE — which is exactly why the rest of the gate has to hold: a
+// half-made account must not be an account, and five wrong codes must end it.
+area('signup');
+
+t('a sign-up is refused unless the username, email and password are all right', function () use ($scratch) {
+    $bad = [
+        ['x',        'a@b.com',   'longenough', 'username too short'],
+        ['ok_user',  'not-email', 'longenough', 'email'],
+        ['ok_user',  'a@b.com',   'short',      'password length'],
+        ['example',  'a@b.com',   'longenough', 'username taken'],
+    ];
+    foreach ($bad as [$u, $em, $pw, $why]) {
+        $jar = [];
+        req('GET', '/reminders/', [], $jar);
+        $r = req('POST', '/reminders/', ['action' => 'signup', 'newuser' => $u,
+            'email' => $em, 'newpass' => $pw], $jar);
+        eq(200, $r['status'], "$why: no redirect");
+        $acc = store_read($scratch . '/accounts.json');
+        ok(!isset($acc[$u]) || $u === 'example', "$why must not create an account");
+    }
+});
+
+t('a good sign-up parks the account rather than creating it', function () use ($scratch) {
+    $jar = [];
+    req('GET', '/reminders/', [], $jar);
+    $r = req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
+        'email' => 'newbie@example.com', 'newpass' => 'newbiepass'], $jar);
+    eq(200, $r['status'], 'the code window opens in place');
+    $pending = store_read($scratch . '/signups.json');
+    ok(isset($pending['newbie']), 'it is waiting in signups.json');
+    eq('newbie@example.com', $pending['newbie']['email'] ?? null);
+    ok(!isset(store_read($scratch . '/accounts.json')['newbie']), 'and is NOT an account yet');
+    // Nor can it sign in while it's only pending.
+    $j2 = [];
+    req('GET', '/reminders/', [], $j2);
+    $s = req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j2);
+    eq(200, $s['status'], 'a pending account cannot sign in');
+});
+
+t('a wrong code is counted and the fifth one ends the sign-up', function () use ($scratch) {
+    $jar = [];
+    req('GET', '/reminders/', [], $jar);
+    req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'doomed',
+        'email' => 'doomed@example.com', 'newpass' => 'doomedpass'], $jar);
+    for ($i = 0; $i < 5; $i++) {
+        req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '9999'], $jar);
+    }
+    $r = req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '1234'], $jar);
+    eq(200, $r['status'], 'even the right code is too late now');
+    ok(!isset(store_read($scratch . '/accounts.json')['doomed']), 'no account was made');
+    ok(!isset(store_read($scratch . '/signups.json')['doomed']), 'and the pending row is gone');
+});
+
+t('the right code makes the account and signs you in', function () use ($scratch) {
+    $jar = [];
+    req('GET', '/reminders/', [], $jar);
+    req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
+        'email' => 'newbie@example.com', 'newpass' => 'newbiepass'], $jar);
+    $r = req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'newbie', 'code' => '1234'], $jar);
+    eq(302, $r['status'], 'verifying redirects');
+    eq('/calendar/', $r['location'], 'straight into the app');
+    $acc = store_read($scratch . '/accounts.json');
+    ok(isset($acc['newbie']), 'the account is real now');
+    eq('newbiepass', $acc['newbie']['password'] ?? null);
+    ok(!isset(store_read($scratch . '/signups.json')['newbie']), 'and no longer pending');
+});
+
+t('a brand-new account is an empty working suite, and sees nobody else\'s data', function () {
+    ensure_account('fresh', 'freshpassword');
+    $jar = login('fresh', 'freshpassword');
+    foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
+        $r = req('GET', $p, [], $jar);
+        eq(200, $r['status'], "$p renders for a new account");
+        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$p is quiet"); }
+    }
+    eq(0, count(rows('fresh')), 'no reminders');
+    // A stranger has no partner, so nothing of anyone else's can be reachable.
+    eq(null, share_partner('fresh'), 'and no partner');
+});
+
+/**
+ * Make an account through the real sign-up, if it isn't there already. Areas share the
+ * seeded set, so anything that needs a *fresh* account has to be able to make one on its
+ * own — otherwise running one area by name depends on another having run first.
+ */
+function ensure_account(string $user, string $pass): void
+{
+    global $scratch;
+    if (!isset(store_read($scratch . '/accounts.json')[$user])) {
+        $jar = [];
+        req('GET', '/reminders/', [], $jar);
+        req('POST', '/reminders/', ['action' => 'signup', 'newuser' => $user,
+            'email' => $user . '@example.com', 'newpass' => $pass], $jar);
+        req('POST', '/reminders/', ['action' => 'verify', 'newuser' => $user, 'code' => SIGNUP_CODE], $jar);
+    }
+    if (!isset(store_read($scratch . '/accounts.json')[$user])) {
+        // Signup wouldn't take the name: it's already an account in the developer's own
+        // config.php (aki is, here). So the suite doesn't depend on whatever passwords a
+        // given machine's config holds, guarantee this one works with the passwords.json
+        // override — the same file a self-service change writes, and it wins over config.
+        auth_password_set(app_config(), $user, $pass);
+    }
+}
+
+// ---------------------------------------------------------------- the settings window
+// require_login() answers these on whatever page you happen to be on, so they are the
+// one pair of handlers every app inherits without wiring anything up.
+area('account');
+
+t('changing a password needs a token and the current password', function () use ($scratch) {
+    ensure_account('newbie', 'newbiepass');
+    $jar = login('newbie', 'newbiepass');
+    $was = store_read($scratch . '/passwords.json');
+    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => 'wrong',
+        'current' => 'newbiepass', 'new' => 'brandnewpass'], $jar, true);
+    eq(400, $r['status'], 'a bad token is a 400');
+    eq($was, store_read($scratch . '/passwords.json'), 'and nothing was written');
+
+    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+        'current' => 'nope', 'new' => 'brandnewpass'], $jar, true);
+    eq(false, json_decode($r['body'], true)['ok'] ?? null, 'the wrong current password is refused');
+
+    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+        'current' => 'newbiepass', 'new' => 'short'], $jar, true);
+    eq(false, json_decode($r['body'], true)['ok'] ?? null, 'a six-character floor');
+});
+
+t('a changed password takes effect and the old one stops working', function () {
+    ensure_account('newbie', 'newbiepass');
+    $jar = login('newbie', 'newbiepass');
+    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+        'current' => 'newbiepass', 'new' => 'brandnewpass'], $jar, true);
+    eq(true, json_decode($r['body'], true)['ok'] ?? null, 'accepted');
+
+    $j = [];
+    req('GET', '/reminders/', [], $j);
+    eq(200, req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j)['status'],
+       'the old password is dead');
+    $j2 = [];
+    req('GET', '/reminders/', [], $j2);
+    eq(302, req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'brandnewpass'], $j2)['status'],
+       'the new one works');
+});
+
+t('a stored password wins over the account record it overrides', function () use ($scratch) {
+    // passwords.json is the override, because config.php is hand-kept on the server and
+    // never deployed. Deleting it has to fall back rather than lock the account out.
+    $pw = store_read($scratch . '/passwords.json');
+    ok(isset($pw['newbie']), 'the override is on disk');
+    eq('newbiepass', store_read($scratch . '/accounts.json')['newbie']['password'] ?? null,
+       'and the account record still holds the original');
+});
+
+t('the theme is set over AJAX, refuses a name it does not know, and sticks', function () use ($scratch) {
+    $jar = login('example', 'examplepassword');
+    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
+        'theme' => 'not-a-theme'], $jar, true);
+    eq(false, json_decode($r['body'], true)['ok'] ?? null, 'an unknown theme is refused');
+
+    $names = array_keys(THEMES);
+    $pick  = $names[count($names) - 1];
+    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
+        'theme' => $pick], $jar, true);
+    eq(true, json_decode($r['body'], true)['ok'] ?? null, "theme $pick is accepted");
+    eq($pick, store_read($scratch . '/prefs-example.json')['theme'] ?? null, 'and it is stored');
+
+    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => 'wrong', 'theme' => $names[0]], $jar, true);
+    eq(false, json_decode($r['body'], true)['ok'] ?? null, 'no token, no change');
+    eq($pick, store_read($scratch . '/prefs-example.json')['theme'] ?? null, 'still the one we set');
+});
+
+// ---------------------------------------------------------------- token auth
+// The widget and the watch carry a token instead of a session. It is a READ credential
+// and has been handed out as one: anything behind it that wrote would hand that power
+// to every copy already in circulation.
+area('token');
+
+t('token_user() matches exactly, or not at all', function () {
+    $dir = datadir();
+    $tok = 'testtoken' . bin2hex(random_bytes(6));
+    store_write($dir . '/token-example.json', ['token' => $tok]);
+    eq('example', token_user($dir, $tok), 'the right token names its owner');
+    eq(null, token_user($dir, ''), 'an empty token is nobody');
+    eq(null, token_user($dir, substr($tok, 0, -1)), 'a prefix is not a match');
+    eq(null, token_user($dir, $tok . 'x'), 'nor is an extension');
+    eq(null, token_user($dir, strtoupper($tok)), 'nor a different case');
+});
+
+t('one person\'s token cannot read another person\'s feed', function () {
+    $dir = datadir();
+    $mine = 'tokA' . bin2hex(random_bytes(6));
+    $them = 'tokB' . bin2hex(random_bytes(6));
+    store_write($dir . '/token-example.json', ['token' => $mine]);
+    store_write($dir . '/token-buddy.json',   ['token' => $them]);
+
+    $a = json_decode(req('GET', '/calendar/feed.php?token=' . $mine)['body'], true);
+    $b = json_decode(req('GET', '/calendar/feed.php?token=' . $them)['body'], true);
+    ok(is_array($a) && is_array($b), 'both answer JSON');
+    $txt = fn($f) => array_column($f['items'] ?? [], 'text');
+    ok($txt($a) !== $txt($b) || (!$txt($a) && !$txt($b)), 'the two feeds are not the same list');
+    eq('example', token_user($dir, $mine));
+    eq('buddy',   token_user($dir, $them));
+});
+
+t('the feed refuses to write, whatever it is asked', function () {
+    $dir = datadir();
+    $tok = 'tokW' . bin2hex(random_bytes(6));
+    store_write($dir . '/token-example.json', ['token' => $tok]);
+    $before = count(rows('example'));
+    foreach ([['action' => 'add', 'text' => 'via the token'],
+              ['action' => 'tick', 'id' => (rows('example')[0]['id'] ?? 'x')]] as $post) {
+        req('POST', '/calendar/feed.php?token=' . $tok, $post);
+    }
+    eq($before, count(rows('example')), 'the feed wrote nothing');
+    ok(rowBy('example', 'via the token') === null, 'and added nothing');
+});
+
+t('the reminders API has no anonymous read and no write', function () {
+    $r = req('GET', '/api/reminders.php');
+    ok($r['status'] !== 200 || strpos($r['body'], '"text"') === false,
+       'an unauthenticated read must not return rows');
+    $before = count(rows('example'));
+    req('POST', '/api/reminders.php', ['action' => 'add', 'text' => 'api row']);
+    eq($before, count(rows('example')), 'and an unauthenticated POST changes nothing');
+});
+
+// ---------------------------------------------------------------- chat
+// Deliberately public: no login, no session, one shared file. Which makes the escaping
+// and the cap the whole of its safety.
+area('chat');
+
+t('chat needs no login and posts a message', function () {
+    $r = req('GET', '/chat/');
+    eq(200, $r['status'], 'open to anyone');
+    hasnt('name="password"', $r['body'], 'no login gate');
+    req('POST', '/chat/', ['action' => 'send', 'name' => 'tester', 'text' => 'hello from the test run']);
+    has('hello from the test run', req('GET', '/chat/')['body'], 'the message is on the page');
+});
+
+t('a message is escaped, not rendered', function () {
+    req('POST', '/chat/', ['action' => 'send', 'name' => '<b>me</b>',
+        'text' => '<script>alert(1)</script> & "quoted"']);
+    $b = req('GET', '/chat/')['body'];
+    hasnt('<script>alert(1)</script>', $b, 'no live script in the page');
+    has('&lt;script&gt;', $b, 'it came back escaped');
+    hasnt('<b>me</b>', $b, 'and so did the name');
+});
+
+t('an empty message is not stored', function () {
+    $file = datadir() . '/chat.json';
+    $before = count(store_read($file));
+    req('POST', '/chat/', ['action' => 'send', 'name' => 'tester', 'text' => '   ']);
+    eq($before, count(store_read($file)), 'whitespace is nothing');
+});
+
+// ---------------------------------------------------------------- Aki's Bookshelf
+// One username's app, sitting behind the shared login. The gate is the only thing
+// between it and everyone else who has an account on the suite.
+area('bookshelf');
+
+t('the bookshelf is behind the login', function () {
+    $r = req('GET', '/akisbookshelf/');
+    has('Sign in', $r['body'], 'signed out you get the login page');
+});
+
+t('a signed-in stranger is turned away and sees none of it', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    has('bookshelf is aki', $r['body'], 'told whose it is');
+    foreach (['booksgrid', 'bookcard', 'shelf-tile'] as $marker) {
+        hasnt($marker, $r['body'], "no bookshelf markup leaks ($marker)");
+    }
+    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+});
+
+t('aki gets the app itself', function () {
+    // aki may already be a config account on this machine, so ensure_account() falls back
+    // to the passwords.json override to give it a password the test knows — either way we
+    // reach the gate as a signed-in aki, which is what it turns on.
+    ensure_account('aki', 'akipassword');
+    $jar = login('aki', 'akipassword');
+    $r = req('GET', '/akisbookshelf/', [], $jar);
+    eq(200, $r['status'], 'it renders');
+    hasnt('bookshelf is aki', $r['body'], 'and is not the refusal page');
+    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+});
+
+// ---------------------------------------------------------------- recolouring a share
+// Each person can recolour how the other's shared folders look *in their own picker*.
+// The whole point is that it never touches the owner's data, so that is what's checked.
+area('shared2');
+
+t('a recolour is stored on the viewer\'s side, keyed by the view name', function () {
+    $dir = datadir();
+    $key = '@buddy:Dinners';
+    $_SESSION['user'] = 'example';                       // the helper writes as "me"
+    $ownerBefore = folders_load($dir, 'buddy');
+    folder_shared_color_set($dir, 'reminders', $key, app_palette('reminders', true)[1], ['Dinners']);
+    $mine = folder_shared_colors($dir, 'reminders', 'example');
+    ok(isset($mine[$key]), 'the override is in my own folders file');
+    eq($ownerBefore, folders_load($dir, 'buddy'), 'the owner\'s folders file is untouched');
+    ok(!isset(folder_shared_colors($dir, 'reminders', 'buddy')[$key]),
+       'and nothing was written on their side');
+    unset($_SESSION['user']);
+});
+
+t('a colour off the shared palette, or a folder they do not share, is refused', function () {
+    $dir = datadir();
+    $key = '@buddy:Dinners';
+    $_SESSION['user'] = 'example';
+    $was = folder_shared_colors($dir, 'reminders', 'example')[$key] ?? null;
+    folder_shared_color_set($dir, 'reminders', $key, '#ff0000', ['Dinners']);
+    eq($was, folder_shared_colors($dir, 'reminders', 'example')[$key] ?? null, 'a made-up colour');
+    folder_shared_color_set($dir, 'reminders', '@buddy:Secret',
+        app_palette('reminders', true)[3], ['Dinners']);
+    ok(!isset(folder_shared_colors($dir, 'reminders', 'example')['@buddy:Secret']),
+       'a folder they never shared');
+    unset($_SESSION['user']);
+});
+
+t('resolution goes mine, then theirs, then a default by position', function () {
+    $shared = app_palette('reminders', true);
+    $mine   = ['@buddy:Dinners' => $shared[2]];
+    $owner  = ['Dinners' => $shared[4], 'Other' => $shared[5]];
+    eq($shared[2], folder_shared_color($mine, $owner, 'reminders', '@buddy:Dinners', 'Dinners', 0),
+       'my override wins');
+    eq($shared[4], folder_shared_color([], $owner, 'reminders', '@buddy:Dinners', 'Dinners', 0),
+       'then the owner\'s own colour');
+    $d = folder_shared_color([], [], 'reminders', '@buddy:Nothing', 'Nothing', 1);
+    ok(in_array($d, $shared, true), 'then a shared-palette default');
+});
+
+// ---------------------------------------------------------------- the public front
+// Home, projects, about and contact are the marketing front, not the app suite: no
+// login, no tab bar, no app chrome. Getting that wrong shows a signed-out stranger a
+// tab bar into pages they can't open.
+area('site');
+
+t('every public page renders for a stranger', function () {
+    foreach (['/', '/about/', '/projects/', '/contact/'] as $p) {
+        $r = req('GET', $p);
+        eq(200, $r['status'], "$p status");
+        hasnt('name="password"', $r['body'], "$p must not ask for a login");
+        foreach (['Fatal error', 'Warning:', 'Notice:', '/home/protected'] as $l) {
+            hasnt($l, $r['body'], "$p leaks \"$l\"");
+        }
+    }
+});
+
+t('a public page wears the site nav and never the app tab bar', function () {
+    foreach (['/', '/about/', '/projects/', '/contact/'] as $p) {
+        $b = req('GET', $p)['body'];
+        hasnt('class="tabbar"', $b, "$p must not carry the app tab bar");
+        hasnt('segmented', $b, "$p must not carry the app segmented control");
+    }
+    $nav = site_nav('about');
+    has('<a href="/about/" class="on">About</a>', $nav, 'the nav marks the page you are on');
+    has('<a href="/">Home</a>', $nav, 'and does not mark the others');
+});
+
+t('the public pages are the same shell', function () {
+    foreach (['/about/', '/projects/', '/contact/'] as $p) {
+        $b = req('GET', $p)['body'];
+        has('<!DOCTYPE html', $b, "$p is a whole document");
+        has('#34d399', strtolower($b), "$p carries the suite accent");
+    }
+});
+
+// ---------------------------------------------------------------- quick add / widget tick
+// quick.php is the one page the widget can reach that writes — deliberately, because the
+// write happens in a signed-in session with a token rather than behind the read-only feed.
+area('quick');
+
+t('a quick add lands on today, in the fallback folder', function () {
+    $jar = login('example', 'examplepassword');
+    $tok = csrf($jar, '/calendar/quick.php');
+    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+        'text' => 'quick added reminder'], $jar);
+    $r = rowBy('example', 'quick added reminder');
+    ok($r !== null, 'it was written');
+    eq(date('Y-m-d'), $r['due'] ?? null, 'due today');
+    eq(folder_fallback('reminders'), $r['folder'] ?? null, 'in the fallback folder');
+    eq('', $r['section'] ?? null, 'and no section');
+});
+
+t('a quick add reads the date and time out of the line', function () {
+    $jar = login('example', 'examplepassword');
+    $tok = csrf($jar, '/calendar/quick.php');
+    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_event',
+        'text' => 'Vet 8/3 2pm'], $jar);
+    $ev = null;
+    foreach (stored('events', 'example') as $e) { if (($e['text'] ?? '') === 'Vet') { $ev = $e; } }
+    ok($ev !== null, 'the text was trimmed to "Vet"');
+    eq('08-03', substr((string) $ev['date'], 5), 'the date came out of the line');
+    eq('14:00', $ev['time'] ?? null, 'and so did the time');
+});
+
+t('?tick= shows one reminder and its Done button marks it', function () {
+    $jar = login('example', 'examplepassword');
+    $tok = csrf($jar, '/calendar/quick.php');
+    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+        'text' => 'tick me from the widget'], $jar);
+    $id = rowBy('example', 'tick me from the widget')['id'];
+
+    $g = req('GET', '/calendar/quick.php?tick=' . $id, [], $jar);
+    eq(200, $g['status']);
+    has('tick me from the widget', $g['body'], 'the page names the reminder');
+    has('value="tick"', $g['body'], 'and carries the Done button');
+
+    req('POST', '/calendar/quick.php?tick=' . $id, ['csrf' => csrf($jar, '/calendar/quick.php'),
+        'action' => 'tick', 'id' => $id], $jar);
+    ok(!empty(rowBy('example', 'tick me from the widget')['done']), 'it is done');
+});
+
+t('ticking a repeat from the widget rolls it instead of finishing it', function () {
+    $jar = login('example', 'examplepassword');
+    $row = rowBy('example', 'Water the tomatoes');          // every 2 days, from the seeder
+    ok($row !== null && repeat_get($row) !== null, 'the seeded repeat exists');
+    $was = $row['due'];
+    req('POST', '/calendar/quick.php?tick=' . $row['id'], ['csrf' => csrf($jar, '/calendar/quick.php'),
+        'action' => 'tick', 'id' => $row['id']], $jar);
+    $after = rowBy('example', 'Water the tomatoes');
+    ok(empty($after['done']), 'a repeat is never marked done from the widget either');
+    ok($after['due'] > $was, "it moved on (was $was, now {$after['due']})");
+});
+
+t('a tick with no token changes nothing', function () {
+    $jar = login('example', 'examplepassword');
+    $tok = csrf($jar, '/calendar/quick.php');
+    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+        'text' => 'untouchable'], $jar);
+    $id = rowBy('example', 'untouchable')['id'];
+    req('POST', '/calendar/quick.php?tick=' . $id, ['action' => 'tick', 'id' => $id], $jar);
+    ok(empty(rowBy('example', 'untouchable')['done']), 'still open');
+    req('POST', '/calendar/quick.php?tick=' . $id, ['csrf' => 'nope', 'action' => 'tick', 'id' => $id], $jar);
+    ok(empty(rowBy('example', 'untouchable')['done']), 'still open with a wrong token');
+});
+
+// ---------------------------------------------------------------- the deploy script
+// Static checks, because a deploy is the one thing here that can destroy data and the
+// one thing no test run may actually perform. These are the promises deploy.sh makes in
+// its own header; this is the test that it still keeps them.
+area('deploy');
+
+t('deploy.sh parses', function () use ($root) {
+    exec('bash -n ' . escapeshellarg($root . '/deploy.sh') . ' 2>&1', $o, $rc);
+    eq(0, $rc, 'bash -n: ' . implode("\n", $o));
+});
+
+t('it never deletes and never sends a config', function () use ($root) {
+    $s = (string) file_get_contents($root . '/deploy.sh');
+    foreach (preg_split('/\R/', $s) as $n => $line) {
+        if (strpos($line, 'rsync') === false) { continue; }
+        $bare = preg_replace('/#.*$/', '', $line);
+        ok(strpos($bare, '--delete') === false, 'line ' . ($n + 1) . ' uses --delete');
+    }
+    ok(substr_count($s, "--exclude='config.php'") + substr_count($s, '--exclude=config.php') >= 2,
+       'every rsync of lib excludes config.php');
+});
+
+t('it never touches a data directory', function () use ($root) {
+    $s = (string) file_get_contents($root . '/deploy.sh');
+    foreach (preg_split('/\R/', $s) as $n => $line) {
+        if (strpos($line, 'rsync') === false && strpos($line, 'rm ') === false) { continue; }
+        $bare = preg_replace('/#.*$/', '', $line);
+        ok(strpos($bare, '/home/protected/data') === false,
+           'line ' . ($n + 1) . ' names a live data directory');
+    }
+});
+
+t('a bare deploy is the test instance, never production', function () use ($root) {
+    $s = (string) file_get_contents($root . '/deploy.sh');
+    has('MODE="${MODE:-test}"', $s, 'the default mode is test');
+    foreach (['test|prod|both|promote', 'push_instance'] as $m) { has($m, $s, "deploy.sh still has $m"); }
+    // The script itself is not run here: it needs the deploy key, and a test run must
+    // never be one keystroke away from touching the live site. These are text checks.
+    ok(preg_match('/\bprod\)\s*$/m', $s) === 1, 'prod is its own explicit mode');
+    ok(strpos($s, 'promote') !== false, 'and promote exists to move test into prod');
 });
 
 // ═══════════════════════════════════════════════════════════════════ run

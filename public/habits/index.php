@@ -16,6 +16,7 @@ require_once $__libDir . '/auth.php';
 require_once $__libDir . '/tabbar.php';
 require_once $__libDir . '/chrome.php';
 require_once $__libDir . '/palette.php';   // the section colour dots
+require_once $__libDir . '/folders.php';   // folder_nav_styles() — the picker's look
 require_login('Habits');
 
 $cfg      = app_config();
@@ -41,6 +42,43 @@ function habit_section_color(array $s, int $i): string
     $pal = habits_palette();
     $c   = (string) ($s['color'] ?? '');
     return in_array($c, $pal, true) ? $c : $pal[$i % count($pal)];
+}
+
+/**
+ * The month view's section filter.
+ *
+ * A month cell is a pie of "how much of that day got done", which is only a useful
+ * number if it's over the habits you meant. The filter decides which sections feed it.
+ * It is stored as the *hidden* set — a list of section ids in prefs-<user>.json beside
+ * the theme and the chosen view — so a section added later is counted straight away
+ * rather than silently missing until someone finds this menu.
+ *
+ * Ungrouped habits are a section as far as the filter is concerned; they have no id, so
+ * they answer to MSEC_NONE. It can't collide with a real id, which is hex.
+ */
+const MSEC_NONE = '~none';
+
+/** Every key the filter can hold, in the order the menu draws them. */
+function msec_keys(array $habits): array
+{
+    $keys = [MSEC_NONE];
+    foreach ($habits as $it) { if (is_section($it)) { $keys[] = (string) $it['id']; } }
+    return $keys;
+}
+
+/** The hidden set, re-validated against the sections that still exist. */
+function msec_hidden(string $prefsFile, array $habits): array
+{
+    $all = msec_keys($habits);
+    $raw = store_read($prefsFile)['habits_msec'] ?? [];
+    return array_values(array_intersect(is_array($raw) ? array_map('strval', $raw) : [], $all));
+}
+
+function msec_hidden_set(string $prefsFile, array $hidden): void
+{
+    $p = store_read($prefsFile);
+    $p['habits_msec'] = array_values(array_unique($hidden));
+    store_write($prefsFile, $p);
 }
 
 /**
@@ -141,6 +179,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         header('Content-Type: application/json');
         echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // The month view's section filter (AJAX, from the picker in the top bar). Three
+    // gestures, the same three every picker in the suite has: the box toggles one, a row
+    // tap makes it the only one counted, and "All" turns everything on — or, when it
+    // already is, off. The keys are worked out here rather than taken from the post, so
+    // a stale page can't name a section that no longer exists.
+    if (in_array($_POST['action'], ['msec_vis', 'msec_only', 'msec_all'], true)) {
+        $prefs  = theme_file();          // prefs-<user>.json, where the view lives too
+        $all    = msec_keys($habits);
+        $hidden = msec_hidden($prefs, $habits);
+        $name   = (string) ($_POST['name'] ?? '');
+        $show   = !empty($_POST['show']);
+        if ($_POST['action'] === 'msec_all') {
+            $hidden = $show ? [] : $all;
+        } elseif (in_array($name, $all, true)) {
+            if ($_POST['action'] === 'msec_only') {
+                $hidden = array_values(array_diff($all, [$name]));
+            } else {
+                $hidden = $show ? array_values(array_diff($hidden, [$name]))
+                                : array_values(array_unique(array_merge($hidden, [$name])));
+            }
+        }
+        msec_hidden_set($prefs, $hidden);
+        header('Content-Type: application/json');
+        // Answer with the whole authoritative set, the way every other AJAX handler here
+        // does, rather than a bare ok.
+        echo json_encode(['ok' => true, 'hidden' => $hidden]);
         exit;
     }
 
@@ -330,12 +397,119 @@ $mLead      = (int) date('w', $mFirstTs);
 $mName      = date('F Y', $mFirstTs);
 $mPrev      = date('Y-m', mktime(0, 0, 0, $mMon - 1, 1, $mYear));
 $mNext      = date('Y-m', mktime(0, 0, 0, $mMon + 1, 1, $mYear));
-$habitTotal = count($habitItems);
-$monthDone  = [];   // 'YYYY-MM-DD' => how many habits were ticked that day
-foreach ($habitItems as $h) {
+// Only the sections the filter leaves on feed the pies. Everything else on the page —
+// the week grid, the lists, the drag order — is untouched by it: this is a question
+// about the month's arithmetic, not about which habits exist.
+$mHidden    = msec_hidden($prefsFile, $habits);
+$mKeys      = msec_keys($habits);
+$mShown     = array_values(array_diff($mKeys, $mHidden));
+$mFiltered  = $mHidden !== [];
+$monthItems = array_values(array_filter($habitItems, function ($h) use ($sectionIds, $mHidden) {
+    $sec = (string) ($h['section'] ?? '');
+    $key = in_array($sec, $sectionIds, true) ? $sec : MSEC_NONE;
+    return !in_array($key, $mHidden, true);
+}));
+$habitTotal = count($monthItems);
+$monthDone  = [];   // 'YYYY-MM-DD' => how many of the counted habits were ticked that day
+foreach ($monthItems as $h) {
     foreach ((array) ($h['done'] ?? []) as $d => $on) {
         if ($on && strncmp((string) $d, $mym, 7) === 0) { $monthDone[(string) $d] = ($monthDone[(string) $d] ?? 0) + 1; }
     }
+}
+
+/**
+ * The filter's picker: a round button in the top bar dropping a menu of tick boxes, the
+ * same shape and the same three gestures as the folder and calendar pickers (box toggles
+ * one, row tap makes it the only one, "All" turns the lot on or off). Its dot is a pie of
+ * the counted sections' colours, so the button says what the month is measuring without
+ * opening it. Month view only — in the week grid there is nothing for it to filter.
+ */
+function render_msec_pick(array $habits, array $hidden, string $csrf): void
+{
+    $opts = [[MSEC_NONE, 'Ungrouped', '#8b7fd4']];
+    $i = 0;
+    foreach ($habits as $it) {
+        if (!is_section($it)) { continue; }
+        $opts[] = [(string) $it['id'], (string) ($it['name'] ?? 'Section'), habit_section_color($it, $i)];
+        $i++;
+    }
+    $on = array_values(array_filter($opts, fn($o) => !in_array($o[0], $hidden, true)));
+    $pie = '';
+    if (count($on) > 1) {
+        $n = count($on); $stops = [];
+        foreach ($on as $k => $o) {
+            $stops[] = e($o[2]) . ' ' . round($k * 100 / $n, 2) . '% ' . round(($k + 1) * 100 / $n, 2) . '%';
+        }
+        $pie = 'conic-gradient(' . implode(',', $stops) . ')';
+    } elseif (count($on) === 1) {
+        $pie = e($on[0][2]);
+    }
+    $label = $hidden === [] ? 'Counting every section'
+           : (count($on) . ' of ' . count($opts) . ' sections counted');
+    ?>
+    <div class="folderpick">
+      <button type="button" class="folderpick-btn" id="msecBtn" aria-haspopup="listbox"
+              aria-expanded="false" title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
+        <span class="fdot<?= $pie === '' ? '' : '' ?>"<?= $pie === '' ? '' : ' style="background:' . $pie . '"' ?>></span>
+      </button>
+      <div class="folderpick-menu" id="msecMenu" role="listbox" hidden>
+        <button type="button" class="folderpick-opt msec-opt" data-key="">
+          <span class="fvis fvis-all<?= $hidden === [] ? ' on' : '' ?>" role="checkbox"
+                aria-checked="<?= $hidden === [] ? 'true' : 'false' ?>"
+                title="Count every section" aria-label="Count every section"></span>
+          <span class="fdot all"></span><span class="fpick-name">All</span>
+        </button>
+        <?php foreach ($opts as [$key, $name, $col]): $isOn = !in_array($key, $hidden, true); ?>
+          <button type="button" class="folderpick-opt msec-opt" data-key="<?= e($key) ?>">
+            <span class="fvis<?= $isOn ? ' on' : '' ?>" role="checkbox" data-key="<?= e($key) ?>"
+                  aria-checked="<?= $isOn ? 'true' : 'false' ?>"
+                  title="Count in the pies" aria-label="Count <?= e($name) ?> in the pies"></span>
+            <span class="fdot" style="background:<?= e($col) ?>"></span>
+            <span class="fpick-name"><?= e($name) ?></span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <script>(function(){
+      var b = document.getElementById('msecBtn'), m = document.getElementById('msecMenu');
+      if (!b || !m) { return; }
+      var CSRF = <?= json_encode($csrf) ?>;
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        m.hidden = !m.hidden;
+        b.setAttribute('aria-expanded', m.hidden ? 'false' : 'true');
+      });
+      document.addEventListener('click', function (e) {
+        if (!m.hidden && !m.contains(e.target)) { m.hidden = true; b.setAttribute('aria-expanded', 'false'); }
+      });
+      // Ticking reloads (the pies have to be redrawn server-side), so remember that the
+      // menu was open and put it back — otherwise it folds away between every tap.
+      try { if (sessionStorage.getItem('msecOpen') === '1') { sessionStorage.removeItem('msecOpen');
+        m.hidden = false; b.setAttribute('aria-expanded', 'true'); } } catch (_) {}
+      var post = function (params) {
+        try { sessionStorage.setItem('msecOpen', '1'); } catch (_) {}
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new URLSearchParams(params) })
+          .then(function () { location.reload(); })
+          .catch(function () { location.reload(); });
+      };
+      m.addEventListener('click', function (e) {
+        var row = e.target.closest('.msec-opt');
+        if (!row) { return; }
+        // stopPropagation as well: in a home-screen PWA tabbar.php listens for clicks on
+        // document and would leave the page before the POST had gone anywhere.
+        e.preventDefault(); e.stopPropagation();
+        var box = row.querySelector('.fvis'), all = box.classList.contains('fvis-all');
+        var onNow = box.classList.contains('on');
+        // The box toggles just its own; the row makes it the only one counted. "All" does
+        // the same thing either way — everything on, or everything off if it already was.
+        var viaBox = !!e.target.closest('.fvis');
+        if (all) { post({ csrf: CSRF, action: 'msec_all', show: onNow ? '' : '1' }); }
+        else if (viaBox) { post({ csrf: CSRF, action: 'msec_vis', name: box.dataset.key, show: onNow ? '' : '1' }); }
+        else { post({ csrf: CSRF, action: 'msec_only', name: box.dataset.key }); }
+      });
+    })();</script>
+    <?php
 }
 ?><!DOCTYPE html>
 <html lang="en">
@@ -589,6 +763,7 @@ foreach ($habitItems as $h) {
       display: inline-flex; align-items: center; justify-content: center; line-height: 1;
     }
     .secfoot button.newsecbtn:hover { border-color: #888; color: #fff; }
+<?= folder_nav_styles() ?>
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
   </style>
@@ -606,7 +781,17 @@ foreach ($habitItems as $h) {
       // No Edit pencil: holding a habit's name or a section's gets you into edit mode,
       // the same gesture as everywhere else in the suite. Habits was the last app still
       // carrying the button, and two ways in is one too many.
+      //
+      // The month view's section filter goes in the same slot every other app's picker
+      // does — captured with ob_start() and handed to render_user_menu(), the way
+      // render_folder_pick() is elsewhere. Week view has nothing to filter, so it gets
+      // nothing rather than a control that does nothing.
       $titleControls = '';
+      if ($hView === 'month') {
+          ob_start();
+          render_msec_pick($habits, $mHidden, $csrf);
+          $titleControls = ob_get_clean();
+      }
     ?>
     <?= render_user_menu(false, '', '', false, $titleControls) ?>
   </header>
@@ -656,8 +841,10 @@ foreach ($habitItems as $h) {
         </div>
       <?php endfor; ?>
     </div>
-    <p class="mlegend">Each day is filled in proportion to how many of your
-      <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?> were ticked.</p>
+    <p class="mlegend">Each day is filled in proportion to how many of
+      <?= $mFiltered ? 'the' : 'your' ?> <?= $habitTotal ?> habit<?= $habitTotal === 1 ? '' : 's' ?>
+      <?= $mFiltered ? 'in the ' . count($mShown) . ' section' . (count($mShown) === 1 ? '' : 's')
+                       . " you're counting" : '' ?> were ticked.</p>
   <?php elseif (!$habitItems && !$sections): ?>
     <p class="empty">No habits yet — add one below, then tap a day to mark it done.</p>
   <?php else: ?>

@@ -176,6 +176,26 @@ function run_public(string $base): array
         }
     }
 
+    // The /test/ mirror is the same source under a prefix. Its links have to stay inside
+    // it: an unprefixed cross-app link there is a door into production that looks like it
+    // worked. Production has to be the mirror image — no /test anywhere.
+    echo "\n\033[1m$base — the instance keeps to itself\033[0m\n";
+    // Signed out there is no tab bar, but the login page's own asset links are built
+    // through suite_base() too, so they say which instance answered.
+    $pfx  = rtrim((string) parse_url($base, PHP_URL_PATH), '/');
+    $body = get($base . '/reminders/')['body'];
+    if ($pfx !== '') {
+        check("the login page's assets are under $pfx",
+              strpos($body, 'href="' . $pfx . '/reminders/icon-180.png"') !== false,
+              'this looks like production answering under a /test URL');
+        check('and none of them point at the site root',
+              !preg_match('#href="/reminders/(icon|manifest)#', $body));
+    } else {
+        check('production assets are unprefixed',
+              strpos($body, 'href="/reminders/icon-180.png"') !== false);
+        check('and production carries no /test link', strpos($body, '/test/') === false);
+    }
+
     echo "\n\033[1m$base — is this today's code?\033[0m\n";
     foreach (FINGERPRINT() as $p => $markers) {
         $b = get($base . $p)['body'];
@@ -218,6 +238,20 @@ function run_private(string $base, string $user, string $pass): array
             $seen["$p:$mk"] = $hit;
             check("$p carries \"$mk\"", $hit, 'this server looks behind');
         }
+    }
+
+    // Signed in the tab bar is there, and it is the link set that actually moves someone
+    // between apps — so this is where a prefix leak would really bite.
+    $pfx = rtrim((string) parse_url($base, PHP_URL_PATH), '/');
+    $b   = get($base . '/reminders/', $jar)['body'];
+    foreach (['reminders', 'calendar', 'notes', 'habits', 'add'] as $app) {
+        check("the tab bar links to $pfx/$app/",
+              strpos($b, 'href="' . $pfx . '/' . $app . '/"') !== false);
+    }
+    if ($pfx !== '') {
+        check('no unprefixed cross-app link leaks out of the mirror',
+              !preg_match('#href="/(reminders|calendar|notes|habits|add)/"#', $b),
+              'a tap here would drop the user into production');
     }
 
     get($base . '/reminders/?logout=1', $jar);

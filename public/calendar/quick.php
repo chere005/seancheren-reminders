@@ -22,6 +22,15 @@ $today = date('Y-m-d');
 if (empty($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(16)); }
 $csrf  = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
+// A POST with a missing or wrong token is refused outright, the way every other
+// mutation in the suite refuses one. It used to fall through and simply re-render the
+// form, which writes nothing but is indistinguishable from having worked.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && !hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
+    http_response_code(400);
+    echo 'Bad request.';
+    exit;
+}
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     && hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
     $text = trim((string) ($_POST['text'] ?? ''));
