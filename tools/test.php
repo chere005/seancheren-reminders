@@ -1968,7 +1968,7 @@ t('the month view\'s section filter has the suite\'s three gestures', function (
     $secs = array_values(array_filter(stored('habits', 'example'), fn($h) => ($h['type'] ?? '') === 'section'));
     ok(count($secs) >= 1, 'there is at least one section to filter');
     $one = (string) $secs[0]['id'];
-    $all = array_merge(['~none'], array_map(fn($s) => (string) $s['id'], $secs));
+    $all = array_map(fn($s) => (string) $s['id'], $secs);   // every key is a real section now
     $post = function (array $p) use ($jar) {
         return json_decode(req('POST', '/habits/', $p + ['csrf' => csrf($jar, '/habits/')], $jar, true)['body'], true);
     };

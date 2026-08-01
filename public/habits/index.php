@@ -52,16 +52,12 @@ function habit_section_color(array $s, int $i): string
  * It is stored as the *hidden* set — a list of section ids in prefs-<user>.json beside
  * the theme and the chosen view — so a section added later is counted straight away
  * rather than silently missing until someone finds this menu.
- *
- * Ungrouped habits are a section as far as the filter is concerned; they have no id, so
- * they answer to MSEC_NONE. It can't collide with a real id, which is hex.
  */
-const MSEC_NONE = '~none';
 
 /** Every key the filter can hold, in the order the menu draws them. */
 function msec_keys(array $habits): array
 {
-    $keys = [MSEC_NONE];
+    $keys = [];
     foreach ($habits as $it) { if (is_section($it)) { $keys[] = (string) $it['id']; } }
     return $keys;
 }
@@ -112,7 +108,7 @@ function render_habit_add(string $section, string $csrf): void
  * $color is the colour of the section the habit sits in, carried into the row as a --hc
  * custom property: the name bubble takes it as a wash and a ticked square fills with it,
  * so a section reads as one band down the grid rather than as a heading you have to keep
- * glancing back up at. Ungrouped habits pass '' and fall back to the app's own violet.
+ * glancing back up at. (Every habit is in a section now, so a colour is always passed.)
  */
 function render_habit_row(array $h, array $days, string $today, string $csrf, int $extra = 0,
                           string $color = ''): void {
@@ -425,11 +421,11 @@ for ($i = 6; $i >= -1; $i--) {
 $extraDays = count($days) - 5;   // the columns only a wide screen shows
 $csrf   = htmlspecialchars($_SESSION['csrf'], ENT_QUOTES);
 
-// Split sections from habits; group habits under their section (ungrouped first).
+// Split sections from habits; group habits under their section (there's always ≥1 section
+// and every habit belongs to one, so there is no ungrouped bucket).
 $sections   = array_values(array_filter($habits, 'is_section'));
 $habitItems = array_values(array_filter($habits, fn($h) => !is_section($h)));
 $sectionIds = array_map(fn($s) => $s['id'], $sections);
-$ungrouped  = array_values(array_filter($habitItems, fn($h) => !in_array($h['section'] ?? '', $sectionIds, true)));
 $bySection  = fn(string $sid) => array_values(array_filter($habitItems, fn($h) => ($h['section'] ?? '') === $sid));
 
 // --- Month view: one cell per day, filled in proportion to that day's ticks ---
@@ -454,7 +450,7 @@ $mShown     = array_values(array_diff($mKeys, $mHidden));
 $mFiltered  = $mHidden !== [];
 $monthItems = array_values(array_filter($habitItems, function ($h) use ($sectionIds, $mHidden) {
     $sec = (string) ($h['section'] ?? '');
-    $key = in_array($sec, $sectionIds, true) ? $sec : MSEC_NONE;
+    $key = $sec;                                 // every habit is in a section now
     return !in_array($key, $mHidden, true);
 }));
 $habitTotal = count($monthItems);
@@ -464,7 +460,7 @@ $monthDone = [];   // 'YYYY-MM-DD' => total ticked
 $monthSec  = [];   // 'YYYY-MM-DD' => [sectionKey => ticked]
 foreach ($monthItems as $h) {
     $sec = (string) ($h['section'] ?? '');
-    $key = in_array($sec, $sectionIds, true) ? $sec : MSEC_NONE;
+    $key = $sec;                                 // every habit is in a section now
     foreach ((array) ($h['done'] ?? []) as $d => $on) {
         if ($on && strncmp((string) $d, $mym, 7) === 0) {
             $monthDone[(string) $d]      = ($monthDone[(string) $d] ?? 0) + 1;
@@ -472,10 +468,10 @@ foreach ($monthItems as $h) {
         }
     }
 }
-// Section key -> its colour, so a day's slices can be drawn in them. MSEC_NONE (ungrouped
-// habits) reuses the picker's violet default; the section index matches the picker's, so
-// a section shows the same colour in the pie, the menu and its own header.
-$secColors = [MSEC_NONE => '#8b7fd4'];
+// Section key -> its colour, so a day's slices can be drawn in them. The section index
+// matches the picker's, so a section shows the same colour in the pie, the menu and its
+// own header.
+$secColors = [];
 $sci = 0;
 foreach ($habits as $it) {
     if (is_section($it)) { $secColors[(string) $it['id']] = habit_section_color($it, $sci); $sci++; }
@@ -490,7 +486,7 @@ foreach ($habits as $it) {
  */
 function render_msec_pick(array $habits, array $hidden, string $csrf): void
 {
-    $opts = [[MSEC_NONE, 'Ungrouped', '#8b7fd4']];
+    $opts = [];
     $i = 0;
     foreach ($habits as $it) {
         if (!is_section($it)) { continue; }
@@ -634,11 +630,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
             </li>
           <?php endforeach; ?>
         </ul>
-        <?php if (!$sections): ?>
-          <p class="fhint">No sections yet — add one above. Ungrouped habits sit under the grid.</p>
-        <?php else: ?>
-          <p class="fhint">Drag a row to reorder. At least one section stays — the last can't be removed.</p>
-        <?php endif; ?>
+        <p class="fhint">Drag a row to reorder. At least one section stays — the last can't be removed.</p>
         <div class="frow"><button type="button" class="fdone" id="hsecDone">Done</button></div>
       </div>
     </div>
