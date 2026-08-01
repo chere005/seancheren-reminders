@@ -718,7 +718,11 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
        than one folder together — bigger and a shade darker than a section header. */
-    .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 1.75rem 0 0 0.25rem; }
+    /* A slightly thicker rule straight across the page above each folder, capping the run
+       before it. Full-width because the block is; the block's top margin+padding sit the
+       heading just under the divider, so the heading's own top margin comes off. */
+    .folder-block { border-top: 2px solid #363636; margin-top: 1.5rem; padding-top: 0.55rem; }
+    .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0 0.25rem; }
     /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
        of the folder's own colour — 8-digit hex, inline, from folder_tint(). That wash is
        what makes it read as the level above the gold section titles under it, and what

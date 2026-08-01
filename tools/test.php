@@ -1380,14 +1380,22 @@ t('wiring: an explicit ?day= still wins over the remembered one', function () {
        'the URL is consulted before the remembered day');
 });
 
-t('wiring: the tab bar + is centred by an equal margin top and bottom', function () {
+t('wiring: the tab bar clusters its tabs and centres the + inside the bar', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/reminders/', [], $jar)['body'];
-    ok(preg_match('/\.segmented a\.addtab \{[^}]*margin:\s*(-?\d+px)\s+[^;]*;/', $b, $m) === 1,
-       'the add tab sets a margin');
-    // Two-value shorthand (vertical horizontal) is symmetric; three values are not.
-    ok(preg_match('/\.segmented a\.addtab \{[^}]*margin:\s*-?\d+px\s+[\d.a-z]+\s*;/', $b) === 1,
-       'it must be the two-value shorthand, or the circle sits high again');
+    // The + is centred by the flex row, not raised out of it with a negative margin — the
+    // old trick left it reading as off-centre. So: the row centres its items, and the add
+    // tab carries no vertical raise (a two-value margin whose first value is 0).
+    ok(preg_match('/\.segmented \{[^}]*align-items:\s*center/', $b) === 1,
+       'the segmented centres its items vertically');
+    ok(preg_match('/\.segmented a\.addtab \{[^}]*margin:\s*0\s+[\d.a-z]+\s*;/', $b) === 1,
+       'the add tab has no vertical raise');
+    // Tabs are sized to content and clustered in the middle, not stretched flex:1 which
+    // flung Reminders and Habits out to the far corners.
+    ok(preg_match('/\.segmented \{[^}]*justify-content:\s*center/', $b) === 1,
+       'the tabs are centred as a cluster');
+    ok(preg_match('/\.segmented a \{[^}]*flex:\s*0 0 auto/', $b) === 1,
+       'and sized to content, not stretched edge to edge');
 });
 
 // ---------------------------------------------------------------- 15. security sweeps
