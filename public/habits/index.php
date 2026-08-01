@@ -797,13 +797,14 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
     </div>
     <?php
       // No Edit pencil: holding a habit's name or a section's gets you into edit mode,
-      // the same gesture as everywhere else in the suite. Habits was the last app still
-      // carrying the button, and two ways in is one too many.
+      // the same gesture as everywhere else in the suite.
       //
-      // The section filter used to ride in this top-bar slot (month only). It now sits by
-      // the Week/Month switch in the view bar below, in both views — so the top bar keeps
-      // just the settings menu and the username, like the other apps with no title control.
-      $titleControls = '';
+      // The section filter (which sections feed the Month pies) rides in the same top-bar
+      // slot every other app's picker does — the round button by the ⋮ — captured with
+      // ob_start() and handed to render_user_menu(), the way render_folder_pick() is.
+      ob_start();
+      render_msec_pick($habits, $mHidden, $csrf);
+      $titleControls = ob_get_clean();
     ?>
     <?= render_user_menu(false, '', '', false, $titleControls) ?>
   </header>
@@ -814,9 +815,6 @@ function render_msec_pick(array $habits, array $hidden, string $csrf): void
       <a href="?v=week"<?= $hView === 'week' ? ' class="on"' : '' ?>>Week</a>
       <a href="?v=month"<?= $hView === 'month' ? ' class="on"' : '' ?>>Month</a>
     </div>
-    <?php // The section filter sits right of the switch, in both views: it decides which
-          // sections feed the Month pies, and lives here so it can be set from either. ?>
-    <div class="msecpick"><?php render_msec_pick($habits, $mHidden, $csrf); ?></div>
     <div class="range">
       <?php if ($hView === 'week'): ?>
         <a href="?w=<?= $weekOff - 1 ?>" id="wPrev" aria-label="Previous week">&lsaquo;</a>
