@@ -170,3 +170,8 @@ carries the login. Set the same value here when you run the command by hand.
 
 If `data_key` is left empty a random one is generated into `data/.datakey` on
 first use. Keep that file — losing it means losing the data.
+
+## License
+
+BSD 3-Clause — see [LICENSE](LICENSE). Do what you like with the code; keep the
+copyright notice, and don't use the author's name to endorse your own version.
