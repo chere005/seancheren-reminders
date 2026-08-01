@@ -22,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,8 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.seancheren.suite.core.Event
 import com.seancheren.suite.core.GroupRef
 import com.seancheren.suite.core.ItemKind
+import com.seancheren.suite.core.Note
 import com.seancheren.suite.core.Reminder
 import com.seancheren.suite.core.parseWhen
 import com.seancheren.suite.core.timeLabel
@@ -53,7 +54,7 @@ fun CalendarScreen(vm: SuiteViewModel) {
     var selected by remember { mutableStateOf(today) }
     var adding by remember { mutableStateOf(false) }
     var addText by remember { mutableStateOf("") }
-    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    var dayAddType by remember { mutableStateOf(DayAddKind.Reminder) }
 
     // Read rev so the grid and panel refresh after any change.
     val revKey = vm.rev
@@ -146,15 +147,33 @@ fun CalendarScreen(vm: SuiteViewModel) {
             }
             if (adding) {
                 Spacer(Modifier.size(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (k in DayAddKind.values()) {
+                        val sel = dayAddType == k
+                        Text(
+                            k.name,
+                            color = if (sel) OnAccent else Muted,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .then(if (sel) Modifier.background(Accent) else Modifier.border(1.dp, Hairline, RoundedCornerShape(999.dp)))
+                                .clickable { dayAddType = k }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.size(6.dp))
                 AddField(addText, { addText = it }, {
                     val p = parseWhen(addText)
                     if (p.text.isNotBlank()) {
-                        store.add(
-                            Reminder(
-                                text = p.text, due = p.date ?: selected, minutes = p.minutes,
-                                folder = store.target(ItemKind.reminder, null), group = GroupRef.Inbox,
-                            )
-                        )
+                        when (dayAddType) {
+                            DayAddKind.Reminder -> store.add(Reminder(text = p.text, due = p.date ?: selected, minutes = p.minutes,
+                                folder = store.target(ItemKind.reminder, null), group = GroupRef.Inbox))
+                            DayAddKind.Event -> store.add(Event(text = p.text, date = p.date ?: selected, minutes = p.minutes,
+                                cal = store.data.defaultCal))
+                            DayAddKind.Note -> store.add(Note(title = addText.trim(), date = selected,
+                                folder = store.target(ItemKind.note, null)))
+                        }
                     }
                     addText = ""; adding = false
                 }, "Add to this day…")
@@ -165,10 +184,10 @@ fun CalendarScreen(vm: SuiteViewModel) {
                 Text("Nothing on.", color = Muted, fontSize = 14.sp)
             }
 
-            DayGroup("Events", events.size, collapsed["Events"] == true, { collapsed["Events"] = collapsed["Events"] != true }) {
+            DayGroup("Events", events.size, vm.flag("cal.grp.Events"), { vm.setFlag("cal.grp.Events", !vm.flag("cal.grp.Events")) }) {
                 for (e in events) PanelRow(dot = KEvent, text = e.text, meta = e.minutes?.let { timeLabel(it) })
             }
-            DayGroup("Reminders", reminders.size, collapsed["Reminders"] == true, { collapsed["Reminders"] = collapsed["Reminders"] != true }) {
+            DayGroup("Reminders", reminders.size, vm.flag("cal.grp.Reminders"), { vm.setFlag("cal.grp.Reminders", !vm.flag("cal.grp.Reminders")) }) {
                 for (r in reminders) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -181,7 +200,7 @@ fun CalendarScreen(vm: SuiteViewModel) {
                     }
                 }
             }
-            DayGroup("Notes", notes.size, collapsed["Notes"] == true, { collapsed["Notes"] = collapsed["Notes"] != true }) {
+            DayGroup("Notes", notes.size, vm.flag("cal.grp.Notes"), { vm.setFlag("cal.grp.Notes", !vm.flag("cal.grp.Notes")) }) {
                 for (n in notes) PanelRow(dot = KNote, text = n.title.ifBlank { "Untitled" }, meta = null)
             }
             Spacer(Modifier.size(24.dp))
@@ -275,3 +294,5 @@ private fun DayGroup(name: String, count: Int, collapsed: Boolean, onToggle: () 
     }
     if (!collapsed) content()
 }
+
+private enum class DayAddKind { Reminder, Event, Note }

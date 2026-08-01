@@ -3,16 +3,22 @@ package com.seancheren.suite.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -86,6 +92,30 @@ fun Swatch(color: Color, sizeDp: Int = 11) {
             .size(sizeDp.dp)
             .clip(CircleShape)
             .background(color),
+    )
+}
+
+/** Swipe a row left to delete it — the way to remove one item without an edit mode. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDelete(onDelete: () -> Unit, content: @Composable () -> Unit) {
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { v ->
+            if (v == SwipeToDismissBoxValue.EndToStart) { onDelete(); true } else false
+        },
+    )
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                Modifier.fillMaxSize().background(Color(0xFF4C1D1D)).padding(end = 22.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Text("Delete", color = Color(0xFFFCA5A5), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        content = { content() },
     )
 }
 

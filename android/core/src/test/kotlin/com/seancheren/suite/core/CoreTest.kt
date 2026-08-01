@@ -92,7 +92,9 @@ class CoreTest {
         store.toggle(plain)
         assertTrue(store.data.reminders.first { it.text == "plain" }.done)
 
-        val due = day(2020, 1, 1)   // safely past, so next() rolls forward from today
+        // Recently overdue, so next() (which, like the web's repeat_next, computes
+        // occurrences from the start with a 400-step cap) can reach forward past today.
+        val due = LocalDate.now().minusDays(2)
         store.add(Reminder(text = "rep", due = due, recurrence = Recurrence(1, RepeatUnit.day)))
         val rep = store.data.reminders.first { it.text == "rep" }
         store.toggle(rep)

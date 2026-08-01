@@ -1,8 +1,10 @@
 package com.seancheren.suite.app
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,7 +53,8 @@ fun RemindersScreen(vm: SuiteViewModel) {
     var folderMenu by remember { mutableStateOf(false) }
     var addingKey by remember { mutableStateOf<String?>(null) }
     var addingText by remember { mutableStateOf("") }
-    var armed by remember { mutableStateOf<UUID?>(null) }
+    var editingId by remember { mutableStateOf<UUID?>(null) }
+    var editText by remember { mutableStateOf("") }
     var addingSection by remember { mutableStateOf(false) }
     var sectionName by remember { mutableStateOf("") }
 
@@ -81,6 +84,19 @@ fun RemindersScreen(vm: SuiteViewModel) {
         }
         addingText = ""
         addingKey = null
+    }
+
+    fun commitEdit() {
+        val id = editingId ?: return
+        val row = store.data.reminders.firstOrNull { it.id == id }
+        if (row != null) {
+            val p = parseWhen(editText)
+            // Retyping re-parses date/time (like the web); a bare edit keeps the old ones.
+            if (p.text.isNotBlank()) {
+                store.update(row.copy(text = p.text, due = p.date ?: row.due, minutes = p.minutes ?: row.minutes))
+            }
+        }
+        editingId = null
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -127,10 +143,13 @@ fun RemindersScreen(vm: SuiteViewModel) {
                 for (row in sec.rows) {
                     ReminderRow(
                         row = row,
-                        armed = armed == row.id,
+                        editing = editingId == row.id,
+                        editText = editText,
                         onToggle = { store.toggle(row) },
-                        onArm = { armed = row.id },
-                        onDelete = { store.delete(row); armed = null },
+                        onLongPress = { editingId = row.id; editText = row.text },
+                        onEditChange = { editText = it },
+                        onCommit = { commitEdit() },
+                        onDelete = { store.delete(row) },
                     )
                 }
             }
@@ -164,60 +183,80 @@ private fun keyOf(ref: GroupRef): String = when (ref) {
     is GroupRef.Group -> ref.id.toString()
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ReminderRow(
     row: Reminder,
-    armed: Boolean,
+    editing: Boolean,
+    editText: String,
     onToggle: () -> Unit,
-    onArm: () -> Unit,
+    onLongPress: () -> Unit,
+    onEditChange: (String) -> Unit,
+    onCommit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val today = LocalDate.now()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = (16 + row.indent * 20).dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
+    // Swipe left to delete; long-press the text to edit it inline (Enter commits).
+    SwipeToDelete(onDelete = onDelete) {
+        Row(
             Modifier
-                .size(22.dp)
-                .clip(CircleShape)
-                .border(2.dp, if (row.done) Accent else Muted, CircleShape)
-                .background(if (row.done) Accent else Color.Transparent)
-                .clickable { onToggle() },
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .background(Bg)
+                .padding(start = (16 + row.indent * 20).dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (row.done) Text("✓", color = OnAccent, fontSize = 13.sp)
-        }
-        Spacer(Modifier.size(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                row.text.ifBlank { "—" },
-                color = if (row.done) Muted else TextColor,
-                fontSize = 16.sp,
-            )
-            val meta = ArrayList<String>()
-            row.due?.let { meta.add(dayLabel(it, today)) }
-            row.minutes?.let { meta.add(timeLabel(it)) }
-            row.recurrence?.let { meta.add(it.label) }
-            if (meta.isNotEmpty()) {
-                Text(
-                    meta.joinToString(" · "),
-                    color = if (row.overdue(today)) KOverdue else Muted,
-                    fontSize = 12.sp,
+            Box(
+                Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, if (row.done) Accent else Muted, CircleShape)
+                    .background(if (row.done) Accent else Color.Transparent)
+                    .clickable { onToggle() },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (row.done) Text("✓", color = OnAccent, fontSize = 13.sp)
+            }
+            Spacer(Modifier.size(10.dp))
+            if (editing) {
+                OutlinedTextField(
+                    value = editText,
+                    onValueChange = onEditChange,
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(color = TextColor, fontSize = 16.sp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Accent,
+                        unfocusedBorderColor = Hairline,
+                        cursorColor = Accent,
+                    ),
+                    modifier = Modifier.weight(1f),
                 )
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                ) {
+                    Text(
+                        row.text.ifBlank { "—" },
+                        color = if (row.done) Muted else TextColor,
+                        fontSize = 16.sp,
+                    )
+                    val meta = ArrayList<String>()
+                    row.due?.let { meta.add(dayLabel(it, today)) }
+                    row.minutes?.let { meta.add(timeLabel(it)) }
+                    row.recurrence?.let { meta.add(it.label) }
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            meta.joinToString(" · "),
+                            color = if (row.overdue(today)) KOverdue else Muted,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
             }
         }
-        Text(
-            "✕",
-            color = if (armed) Color(0xFFF87171) else Muted,
-            fontSize = 16.sp,
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable { if (armed) onDelete() else onArm() }
-                .padding(8.dp),
-        )
     }
 }
 

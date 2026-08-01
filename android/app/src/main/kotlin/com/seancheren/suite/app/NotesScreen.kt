@@ -42,7 +42,6 @@ fun NotesScreen(vm: SuiteViewModel) {
     var folderSel by remember { mutableStateOf(store.data.lastFolder[ItemKind.note.name]) }
     var folderMenu by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<UUID?>(null) }
-    var armed by remember { mutableStateOf<UUID?>(null) }
 
     val editingNote = store.data.notes.firstOrNull { it.id == editing }
     if (editing != null && editingNote != null) {
@@ -86,29 +85,23 @@ fun NotesScreen(vm: SuiteViewModel) {
                 Text("No notes yet.", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
             }
             for (n in notes) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { editing = n.id }
-                        .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(n.title.ifBlank { "Untitled" }, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        val snippet = n.body.replace("\n", " ").trim()
-                        if (snippet.isNotEmpty()) {
-                            Text(snippet.take(80), color = Muted, fontSize = 13.sp, maxLines = 1)
+                SwipeToDelete(onDelete = { store.delete(n) }) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Bg)
+                            .clickable { editing = n.id }
+                            .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(n.title.ifBlank { "Untitled" }, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            val snippet = n.body.replace("\n", " ").trim()
+                            if (snippet.isNotEmpty()) {
+                                Text(snippet.take(80), color = Muted, fontSize = 13.sp, maxLines = 1)
+                            }
                         }
                     }
-                    Text(
-                        "✕",
-                        color = if (armed == n.id) Color(0xFFF87171) else Muted,
-                        fontSize = 16.sp,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .clickable { if (armed == n.id) { store.delete(n); armed = null } else armed = n.id }
-                            .padding(8.dp),
-                    )
                 }
                 HorizontalDivider(color = Hairline)
             }

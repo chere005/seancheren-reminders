@@ -1,7 +1,9 @@
 package com.seancheren.suite.app
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -30,6 +32,13 @@ class SuiteViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var saveJob: Job? = null
+
+    // UI-local flags (collapse states, view choices) persisted like the web's localStorage,
+    // kept observable so a toggle recomposes.
+    private val ui = app.getSharedPreferences("ui_prefs", Context.MODE_PRIVATE)
+    private val flags = mutableStateMapOf<String, Boolean>()
+    fun flag(key: String): Boolean = flags[key] ?: ui.getBoolean(key, false)
+    fun setFlag(key: String, value: Boolean) { flags[key] = value; ui.edit().putBoolean(key, value).apply() }
 
     init {
         val file = File(app.filesDir, "suite.json")
