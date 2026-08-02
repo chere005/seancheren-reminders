@@ -2305,6 +2305,10 @@ t('dragging a reminder section in the All view persists its order', function () 
     req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$b, $a, $g])])], $jar, true);
     eq(['Beta', 'Alpha'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'and dragging the other way flips it');
+    // A reload re-reads, re-normalises and may write the file back — none of which may
+    // shuffle what the drag just set. This is the half users actually see.
+    req('GET', '/reminders/?folder=All', [], $jar);
+    eq(['Beta', 'Alpha'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'the order survives a refresh');
 });
 
 t('dragging a reminder section inside a single-folder view persists too', function () {
@@ -2419,6 +2423,44 @@ t('dragging a note section in the All view (multi-folder map) persists across fo
     // And on the next full read (what a reload does) nothing snaps back.
     req('GET', '/notes/?folder=All', [], $jar);
     eq('NDragB', $find($one)['folder'] ?? null, 'the move survives a reload');
+});
+
+t('row order inside a section sticks, and a refresh does not shuffle it', function () {
+    // Undated rows show in stored order (dates only break in above it), so a drag's row
+    // order is exactly what the file holds — and what every later read must keep holding.
+    $jar = login('example', 'examplepassword');
+    foreach (['first', 'second', 'third'] as $txt) {
+        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'DragRem',
+            'text' => 'roworder ' . $txt, 'folder' => 'DragRem', 'section' => 'Alpha'], $jar);
+    }
+    req('GET', '/reminders/?folder=All', [], $jar);   // normalise + write back
+    $mine = fn() => array_values(array_filter(stored('reminders', 'example'),
+        fn($x) => ($x['type'] ?? '') !== 'section' && strncmp($x['text'] ?? '', 'roworder ', 9) === 0));
+    $ids = array_column($mine(), 'id');
+    eq(3, count($ids), 'three rows to drag');
+    $want = [$ids[2], $ids[0], $ids[1]];
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode(array_map(fn($id) => ['id' => $id, 'section' => 'Alpha', 'folder' => 'DragRem'], $want)),
+        'sections' => '{}'], $jar, true);
+    eq($want, array_column($mine(), 'id'), 'the drag order is stored');
+    req('GET', '/reminders/?folder=All', [], $jar);
+    req('GET', '/reminders/?folder=DragRem', [], $jar);
+    eq($want, array_column($mine(), 'id'), 'and two refreshes later it still holds');
+});
+
+t('dragging folders in the manager sticks after a refresh (reminders and notes)', function () {
+    // The Manage-folders window's drag posts reorder_folders with an \x1F-joined key list.
+    $jar = login('example', 'examplepassword');
+    foreach ([['reminders', '/reminders/'], ['notes', '/notes/']] as [$type, $path]) {
+        $own = folders_load(datadir(), 'example')[$type];
+        ok(count($own) > 2, "$type has folders to reorder");
+        $flipped = array_reverse($own);
+        req('POST', $path, ['csrf' => csrf($jar, $path), 'action' => 'reorder_folders',
+            'order' => implode("\x1F", $flipped)], $jar, true);
+        eq($flipped, folders_load(datadir(), 'example')[$type], "$type folder order took");
+        req('GET', $path . '?folder=All', [], $jar);
+        eq($flipped, folders_load(datadir(), 'example')[$type], "$type folder order survives a refresh");
+    }
 });
 
 t('emptying a reminder folder by drag, then the chained delete, removes it cleanly', function () {
