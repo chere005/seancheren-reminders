@@ -79,7 +79,14 @@ function kind_color_css(): string
 function cal_color_fix(?string $color): string
 {
     $color = (string) $color;
-    return strcasecmp($color, '#38bdf8') === 0 ? KIND_BLUE : $color;
+    if (strcasecmp($color, '#38bdf8') === 0) { return KIND_BLUE; }
+    // A colour stored under an earlier palette generation bumps to today's same slot;
+    // guarded because a few thin pages include util.php without the palette.
+    if (function_exists('palette_recolor')) {
+        $bumped = palette_recolor('calendar', strtolower($color));
+        if ($bumped !== null) { return $bumped; }
+    }
+    return $color;
 }
 
 /** Pull a time like "2pm" / "2:30 pm" out of text; returns [cleanedText, "HH:MM"|null]. */

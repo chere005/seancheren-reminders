@@ -181,7 +181,10 @@ the day (Jan 31 → Feb 28, Feb 29 → Feb 28) instead of sliding. `repeat_next(
 text plus. Every palette has six colours and validates its own; each app's shade of a
 hue is measurably distinct from every other app's, every own colour clears 3:1 on the
 dark themes' card, and each shared set is a clearly lighter same-hue version of its
-own. The palettes viewer (`/userpalettes/`) renders and grades every swatch's hex label
+own. A colour stored under any earlier palette generation bumps to the same slot in
+today's (`palette_recolor`) — folders, calendars, habit sections and shared overrides
+alike — while a stranger still falls back positionally.
+The palettes viewer (`/userpalettes/`) renders and grades every swatch's hex label
 by its contrast on each theme board, and groups its boards into drafts, newest first —
 Draft 3 the live leaned palette (all-clear on Midnight), Draft 2 the II retunes (each
 must report all-clear), Draft 1 the frozen earlier tiers.
