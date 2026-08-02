@@ -3104,11 +3104,23 @@ t('the palette workbench is behind the login and opens with the eight starters',
     // The name is a field but read-only until the pencil is on, and delete is hidden
     // outside edit mode — arriving here must never be one tap from destroying a palette.
     has('class="palname"', $r['body'], 'the name is an editable field');
-    has('readonly', $r['body'], 'but read-only until editing is on');
-    has('id="editBtn"', $r['body'], 'there is an Edit button');
-    has('backbtn goback', $r['body'], 'and a back button');
-    has('backbtn exitedit', $r['body'], 'which becomes the leave-edit-mode x');
-    has('paldel', $r['body'], 'delete is marked so it can hide outside edit mode');
+    has('readonly', $r['body'], "but read-only until that palette's pencil is on");
+    // Edit belongs to the palette, not the page, and sits left of duplicate. Delete is
+    // always shown — the two-press confirm is the guard, not hiding the control.
+    hasnt('id="editBtn"', $r['body'], 'there is no page-wide Edit button');
+    eq(8, substr_count($r['body'], 'palact paledit'), 'every palette has its own pencil');
+    // First occurrence of each in the document is the first palette's row, so their
+    // order in the source is the order they render in.
+    $pen = strpos($r['body'], 'palact paledit');
+    $dup = strpos($r['body'], 'aria-label="Duplicate"');
+    $del = strpos($r['body'], 'paldel needs-confirm');
+    eq(true, $pen !== false && $dup !== false && $del !== false, 'all three controls are there');
+    eq(true, $pen < $dup, 'the pencil comes before the duplicate button');
+    eq(true, $dup < $del, 'and duplicate before delete');
+    has('paldel needs-confirm', $r['body'], 'delete takes two presses');
+    hasnt('.paldel { visibility: hidden', $r['body'], 'and is never hidden');
+    has('backbtn goback', $r['body'], 'there is a back button');
+    has('backbtn exitedit', $r['body'], 'which becomes the x that closes an open editor');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
     // Both of these return bare CSS and must sit INSIDE the style block; emitted after
     // </style> they render as text down the top of the page, which is how this was found.
