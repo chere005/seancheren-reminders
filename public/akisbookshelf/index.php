@@ -450,7 +450,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $map[$bookId] = $notes;
             bnotes_save($notesFile, $map);
         }
-        header('Location: ' . $bookUrl . '&edit=1');
+        // Adding a section is reachable from *outside* edit mode, so it must not switch
+        // edit mode on — it only stays on if you were already in it, which keep_edit_script()
+        // says by posting an `edit` flag. (The destructive actions above and below can only
+        // be reached while editing, so they carry edit=1 back unconditionally.)
+        header('Location: ' . $bookUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
     if ($action === 'delete_bsection') {
@@ -1601,6 +1605,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
     root.addEventListener('click', (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
   })();
 </script>
+<?= keep_edit_script() ?>
 <?= settings_modal_script() ?>
 <script>
   // The bookshelf theme picker, in the settings window's $extra slot. A theme is only
