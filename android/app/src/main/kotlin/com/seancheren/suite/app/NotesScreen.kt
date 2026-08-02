@@ -68,7 +68,7 @@ fun NotesScreen(vm: SuiteViewModel) {
                     for (f in store.data.folderList(ItemKind.note)) {
                         DropdownMenuItem(
                             text = { Text(f.name) },
-                            leadingIcon = { Swatch(paletteColor(f.color)) },
+                            leadingIcon = { Swatch(paletteColor(f.color, Tier.Note)) },
                             onClick = { folderSel = f.id; folderMenu = false },
                         )
                     }

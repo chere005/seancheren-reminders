@@ -28,7 +28,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import java.util.UUID
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -100,13 +107,22 @@ fun CalendarScreen(vm: SuiteViewModel) {
             for (week in cells.chunked(7)) {
                 Row(Modifier.fillMaxWidth()) {
                     for (day in week) {
+                        // The legend's kind icons, at most one of each — the icon says which
+                        // kinds the day holds, its colour whose calendar or folder; the panel
+                        // has the detail. The reminder icon takes the worst reminder's folder
+                        // colour (overdue beats open), the same pick the web makes.
                         DayCell(
                             day = day,
                             isToday = day == today,
                             isSelected = day == selected,
-                            hasEvent = day != null && store.events(day).isNotEmpty(),
-                            reminderState = day?.let { reminderStateOn(store, it, today) } ?: ReminderState.None,
-                            hasNote = day != null && store.notes(day).isNotEmpty(),
+                            eventColor = day?.let { d -> store.events(d).firstOrNull()?.let { e ->
+                                paletteColor(store.data.cal(e.cal)?.color ?: 0, Tier.Calendar) } },
+                            reminderColor = day?.let { d ->
+                                val rows = store.reminders(d, today)
+                                val worst = rows.firstOrNull { it.overdue(today) } ?: rows.firstOrNull()
+                                worst?.let { paletteColor(folderColorIndex(store, it.folder), Tier.Reminder) } },
+                            noteColor = day?.let { d -> store.notes(d).firstOrNull()?.let { n ->
+                                paletteColor(folderColorIndex(store, n.folder), Tier.Note) } },
                             modifier = Modifier.weight(1f),
                             onClick = { if (day != null) selected = day },
                         )
@@ -208,22 +224,18 @@ fun CalendarScreen(vm: SuiteViewModel) {
     }
 }
 
-private enum class ReminderState { None, Open, Overdue }
-
-private fun reminderStateOn(store: com.seancheren.suite.core.Store, day: LocalDate, today: LocalDate): ReminderState {
-    val rows = store.reminders(day, today)
-    if (rows.isEmpty()) return ReminderState.None
-    return if (rows.any { it.overdue(today) }) ReminderState.Overdue else ReminderState.Open
-}
+/** A folder's palette index by id — the first tier colour when the item has none. */
+private fun folderColorIndex(store: com.seancheren.suite.core.Store, id: UUID?): Int =
+    id?.let { fid -> store.data.folders.firstOrNull { it.id == fid }?.color } ?: 0
 
 @Composable
 private fun DayCell(
     day: LocalDate?,
     isToday: Boolean,
     isSelected: Boolean,
-    hasEvent: Boolean,
-    reminderState: ReminderState,
-    hasNote: Boolean,
+    eventColor: Color?,
+    reminderColor: Color?,
+    noteColor: Color?,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -246,20 +258,51 @@ private fun DayCell(
                     Text("${day.dayOfMonth}", color = TextColor, fontSize = 13.sp)
                 }
                 Spacer(Modifier.size(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (hasEvent) Dot(KEvent)
-                    when (reminderState) {
-                        ReminderState.Overdue -> Dot(KOverdue)
-                        ReminderState.Open -> Dot(KReminder)
-                        ReminderState.None -> {}
-                    }
-                    if (hasNote) Dot(KNote)
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    if (eventColor != null) KindIcon(CellKind.Event, eventColor)
+                    if (reminderColor != null) KindIcon(CellKind.Reminder, reminderColor)
+                    if (noteColor != null) KindIcon(CellKind.Note, noteColor)
                 }
             }
         }
     }
 }
 
+private enum class CellKind { Event, Reminder, Note }
+
+/** The legend's kind glyphs at cell size — a calendar, a tick box, a page — stroke-drawn
+ *  like the web's SVGs so no icon pack is pulled in for three shapes. */
+@Composable
+private fun KindIcon(kind: CellKind, color: Color) {
+    Canvas(Modifier.size(9.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(width = w * 0.12f)
+        when (kind) {
+            CellKind.Event -> {          // a calendar: the frame, its top bar
+                drawRoundRect(color, topLeft = Offset(0f, h * 0.1f), size = Size(w, h * 0.9f),
+                              cornerRadius = CornerRadius(w * 0.15f), style = stroke)
+                drawLine(color, Offset(0f, h * 0.38f), Offset(w, h * 0.38f), strokeWidth = stroke.width)
+            }
+            CellKind.Reminder -> {       // a tick box
+                drawRoundRect(color, size = Size(w, h),
+                              cornerRadius = CornerRadius(w * 0.22f), style = stroke)
+                val tick = Path().apply {
+                    moveTo(w * 0.28f, h * 0.52f); lineTo(w * 0.45f, h * 0.7f); lineTo(w * 0.75f, h * 0.32f)
+                }
+                drawPath(tick, color, style = stroke)
+            }
+            CellKind.Note -> {           // a page with two ruled lines
+                drawRoundRect(color, topLeft = Offset(w * 0.08f, 0f), size = Size(w * 0.84f, h),
+                              cornerRadius = CornerRadius(w * 0.12f), style = stroke)
+                drawLine(color, Offset(w * 0.3f, h * 0.42f), Offset(w * 0.7f, h * 0.42f), strokeWidth = stroke.width)
+                drawLine(color, Offset(w * 0.3f, h * 0.65f), Offset(w * 0.7f, h * 0.65f), strokeWidth = stroke.width)
+            }
+        }
+    }
+}
+
+/** A row's colour dot in the day panel — the panel keeps dots; only the cells wear icons. */
 @Composable
 private fun Dot(color: Color) {
     Spacer(Modifier.size(5.dp).clip(CircleShape).background(color))

@@ -253,7 +253,7 @@ private data class HabitSection(val groupId: UUID?, val name: String, val color:
 private fun habitSections(store: com.seancheren.suite.core.Store): List<HabitSection> {
     val out = ArrayList<HabitSection>()
     for (g: ListGroup in store.data.groupList(ItemKind.habit)) {
-        out.add(HabitSection(g.id, g.name, paletteColor(g.color), store.habits(g.id)))
+        out.add(HabitSection(g.id, g.name, paletteColor(g.color, Tier.Habit), store.habits(g.id)))
     }
     val loose = store.habits(null)
     if (loose.isNotEmpty()) out.add(HabitSection(null, "Habits", Muted, loose))

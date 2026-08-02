@@ -70,7 +70,7 @@ fun RemindersScreen(vm: SuiteViewModel) {
         list.add(ReminderSection(GroupRef.Calendar, "Calendar", KEvent, store.reminders(folderSel, GroupRef.Calendar)))
         list.add(ReminderSection(GroupRef.Inbox, "Reminders", Accent, store.reminders(folderSel, GroupRef.Inbox)))
         for (g in store.data.groupList(ItemKind.reminder)) {
-            list.add(ReminderSection(GroupRef.Group(g.id), g.name, paletteColor(g.color), store.reminders(folderSel, GroupRef.Group(g.id))))
+            list.add(ReminderSection(GroupRef.Group(g.id), g.name, paletteColor(g.color, Tier.Reminder), store.reminders(folderSel, GroupRef.Group(g.id))))
         }
         list
     }
@@ -127,7 +127,7 @@ fun RemindersScreen(vm: SuiteViewModel) {
                     for (f in store.data.folderList(ItemKind.reminder)) {
                         DropdownMenuItem(
                             text = { Text(f.name) },
-                            leadingIcon = { Swatch(paletteColor(f.color)) },
+                            leadingIcon = { Swatch(paletteColor(f.color, Tier.Reminder)) },
                             onClick = { chooseFolder(f.id); folderMenu = false },
                         )
                     }

@@ -1,17 +1,40 @@
 import SwiftUI
 
-/// The suite's colours. Folders and calendars store an index into `palette` rather
-/// than a hex string, so re-theming later is one edit here.
+/// The suite's item palettes — the web's leaned tiers, one per kind: the same six hues
+/// (blue, red, green, orange, purple, grey), each kind wearing them at its own
+/// unmistakable shade. The values are `app_palette()`'s live output (lib/palette.php),
+/// frozen here; folders, calendars and sections store an index into their kind's tier,
+/// so re-theming stays one edit and an old index just re-hues.
 enum Theme {
-    static let palette: [Color] = [
-        Color(hex: 0x60a5fa), Color(hex: 0x34d399), Color(hex: 0xf472b6),
-        Color(hex: 0xc084fc), Color(hex: 0xfb923c), Color(hex: 0xfacc15),
-        Color(hex: 0xfb7185), Color(hex: 0x22d3ee), Color(hex: 0xa3e635),
-        Color(hex: 0x94a3b8),
-    ]
+    enum Tier { case reminder, calendar, note, habit }
 
-    static func color(_ index: Int) -> Color {
-        palette[((index % palette.count) + palette.count) % palette.count]
+    static let reminderPalette = [0x4c8bf0, 0xea5853, 0x66d695, 0xf39849, 0x9e5ce0, 0x929aaa].map { Color(hex: UInt32($0)) }   // the vivid anchor
+    static let calendarPalette = [0x0379f6, 0xed0d10, 0x2ad05f, 0xfa6800, 0x803be7, 0x677289].map { Color(hex: UInt32($0)) }   // electric deep
+    static let notePalette     = [0x7dc2ed, 0xe9818a, 0x8fdb9d, 0xefa37b, 0xa088e2, 0xadb2bd].map { Color(hex: UInt32($0)) }   // sky, leaned back
+    static let habitPalette    = [0x4357ef, 0xe44525, 0x3ecb9f, 0xf09a19, 0xb131d8, 0x7d8699].map { Color(hex: UInt32($0)) }   // full-strength jewel
+
+    static func palette(_ tier: Tier) -> [Color] {
+        switch tier {
+        case .reminder: return reminderPalette
+        case .calendar: return calendarPalette
+        case .note:     return notePalette
+        case .habit:    return habitPalette
+        }
+    }
+
+    /// The tier a stored kind's colours come from (calendars aren't an ItemKind; they
+    /// ask for `.calendar` directly).
+    static func tier(_ kind: ItemKind) -> Tier {
+        switch kind {
+        case .reminder: return .reminder
+        case .note:     return .note
+        case .habit:    return .habit
+        }
+    }
+
+    static func color(_ index: Int, _ tier: Tier) -> Color {
+        let p = palette(tier)
+        return p[((index % p.count) + p.count) % p.count]
     }
 
     /// One colour per kind, the same everywhere — a dot, a chip and a tag all read
@@ -42,7 +65,8 @@ struct PickerDot: View {
             .fill(color ?? .clear)
             .overlay {
                 if color == nil {
-                    Circle().fill(AngularGradient(colors: Theme.palette, center: .center))
+                    // The "everything" dot: the vivid anchor tier as a colour wheel.
+                    Circle().fill(AngularGradient(colors: Theme.reminderPalette, center: .center))
                 }
             }
             .frame(width: 16, height: 16)

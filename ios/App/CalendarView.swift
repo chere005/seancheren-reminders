@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// A month at a time, with a panel underneath for the selected day. Each cell shows a
-/// dot per event in its calendar's colour, then at most one reminder dot (the worst
-/// state of the day) and one note dot — enough to read "how much is on" without a long
-/// list crowding the events out.
+/// A month at a time, with a panel underneath for the selected day. Each cell shows the
+/// legend's kind icons — at most one of each (event, reminder, note), coloured by its
+/// item — so a day reads as *which kinds* it holds; the panel carries the detail.
 struct CalendarView: View {
     @EnvironmentObject private var store: Store
 
@@ -104,7 +103,7 @@ struct CalendarView: View {
             Button("Calendars…", systemImage: "calendar") { managing = true }
         } label: {
             // One calendar on show wears its colour; several (or none) show the all-colours dot.
-            PickerDot(color: shownCals.count == 1 ? Theme.color(shownCals[0].color) : nil)
+            PickerDot(color: shownCals.count == 1 ? Theme.color(shownCals[0].color, .calendar) : nil)
         }
     }
 
@@ -155,7 +154,7 @@ struct CalendarView: View {
                 .font(.callout)
                 .foregroundStyle(inMonth ? (isToday ? Theme.event : .primary) : .secondary)
                 .fontWeight(isToday ? .bold : .regular)
-            dots(day).frame(height: 5)
+            dots(day).frame(height: 11)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
@@ -167,23 +166,38 @@ struct CalendarView: View {
         }
     }
 
+    /// The legend's kind icons, at most one of each — the web's month cell: the icon says
+    /// which kinds the day holds, its colour whose calendar or folder; the day panel has
+    /// the per-item detail. The reminder icon takes the worst reminder's folder colour
+    /// (overdue beats open), the same pick the web makes.
     private func dots(_ day: Date) -> some View {
         let events = store.events(on: day, scope: scope)
         let reminders = store.reminders(on: day, today: today)
-        let hasNotes = !store.notes(on: day).isEmpty
-        return HStack(spacing: 2) {
-            ForEach(events.prefix(3)) { e in
-                Circle().fill(store.data.cal(e.cal).map { Theme.color($0.color) } ?? Theme.event)
-                    .frame(width: 5, height: 5)
+        let notes = store.notes(on: day)
+        return HStack(spacing: 3) {
+            if let e = events.first {
+                Image(systemName: "calendar")
+                    .foregroundStyle(store.data.cal(e.cal).map { Theme.color($0.color, .calendar) } ?? Theme.event)
             }
-            if !reminders.isEmpty {
-                Circle().fill(reminders.contains { $0.overdue(today: today) } ? Theme.overdue : Theme.reminder)
-                    .frame(width: 5, height: 5)
+            if let worst = reminders.first(where: { $0.overdue(today: today) }) ?? reminders.first {
+                Image(systemName: "checkmark.square")
+                    .foregroundStyle(folderColor(worst.folder, kind: .reminder))
             }
-            if hasNotes {
-                Circle().fill(Theme.note).frame(width: 5, height: 5)
+            if let n = notes.first {
+                Image(systemName: "doc.text")
+                    .foregroundStyle(folderColor(n.folder, kind: .note))
             }
         }
+        .font(.system(size: 9, weight: .medium))
+    }
+
+    /// A folder's tier colour by id, the first tier colour when the item has no folder.
+    private func folderColor(_ id: UUID?, kind: ItemKind) -> Color {
+        let tier = Theme.tier(kind)
+        guard let id, let f = store.data.folderList(kind).first(where: { $0.id == id }) else {
+            return Theme.color(0, tier)
+        }
+        return Theme.color(f.color, tier)
     }
 
     // MARK: - Day panel
@@ -268,7 +282,7 @@ struct CalendarView: View {
 
     private func eventRow(_ e: Event) -> some View {
         HStack(spacing: 8) {
-            Circle().fill(store.data.cal(e.cal).map { Theme.color($0.color) } ?? Theme.event)
+            Circle().fill(store.data.cal(e.cal).map { Theme.color($0.color, .calendar) } ?? Theme.event)
                 .frame(width: 8, height: 8)
             Text(e.text)
             Spacer()
@@ -494,7 +508,7 @@ struct CalendarManager: View {
                 Section {
                     ForEach(store.calendarsOnly) { c in
                         HStack {
-                            ColorDot(selected: c.color, size: 18) { recolour(c, to: $0) }
+                            ColorDot(selected: c.color, tier: .calendar, size: 18) { recolour(c, to: $0) }
                             Text(c.name)
                             Spacer()
                             if store.data.defaultCal == c.id {
@@ -524,7 +538,7 @@ struct CalendarManager: View {
                 Section("Sets") {
                     ForEach(store.calSets) { s in
                         HStack {
-                            Circle().fill(Theme.color(s.color)).frame(width: 18, height: 18)
+                            Circle().fill(Theme.color(s.color, .calendar)).frame(width: 18, height: 18)
                             Text(s.name)
                             Spacer()
                             Text("\(s.members?.count ?? 0)").font(.caption2).foregroundStyle(.secondary)
@@ -580,7 +594,7 @@ struct SetEditor: View {
                         if members.contains(c.id) { members.remove(c.id) } else { members.insert(c.id) }
                     } label: {
                         HStack {
-                            Circle().fill(Theme.color(c.color)).frame(width: 16, height: 16)
+                            Circle().fill(Theme.color(c.color, .calendar)).frame(width: 16, height: 16)
                             Text(c.name).foregroundStyle(.primary)
                             Spacer()
                             if members.contains(c.id) {
