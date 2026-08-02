@@ -3121,6 +3121,11 @@ t('the palette workbench is behind the login and opens with the eight starters',
     hasnt('.paldel { visibility: hidden', $r['body'], 'and is never hidden');
     has('backbtn goback', $r['body'], 'there is a back button');
     has('backbtn exitedit', $r['body'], 'which becomes the x that closes an open editor');
+    // Colours are only changeable on the palette that is open, so a stray tap on a
+    // swatch can't repaint a palette you were only looking at. The rule has to be in
+    // the stylesheet — the JS half (tabindex, readonly) can't be seen from here.
+    has('.pal:not(.editing) .role input { pointer-events: none; }', $r['body'],
+        'swatches are inert outside their palette\'s edit mode');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
     // Both of these return bare CSS and must sit INSIDE the style block; emitted after
     // </style> they render as text down the top of the page, which is how this was found.

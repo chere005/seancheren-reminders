@@ -288,8 +288,12 @@ starters, twelve editable roles each. A colour is stored only when it is a real 
 a real role — a `javascript:` value and an unknown role are both refused, and the refusal is
 reported rather than being reported as success. Add works, delete takes two presses. The one
 that matters most: **editing a palette here leaves Aki's Bookshelf untouched**, which is the
-entire reason the app is separate. **Not covered:** the live preview card, the contrast chips
-and the colour picker are all JS, so how any of it looks or feels is by eye.
+entire reason the app is separate. **Not covered by the harness, checked in a browser instead:** editing is per palette and
+only one opens at a time (opening another closes the first and makes it inert again);
+a swatch is only changeable on the open palette; clicking away closes the editor and
+drops focus, which is what dismisses the native colour picker; the first press of a
+delete arms it red (#b3261e) and writes nothing, the second injects `confirm=1`. The
+live preview card and the contrast chips are JS too, so how they *look* is still by eye.
 
 ### `bookshelf`
 Behind the shared login. A signed-in stranger gets the refusal page and none of the app's
