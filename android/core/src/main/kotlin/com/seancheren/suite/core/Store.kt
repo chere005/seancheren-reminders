@@ -98,6 +98,70 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     fun target(kind: ItemKind, viewing: UUID?): UUID? =
         viewing ?: data.defaultFolder[kind.name] ?: data.folderList(kind).firstOrNull()?.id
 
+    /**
+     * Persist a drag-reorder of a kind's folders (which order by array position, not an
+     * `order` field), splicing the new order back without disturbing the other kind's
+     * rows — the web's `folders_reorder`, which keeps every folder.
+     */
+    fun moveFolders(kind: ItemKind, from: Set<Int>, to: Int) {
+        val list = data.folderList(kind).toMutableList()
+        list.reorder(from, to)
+        val next = list.iterator()
+        data.folders = data.folders.map { if (it.kind == kind) next.next() else it }.toMutableList()
+        touch()
+    }
+
+    // MARK: - Folder visibility (the three-gesture picker)
+    //
+    // Stored as what's hidden, per kind: the box toggles one, a row shows only one, "All"
+    // is the master — the web's folder_vis / folder_vis_only / folder_vis_all.
+
+    /** Whether a folder is currently shown. */
+    fun folderShown(id: UUID, kind: ItemKind): Boolean =
+        !(data.hiddenFolders[kind.name] ?: emptyList()).contains(id)
+
+    /** The box: toggle just this folder. */
+    fun toggleFolder(id: UUID, kind: ItemKind) {
+        val hidden = (data.hiddenFolders[kind.name] ?: emptyList()).toMutableList()
+        if (!hidden.remove(id)) hidden.add(id)
+        data.hiddenFolders[kind.name] = hidden
+        touch()
+    }
+
+    /** The row: show only this folder, hide the rest. */
+    fun showOnlyFolder(id: UUID, kind: ItemKind) {
+        data.hiddenFolders[kind.name] =
+            data.folderList(kind).map { it.id }.filter { it != id }.toMutableList()
+        touch()
+    }
+
+    /** The "All" master: on only when no folder of this kind is hidden. */
+    fun foldersAllShown(kind: ItemKind): Boolean {
+        val hidden = (data.hiddenFolders[kind.name] ?: emptyList()).toSet()
+        return data.folderList(kind).none { hidden.contains(it.id) }
+    }
+
+    fun setFoldersAll(show: Boolean, kind: ItemKind) {
+        data.hiddenFolders[kind.name] =
+            if (show) mutableListOf() else data.folderList(kind).map { it.id }.toMutableList()
+        touch()
+    }
+
+    /** The folders on show, in list order — used to filter the list and to decide where a
+     *  new item lands when exactly one is showing. */
+    fun shownFolders(kind: ItemKind): List<Folder> {
+        val hidden = (data.hiddenFolders[kind.name] ?: emptyList()).toSet()
+        return data.folderList(kind).filter { !hidden.contains(it.id) }
+    }
+
+    /** Where a new item lands from the list: the one folder on show, else the default —
+     *  the web files it in the folder you're focused on, or the default when several show. */
+    fun addTarget(kind: ItemKind): UUID? {
+        val shown = shownFolders(kind)
+        if (shown.size == 1) return shown[0].id
+        return data.defaultFolder[kind.name] ?: data.folderList(kind).firstOrNull()?.id
+    }
+
     // MARK: - Groups
 
     fun addGroup(name: String, kind: ItemKind) {
@@ -122,6 +186,26 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         val g = data.groups.firstOrNull { it.id == id } ?: return
         if (data.groupList(g.kind).any { it.id != id && it.name.equals(clean, ignoreCase = true) }) return
         g.name = clean
+        touch()
+    }
+
+    /** Recolour the ungrouped "Habits" bucket, which has no section row of its own. */
+    fun setUngroupedHabitColor(index: Int) {
+        data.habitUngroupedColor = index
+        touch()
+    }
+
+    /**
+     * Persist a drag-reorder of a kind's sections — the web reorders sections in its
+     * manager; here the same result renumbers each section's `order`, moving no habits
+     * or rows with them.
+     */
+    fun moveGroups(kind: ItemKind, from: Set<Int>, to: Int) {
+        val list = data.groupList(kind).toMutableList()
+        list.reorder(from, to)
+        list.forEachIndexed { i, g ->
+            data.groups.firstOrNull { it.id == g.id }?.order = i
+        }
         touch()
     }
 
@@ -168,6 +252,25 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     }
 
     fun delete(reminder: Reminder) { data.reminders.removeAll { it.id == reminder.id }; touch() }
+
+    /**
+     * Remove the ticked reminders — the web's "clear completed". Scoped to the folder in
+     * view, or every folder on "All". Open rows are untouched.
+     */
+    fun clearDone(folder: UUID?) {
+        data.reminders.removeAll { it.done && (folder == null || it.folder == folder) }
+        touch()
+    }
+
+    /**
+     * Take a reminder off the calendar without deleting it — the web's "delete from the
+     * calendar" for a dated reminder: the date comes off, the row stays in its own list.
+     */
+    fun unschedule(reminder: Reminder) {
+        val r = data.reminders.firstOrNull { it.id == reminder.id } ?: return
+        r.due = null
+        touch()
+    }
 
     /**
      * Display order inside a group: undated first, then by date, stored order breaking
@@ -230,6 +333,20 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     }
 
     /**
+     * The reminders the list shows in a group: one focused folder, or — when `folder` is
+     * null (the "All" view) — every folder that isn't hidden. The list, Markdown and the
+     * watch all read this, so a hidden folder is hidden everywhere the web hides it.
+     */
+    fun remindersShown(folder: UUID?, group: GroupRef): List<Reminder> {
+        if (folder != null) return reminders(folder = folder, group = group)
+        val hidden = (data.hiddenFolders[ItemKind.reminder.name] ?: emptyList()).toSet()
+        return reminders(folder = null, group = group).filter { r ->
+            val f = r.folder ?: return@filter true
+            !hidden.contains(f)
+        }
+    }
+
+    /**
      * Add a blank subtask directly under `parent`: same folder and group, indent 1,
      * slotted right after it in stored order. Returns it so the view can open it to type;
      * left empty, the caller deletes it again, like the web.
@@ -289,9 +406,27 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
 
     fun delete(note: Note) { data.notes.removeAll { it.id == note.id }; touch() }
 
+    /** Take a note off the calendar without deleting it — its `date` comes off, the note stays. */
+    fun unschedule(note: Note) {
+        val n = data.notes.firstOrNull { it.id == note.id } ?: return
+        n.date = null
+        touch()
+    }
+
     /** Notes in a folder+group, in drag order (stored `order`). */
     fun notes(folder: UUID?, group: UUID?): List<Note> =
         data.notes.filter { it.group == group && (folder == null || it.folder == folder) }.sortedBy { it.order }
+
+    /** The notes the list shows in a group: one focused folder, or every non-hidden
+     *  folder on "All" — the notes twin of `remindersShown`. */
+    fun notesShown(folder: UUID?, group: UUID?): List<Note> {
+        if (folder != null) return notes(folder = folder, group = group)
+        val hidden = (data.hiddenFolders[ItemKind.note.name] ?: emptyList()).toSet()
+        return notes(folder = null, group = group).filter { n ->
+            val f = n.folder ?: return@filter true
+            !hidden.contains(f)
+        }
+    }
 
     fun moveNotes(ordered: List<Note>, from: Set<Int>, to: Int) {
         val rows = ordered.toMutableList()
@@ -357,6 +492,63 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         touch()
     }
 
+    // MARK: - Calendar visibility (the three-gesture picker)
+    //
+    // The calendar's twin of folder visibility, over the web's `hidden_cals`.
+
+    /** Whether a calendar is currently shown. */
+    fun calShown(id: UUID): Boolean = !data.hiddenCals.contains(id)
+
+    /** The box: toggle just this calendar. */
+    fun toggleCal(id: UUID) {
+        if (!data.hiddenCals.remove(id)) data.hiddenCals.add(id)
+        touch()
+    }
+
+    /** The row: show only this calendar. */
+    fun showOnlyCal(id: UUID) = showOnlyCalendars(listOf(id))
+
+    /** Show only the given calendars, hiding the rest — the row gesture, and how a saved
+     *  set (a named group of calendars) applies in the visibility model. */
+    fun showOnlyCalendars(ids: List<UUID>) {
+        val keep = ids.toSet()
+        data.hiddenCals = calendarsOnly.map { it.id }.filter { !keep.contains(it) }.toMutableList()
+        touch()
+    }
+
+    /** The "All" master: on only when no calendar is hidden. */
+    fun calsAllShown(): Boolean {
+        val hidden = data.hiddenCals.toSet()
+        return calendarsOnly.none { hidden.contains(it.id) }
+    }
+
+    fun setCalsAll(show: Boolean) {
+        data.hiddenCals = if (show) mutableListOf() else calendarsOnly.map { it.id }.toMutableList()
+        touch()
+    }
+
+    /** The visible-calendar filter for the grid and day panel: null when everything shows
+     *  (no filtering), otherwise the ids still on. Stale hidden ids are ignored. */
+    val shownCalScope: Set<UUID>?
+        get() {
+            val all = calendarsOnly.map { it.id }.toSet()
+            val hidden = data.hiddenCals.toSet().intersect(all)
+            return if (hidden.isEmpty()) null else all.subtract(hidden)
+        }
+
+    // MARK: - Reminder folders on the calendar (the web's rf_mode)
+    //
+    // Separate from the Reminders picker's visibility: a folder can show in the list but
+    // be switched off for the calendar, so its reminders don't clutter the month.
+
+    /** Whether a reminder folder's items reach the calendar (off is the web's rf_mode 'none'). */
+    fun calFolderShown(id: UUID): Boolean = !data.calHiddenFolders.contains(id)
+
+    fun toggleCalFolder(id: UUID) {
+        if (!data.calHiddenFolders.remove(id)) data.calHiddenFolders.add(id)
+        touch()
+    }
+
     /**
      * Which calendar ids a selection covers: null (show all), a single calendar, or a
      * set's members (validated against calendars that still exist).
@@ -387,9 +579,12 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
      * Reminders showing on a day: its own date, any repeat landing there, an overdue one
      * rolled onto today, and the Calendar group's undated riders.
      */
-    fun reminders(on: LocalDate, today: LocalDate): List<Reminder> =
-        data.reminders.filter { r ->
+    fun reminders(on: LocalDate, today: LocalDate): List<Reminder> {
+        val calHidden = data.calHiddenFolders.toSet()
+        return data.reminders.filter { r ->
             if (r.done) return@filter false
+            val f = r.folder
+            if (f != null && calHidden.contains(f)) return@filter false   // folder off for the calendar
             if (r.ridesAlong) return@filter on == today
             val due = r.due ?: return@filter false
             if (due == on) return@filter true
@@ -397,6 +592,7 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
             val rule = r.recurrence
             if (rule != null) rule.dates(start = due, from = on, to = on).isNotEmpty() else false
         }.sortedWith(dayOrder)
+    }
 
     fun notes(on: LocalDate): List<Note> = data.notes.filter { it.date == on }
 
@@ -510,7 +706,7 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         val today = LocalDate.now()
         val out = ArrayList<String>()
         fun emit(ref: GroupRef, title: String) {
-            val rows = reminders(folder = folder, group = ref).filter { includeDone || !it.done }
+            val rows = remindersShown(folder = folder, group = ref).filter { includeDone || !it.done }
             if (rows.isEmpty()) return
             out.add("## $title")
             for (r in rows) {
@@ -541,7 +737,7 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     fun watchList(): WatchList {
         val today = LocalDate.now()
         fun items(ref: GroupRef): List<WatchItem> =
-            reminders(folder = null, group = ref)
+            remindersShown(folder = null, group = ref)
                 .filter { !it.done }
                 .map { r ->
                     val bits = ArrayList<String>()

@@ -291,6 +291,17 @@ data class AppData(
     /** The calendar or set the Calendar screen last had selected (null = all). */
     var lastCal: UUID? = null,
 
+    /** What the three-gesture pickers hide, stored as the hidden side so new folders and
+     *  calendars show without anyone touching this. Keyed by ItemKind.name. */
+    var hiddenFolders: MutableMap<String, MutableList<UUID>> = mutableMapOf(),
+    var hiddenCals: MutableList<UUID> = mutableListOf(),
+    /** Reminder folders switched off for the calendar (the web's rf_mode) — separate from
+     *  the Reminders picker's hiddenFolders, since a folder can show in the list but keep
+     *  its reminders off the month. */
+    var calHiddenFolders: MutableList<UUID> = mutableListOf(),
+    /** The colour of the ungrouped "Habits" bucket, which has no section row of its own. */
+    var habitUngroupedColor: Int = 3,
+
     /**
      * The Habits month pies count every section unless it's in here; the ungrouped run
      * has no id, so it gets its own flag. Stored as what's *hidden*, so a section added
