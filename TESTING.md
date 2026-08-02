@@ -132,7 +132,9 @@ kind icon per colour** — two calendars' events on one day draw two calendar gl
 cell repeats a kind+colour pair. The **dot legend** is
 built in JS from the cells on screen (keyed by owner and kind — a calendar/checkbox/page
 glyph, tinted the item's own colour, before each kind's names); the page only ships its
-key (`LEG_OWNERS` order, `LEG_CALS` names, `LEG_ICONS` glyphs) and the empty container. The
+key (`LEG_OWNERS` order, `LEG_CALS` names, `LEG_ICONS` glyphs) and the empty container.
+The legend's bar sits between the calendar half and the day panel (never inside the
+scrolling `.cal-top`), so it's on screen the moment the app opens; it hides when empty. The
 **add/edit modal** hides Time and Repeat behind **+ Time** / **+ Repeat** buttons (both start
 hidden), with the repeat count before its unit selector. *(By eye: the day-panel reminder
 picker lists real sections and lands new reminders in one; the + buttons reveal their fields

@@ -1063,6 +1063,14 @@ t('the calendar ships the data its in-view legend is built from', function () {
     $r = req('GET', '/calmind/calendar/?ym=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     has('<div class="cal-legend" id="calLegend"', $r['body'], 'the legend container renders');
+    // The legend's bar sits *between* the two scroll halves — inside .cal-top it sat
+    // below the 60vh fold on a phone, so opening the calendar never showed it.
+    has('<div class="cal-legend-bar" id="calLegendBar"', $r['body'], 'the legend has its own bar');
+    ok(strpos($r['body'], 'id="calLegendBar"') < strpos($r['body'], '<div class="daypanel"'),
+       'the bar sits above the day panel');
+    ok(strpos($r['body'], 'id="calLegendBar"') > strpos($r['body'], 'id="calGrid"'),
+       'and below the grid, outside the scrolling half');
+    has('bar.hidden = !box.children.length', $r['body'], 'an empty key hides its bar');
     hasnt('cleg-dot', $r['body'], 'the separate colour dot is gone');
     // The legend is empty until JS fills it — no server-rendered item elements (the CSS
     // rules for .cleg-item still exist; it's the rendered class="cleg-item" that must not).

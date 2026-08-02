@@ -885,8 +885,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Legend under the grid — a key to the day dots. One row per owner; within it, kind
        groups each led by their glyph (calendar / checkbox / page, in the kind's colour),
        then the calendars or folders in view under their own dot. Wraps on a narrow screen,
-       and shows in both month and week views. */
-    .cal-legend { margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; }
+       and shows in both month and week views. It lives in its own bar *between* the two
+       scroll halves, not inside .cal-top — there it sat below the 60vh fold on a phone,
+       so opening the calendar never showed it. The bar caps its height and scrolls
+       within itself if someone's calendar list runs long. */
+    .cal-legend-bar {
+      flex: 0 0 auto; max-height: 22vh; overflow-y: auto; overscroll-behavior: contain;
+      padding: 0.55rem 1rem; border-top: 1px solid var(--line-soft);
+    }
+    .cal-legend-bar[hidden] { display: none; }
+    .cal-legend { display: flex; flex-direction: column; gap: 0.45rem; }
     .cleg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.75rem; }
     .cleg-who {
       flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; color: var(--muted);
@@ -1349,10 +1357,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     <?php endfor; ?>
   </div>
 
-  <?php // A key to the dots: one row per owner, each grouped events → reminders → notes,
-        // with the calendars/folders under their own colour. Built in JS from the cells that
-        // are actually on screen, so it reflects only what's in view — the whole month in
-        // month mode, just the shown week(s) in week mode — and updates as you page weeks. ?>
+ </div>
+</div>
+
+<?php // A key to the dots: one row per owner, each grouped events → reminders → notes,
+      // with the calendars/folders under their own colour. Built in JS from the cells that
+      // are actually on screen, so it reflects only what's in view — the whole month in
+      // month mode, just the shown week(s) in week mode — and updates as you page weeks.
+      // Its bar sits between the two scroll halves so it's on screen the moment the
+      // calendar opens; renderLegend() hides the bar when there's nothing to key. ?>
+<div class="cal-legend-bar" id="calLegendBar">
+ <div class="wrap">
   <div class="cal-legend" id="calLegend" aria-label="Legend"></div>
  </div>
 </div>
@@ -1788,6 +1803,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       });
       if (any) { box.appendChild(row); }
     });
+    // An empty key keeps its bar's padding otherwise, which reads as a stray rule.
+    const bar = document.getElementById('calLegendBar');
+    if (bar) { bar.hidden = !box.children.length; }
   }
   const dpDate  = document.getElementById('dpDate');
   const dpAdd   = document.getElementById('dpAdd');
