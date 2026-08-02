@@ -323,9 +323,10 @@ $kindRows = [
             border: 1px solid var(--line); }
     .sw b { font: 0.55rem ui-monospace, monospace; color: var(--muted); font-weight: 400;
             background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 5px; }
-    /* A colour that can't be seen on this theme is marked where it fails, not in a list. */
-    .sw.low i { border: 1px dashed #f5a3ad; box-shadow: 0 0 0 2px rgba(245, 163, 173, 0.25); }
-    .sw.low b { color: #f5a3ad; }
+    /* A colour that can't be seen on this theme is marked where it fails, not in a list:
+       its label's chip blushes — a red wash over the same surface grey, layered so it
+       tints rather than replaces it (no color-mix; some of the phones predate it). */
+    .sw.low b { background: linear-gradient(#e0525229, #e0525229), var(--surface-2); }
 
     /* --- The mock beside each app: the colours doing their real job ---------------- */
     .demo { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;

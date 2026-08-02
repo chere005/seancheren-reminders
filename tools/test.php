@@ -1596,6 +1596,9 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     $graded = preg_match_all('/<b style="color:#[0-9a-f]{6}">/', $r['body']);
     ok($graded > 300, "the labels are graded ($graded found)");
     has('background: var(--surface-2)', $r['body'], 'the label sits on a chip');
+    // A failure blushes the chip; there is no dashed ring around the dot any more.
+    has('.sw.low b', $r['body'], 'the under-3:1 chip is marked');
+    hasnt('dashed', $r['body'], 'no dashed border anywhere');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
 });
 
