@@ -53,7 +53,7 @@ struct RemindersView: View {
             Image(systemName: synced ? "checklist" : "iphone.and.arrow.forward")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text(synced ? "Nothing on the list." : "Open Seancheren on your phone to sync.")
+            Text(synced ? "Nothing on the list." : "Open CalMind on your phone to sync.")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

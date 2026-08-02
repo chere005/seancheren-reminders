@@ -14,10 +14,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "5E4C00000000000000000300"
-               BuildableName = "Seancheren.app"
-               BlueprintName = "Seancheren"
-               ReferencedContainer = "container:Seancheren.xcodeproj">
+               BlueprintIdentifier = "5E4C00000000000000000301"
+               BuildableName = "CalMindWatch.app"
+               BlueprintName = "CalMindWatch"
+               ReferencedContainer = "container:CalMind.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,10 +44,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "5E4C00000000000000000300"
-            BuildableName = "Seancheren.app"
-            BlueprintName = "Seancheren"
-            ReferencedContainer = "container:Seancheren.xcodeproj">
+            BlueprintIdentifier = "5E4C00000000000000000301"
+            BuildableName = "CalMindWatch.app"
+            BlueprintName = "CalMindWatch"
+            ReferencedContainer = "container:CalMind.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,10 +61,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "5E4C00000000000000000300"
-            BuildableName = "Seancheren.app"
-            BlueprintName = "Seancheren"
-            ReferencedContainer = "container:Seancheren.xcodeproj">
+            BlueprintIdentifier = "5E4C00000000000000000301"
+            BuildableName = "CalMindWatch.app"
+            BlueprintName = "CalMindWatch"
+            ReferencedContainer = "container:CalMind.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

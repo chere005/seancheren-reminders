@@ -1,15 +1,15 @@
 # iOS + Apple Watch
 
-Two targets in one Xcode project, `Seancheren.xcodeproj`:
+Two targets in one Xcode project, `CalMind.xcodeproj`:
 
 | Target | Platform | What it is |
 | --- | --- | --- |
-| `Seancheren` | iOS 17+ | Reminders · Calendar · Notes · Habits · Settings, as native tabs |
-| `SeancherenWatch` | watchOS 10+ | Your reminder list on the wrist, read-only |
+| `CalMind` | iOS 17+ | Reminders · Calendar · Notes · Habits · Settings, as native tabs |
+| `CalMindWatch` | watchOS 10+ | Your reminder list on the wrist, read-only |
 
-Open `ios/Seancheren.xcodeproj`, pick your team under **Signing & Capabilities** for
+Open `ios/CalMind.xcodeproj`, pick your team under **Signing & Capabilities** for
 both targets, and run. The watch app is embedded in the phone app, so building and
-running `Seancheren` installs both — that's why they're one project rather than two.
+running `CalMind` installs both — that's why they're one project rather than two.
 
 ## Completely independent of the website
 
@@ -64,7 +64,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 # Compile-check the SwiftUI app — no simulator needed, it builds for a generic device:
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  xcodebuild -project Seancheren.xcodeproj -scheme Seancheren \
+  xcodebuild -project CalMind.xcodeproj -scheme CalMind \
   -destination 'generic/platform=iOS' -configuration Debug \
   CODE_SIGNING_ALLOWED=NO build
 ```
@@ -96,8 +96,8 @@ phone is the only writer).
 
 ```
 ios/
-  Seancheren.xcodeproj/
-  App/      SeancherenApp, RootView, RemindersView, NotesView, CalendarView,
+  CalMind.xcodeproj/
+  App/      CalMindApp, RootView, RemindersView, NotesView, CalendarView,
             HabitsView, Pickers, Theme, SettingsView, PhoneConnectivity      (iOS)
   Watch/    WatchApp, RemindersView, WatchConnectivityReceiver               (watchOS)
   Shared/   Model, Parse, Store, WatchPayload

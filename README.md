@@ -59,9 +59,9 @@ and NFSN credentials. A blank `data_key` is generated into `data/.datakey` on fi
 A fully native SwiftUI app (no web view, no login, no network) with all data in one local `suite.json`.
 
 ```sh
-open ios/Seancheren.xcodeproj   # pick a scheme + device, then ⌘R:
-                                #   Seancheren      → iPhone (installs the embedded watch app)
-                                #   SeancherenWatch → Apple Watch (needs a paired simulator/device)
+open ios/CalMind.xcodeproj   # pick a scheme + device, then ⌘R:
+                                #   CalMind      → iPhone (installs the embedded watch app)
+                                #   CalMindWatch → Apple Watch (needs a paired simulator/device)
 ```
 
 From the command line (no simulator needed):
@@ -70,7 +70,7 @@ From the command line (no simulator needed):
 cd ios
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test        # logic tests
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-  xcodebuild -scheme Seancheren -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+  xcodebuild -scheme CalMind -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 Nothing in `ios/` is deployed. See `ios/README.md` for detail. A native **Android** clone of
