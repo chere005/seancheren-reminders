@@ -1571,6 +1571,14 @@ t('every app palette offers six colours and validates its own', function () {
             ok(min($d, 360 - $d) < 4, "$app shared colour $i keeps its hue");
         }
     }
+    // Every own colour clears 3:1 on the dark themes' card — pal_floor()'s promise, and
+    // the reason no dot on a dark page ever needs squinting for.
+    foreach (['reminders', 'calendar', 'notes', 'habits'] as $app) {
+        foreach (app_palette($app) as $hex) {
+            ok((pal_lum($hex) + 0.05) / (pal_lum('#1a1a1a') + 0.05) >= 3.0,
+               "$app $hex clears 3:1 on the dark card");
+        }
+    }
     // Each app wears the six hues at its own distinct shade — no two apps share a colour,
     // and the gap is wide enough to see at dot size (sum of per-channel differences).
     $dist = fn($a, $b) => abs(hexdec(substr($a, 1, 2)) - hexdec(substr($b, 1, 2)))
@@ -1599,8 +1607,8 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     // A failure blushes the chip; there is no dashed ring around the dot any more.
     has('.sw.low b', $r['body'], 'the under-3:1 chip is marked');
     hasnt('dashed', $r['body'], 'no dashed border anywhere');
-    // The boards come grouped into drafts, in order, so iterations read side by side;
-    // each heading folds its group (a JS gesture, so only the wiring is checked here).
+    // The boards come grouped into drafts, newest first, so iterations read side by
+    // side; each heading folds its group (a JS gesture, so only the wiring is checked).
     foreach ([1, 2, 3] as $d) {
         has("Draft $d — ", $r['body'], "draft $d has its heading");
         has('<div class="dgroup" data-draft="' . $d . '"', $r['body'], "draft $d wraps its boards");
@@ -1615,12 +1623,13 @@ t('the palettes viewer grades every hex label by its contrast', function () {
         has('all clear 3:1', $chunk, "proposal board $i is all clear");
         hasnt('under 3:1', $chunk, "proposal board $i flags nothing");
     }
-    // Draft 3 draws on four themes; its floor was Midnight's card, so that board at
-    // least must be spotless (cream is deliberately untuned there).
-    foreach (range(0, 3) as $i) { has('data-key="d3-' . $i . '"', $r['body'], "draft-3 board $i renders"); }
-    $at = strpos($r['body'], 'data-key="d3-0"');
+    // Draft 1 is the frozen history, on four themes.
+    foreach (range(0, 3) as $i) { has('data-key="d1-' . $i . '"', $r['body'], "draft-1 board $i renders"); }
+    // The live palette floors itself on Midnight's card, so the live Midnight board
+    // must be spotless.
+    $at = strpos($r['body'], 'data-key="suite-midnight"');
     $chunk = substr($r['body'], $at, strpos($r['body'], '</section>', $at) - $at);
-    has('all clear 3:1', $chunk, 'draft 3 on Midnight is all clear');
+    has('all clear 3:1', $chunk, 'the live palette on Midnight is all clear');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
 });
 
