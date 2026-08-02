@@ -1599,7 +1599,9 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     // A failure blushes the chip; there is no dashed ring around the dot any more.
     has('.sw.low b', $r['body'], 'the under-3:1 chip is marked');
     hasnt('dashed', $r['body'], 'no dashed border anywhere');
-    // The four proposal boards render, and each keeps its whole promise: every one of
+    // The boards come grouped into drafts, in order, so iterations read side by side.
+    foreach ([1, 2, 3] as $d) { has("Draft $d — ", $r['body'], "draft $d has its heading"); }
+    // The four Draft 2 boards render, and each keeps its whole promise: every one of
     // its swatches clears 3:1, so its head must say all clear, never a count.
     foreach (range(0, 3) as $i) {
         $at = strpos($r['body'], 'data-key="prop-' . $i . '"');
@@ -1608,6 +1610,12 @@ t('the palettes viewer grades every hex label by its contrast', function () {
         has('all clear 3:1', $chunk, "proposal board $i is all clear");
         hasnt('under 3:1', $chunk, "proposal board $i flags nothing");
     }
+    // Draft 3 draws on four themes; its floor was Midnight's card, so that board at
+    // least must be spotless (cream is deliberately untuned there).
+    foreach (range(0, 3) as $i) { has('data-key="d3-' . $i . '"', $r['body'], "draft-3 board $i renders"); }
+    $at = strpos($r['body'], 'data-key="d3-0"');
+    $chunk = substr($r['body'], $at, strpos($r['body'], '</section>', $at) - $at);
+    has('all clear 3:1', $chunk, 'draft 3 on Midnight is all clear');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
 });
 
