@@ -2463,6 +2463,60 @@ t('dragging folders in the manager sticks after a refresh (reminders and notes)'
     }
 });
 
+t('a drag payload cannot re-file a section into a shared or unknown folder key', function () {
+    // The section map's keys are folder names; a partner's shared block posts nothing,
+    // but a forged key must not move a section either — it keeps its slot and its home.
+    $jar = login('example', 'examplepassword');
+    $a = rem_sec_id('DragRem', 'Alpha');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['@aki:Stolen' => [$a]])], $jar, true);
+    $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+    eq('DragRem', $find($a)['folder'] ?? null, 'a shared/unknown folder key never captures a section');
+});
+
+t('rows and sections a drag never mentions keep their place and folder', function () {
+    // A drag posts only what was on screen; hidden folders (and everything in them) ride
+    // through untouched — the guard against a filtered view quietly rearranging the rest.
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'Offscreen'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Offscreen',
+        'text' => 'untouched by the drag', 'folder' => 'Offscreen', 'section' => ''], $jar);
+    req('GET', '/reminders/?folder=All', [], $jar);   // normalise
+    $b = rem_sec_id('DragRem', 'Beta');
+    // A drag entirely inside DragRem — Offscreen isn't in the payload at all.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['DragRem' => [$b]])], $jar, true);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'untouched by the drag') { $row = $x; }
+    }
+    ok($row !== null, 'the unmentioned row survived');
+    eq('Offscreen', $row['folder'] ?? null, 'in its own folder');
+    ok(rem_sec_id('Offscreen', 'General') !== null, 'whose sections also survived');
+});
+
+t('a note reorder tolerates the legacy flat payload and duplicate ids', function () {
+    // Same stale-page tolerance Reminders has, plus: an id listed twice (a DOM glitch
+    // mid-drag) counts once rather than duplicating the row.
+    $jar = login('example', 'examplepassword');
+    $before = array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'NDragA')), 'name');
+    $r = req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['Two', 'General'])], $jar, true);
+    eq(200, $r['status'], 'the legacy flat shape answers 200');
+    eq($before, array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'NDragA')), 'name'),
+        'and reorders nothing rather than guessing');
+    $two = note_sec_id('NDragA', 'Two');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['NDragA' => [$two, $two]])], $jar, true);
+    $count = 0;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['id'] ?? '') === $two) { $count++; }
+    }
+    eq(1, $count, 'a section id posted twice is stored once');
+});
+
 t('emptying a reminder folder by drag, then the chained delete, removes it cleanly', function () {
     // The confirm itself is by-eye JS; this replays what OK posts — the reorder that
     // empties the folder, then delete_folder — and checks nothing is stranded.
@@ -3356,6 +3410,30 @@ t('a suite theme paints the whole page, and midnight is the unchanged default', 
     has('--bg: #fefae0', req('GET', '/calendar/quick.php', [], $jar)['body'], 'quick.php is themed');
     has('--bg: #fefae0', req('GET', '/calendar/feed.php', [], $jar)['body'], 'the feed setup page is themed');
     req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar), 'theme' => 'midnight'], $jar, true);
+});
+
+t('no app page carries the old hardcoded dark-room colours', function () {
+    // The tripwire for the theme conversion: a new rule written with a literal #111-family
+    // hex renders fine on midnight and breaks on the cream themes, so the raw declarations
+    // themselves are banned from the rendered page. (The kind palette, the error red and
+    // Habits' violet are semantic and allowed; this only checks the neutral roles.)
+    $jar = login('example', 'examplepassword');
+    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        foreach (['background: #111;', 'background: #1a1a1a', 'background: #222;',
+                  'color: #eee', 'color: #888', 'border: 1px solid #333',
+                  'border: 1px solid #444'] as $lit) {
+            hasnt($lit, $b, "$p still hardcodes '$lit'");
+        }
+    }
+});
+
+t('every app offers the same theme picker', function () {
+    $jar = login('example', 'examplepassword');
+    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        eq(count(THEMES), substr_count($b, 'class="themebtn'), "$p shows one swatch per theme");
+    }
 });
 
 t('the theme picker shows every theme as its own swatch', function () {

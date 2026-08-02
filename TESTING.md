@@ -222,6 +222,21 @@ delete, with delete needing the second press; sections added, renamed and delete
 folder; the reserved "Notes" catch-all name; a note folder colour refusing another app's
 palette.
 
+### `drag`
+The payload half of every drag, replayed exactly as the JS posts it — the gesture itself
+is by-eye, but "it looked right then reverted on reload" bugs live entirely on this side.
+Section order in the All view and in a single-folder view (the folder-keyed id map both
+apps post now); a section dragged into another folder re-filing by id with its rows
+following; the duplicate-name refusal with the realistic whole-screen payload (the
+destination's own same-named section is in the map, and being mentioned must not free its
+name); row re-filing across folders, with a shared/unknown folder key ignored; row order
+inside a section; the manager's folder drag (`reorder_folders`); rows and sections the
+payload never mentions surviving untouched; the stale flat-name payload from a page left
+open across the deploy reordering nothing; a section id posted twice stored once; and the
+"last section out" sequence — the reorder that empties a folder, then the chained
+`delete_folder`. **Every one of these ends with a fresh page load** (the read path
+re-normalises and may write the file back) and re-checks that the order still holds.
+
 ### `calendar2`
 A repeat expanded across the month being drawn. Paging to another month. A reminder folder
 switched to Off with `rf_mode` really leaving the calendar. Adding a reminder from the day
@@ -274,7 +289,15 @@ you're on. Changing a password needs the token *and* the current password, and h
 six-character floor; a bad token is a 400 and writes nothing. A changed password takes
 effect and the old one stops working, with the override in `passwords.json` rather than
 the account record. The theme is set over AJAX, refuses a name it doesn't know, sticks in
-`prefs-<user>.json`, and a bad token is a 400 there too.
+`prefs-<user>.json`, and a bad token is a 400 there too. **The suite themes**: a fresh
+account renders midnight exactly (the old `#111`/`#eee`/`#34d399` values, dark scheme,
+`theme-color` meta); sage flips every app page to the cream palette and a light scheme,
+`quick.php` and the feed setup page included; a legacy stored name falls back to
+midnight; every app offers the full swatch picker; and no app page may render the old
+hardcoded dark-room declarations — the tripwire that keeps a new rule from being written
+with a literal neutral that only works on midnight. What the harness can't see — whether
+the paint actually reads on a cream page — is in the Themes pass under *What only eyes
+can check*.
 
 ### `token`
 `token_user()` matches the whole string or nothing — a prefix, an extension and a
