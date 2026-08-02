@@ -100,10 +100,66 @@ function up_kind_colors(): array
 }
 
 /**
+ * Four proposed retunes — Midnight, Sage & Cream, Forest, Olive & Slate, each drawn as
+ * one extra board where EVERY swatch clears 3:1 on its own page and card. Searched, not
+ * hand-picked: each colour was walked the minimum lightness from the live palette that
+ * passes (offline, then frozen here), so the dark three are near-identical to today —
+ * only the deep purple lifts, Olive's card darkens a step, and the Done grey brightens —
+ * while cream needs its own world: the tiers become inks, banded by depth (calendar
+ * deepest, then habits, reminders, notes), shared a visibly lighter ink, and the kind
+ * colours deepen to match. Wired to nothing; the apps still read app_palette(). Each
+ * row is [name, base theme, var overrides, app => [own six, shared six], kind overrides].
+ */
+const UP_PROPOSALS = [
+    ['Midnight II', 'midnight', [], [
+        'reminders' => [['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
+                        ['#aecbf8', '#f6b4b2', '#baedcf', '#fad1ad', '#d3b6f1', '#ced2d9']],
+        'calendar'  => [['#0361f6', '#ee140d', '#2ad070', '#fa7400', '#8c32e6', '#6b778f'],
+                        ['#8eb8fb', '#f79592', '#9feabf', '#fdc08c', '#cba3f4', '#bcc2cd']],
+        'notes'     => [['#84aceb', '#e78c89', '#94dbb2', '#edb482', '#b88ee1', '#b0b5bf'],
+                        ['#c2d6f5', '#f3c6c4', '#caedd9', '#f6dac1', '#dcc7f0', '#d8dadf']],
+        'habits'    => [['#3a77d9', '#d34641', '#53c081', '#dc8437', '#8a4aca', '#7e8695'],
+                        ['#a6c2ee', '#ebacaa', '#b2e3c6', '#efc8a5', '#caaee7', '#c5c9cf']],
+    ], ['--k-done' => '#676767']],
+    ['Forest II', 'forest', [], [
+        'reminders' => [['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
+                        ['#aecbf8', '#f6b4b2', '#baedcf', '#fad1ad', '#d3b6f1', '#ced2d9']],
+        'calendar'  => [['#0361f6', '#ee140d', '#2ad070', '#fa7400', '#8f37e7', '#6b778f'],
+                        ['#8eb8fb', '#f79592', '#9feabf', '#fdc08c', '#cda5f4', '#bcc2cd']],
+        'notes'     => [['#84aceb', '#e78c89', '#94dbb2', '#edb482', '#b88ee1', '#b0b5bf'],
+                        ['#c2d6f5', '#f3c6c4', '#caedd9', '#f6dac1', '#dcc7f0', '#d8dadf']],
+        'habits'    => [['#3a77d9', '#d34641', '#53c081', '#dc8437', '#8a4aca', '#7e8695'],
+                        ['#a6c2ee', '#ebacaa', '#b2e3c6', '#efc8a5', '#caaee7', '#c5c9cf']],
+    ], ['--k-done' => '#6c6c6c']],
+    ['Olive & Slate II', 'olive', ['--surface' => '#2b2334'], [
+        'reminders' => [['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
+                        ['#aecbf8', '#f6b4b2', '#baedcf', '#fad1ad', '#d3b6f1', '#ced2d9']],
+        'calendar'  => [['#0766fc', '#ee140d', '#2ad070', '#fa7400', '#9745e8', '#6b778f'],
+                        ['#8fbafe', '#f79592', '#9feabf', '#fdc08c', '#d0abf5', '#bcc2cd']],
+        'notes'     => [['#84aceb', '#e78c89', '#94dbb2', '#edb482', '#b88ee1', '#b0b5bf'],
+                        ['#c2d6f5', '#f3c6c4', '#caedd9', '#f6dac1', '#dcc7f0', '#d8dadf']],
+        'habits'    => [['#3a77d9', '#d34641', '#53c081', '#dc8437', '#9256cd', '#7e8695'],
+                        ['#a6c2ee', '#ebacaa', '#b2e3c6', '#efc8a5', '#ceb3e9', '#c5c9cf']],
+    ], ['--k-done' => '#717171']],
+    ['Sage & Cream II', 'sage', [], [
+        'reminders' => [['#1364e6', '#d2201a', '#207945', '#a7540b', '#8f42db', '#626b7e'],
+                        ['#3079ee', '#e73e38', '#268d51', '#c4620d', '#9e5ce0', '#727d91']],
+        'calendar'  => [['#0343ab', '#970c08', '#11542e', '#753600', '#6616b6', '#444b5a'],
+                        ['#0353d3', '#b90f0a', '#166a39', '#944500', '#7f1ce3', '#535c6f']],
+        'notes'     => [['#3576de', '#d8423c', '#2e8954', '#b6631b', '#965ad3', '#70798a'],
+                        ['#4b85e2', '#de5f5a', '#33985d', '#cc6f1e', '#9e66d6', '#7d8696']],
+        'habits'    => [['#2158b0', '#a72a26', '#256540', '#864b18', '#7a37bd', '#555b68'],
+                        ['#286ad2', '#cc342f', '#2d7b4e', '#a0591c', '#8c4dcb', '#656d7c']],
+    ], ['--k-reminder' => '#1a7856', '--k-event' => '#0767de',
+        '--k-note' => '#6d49ec', '--k-overdue' => '#a3590f']],
+];
+
+/**
  * Every theme this page draws a board for: the suite's own eight (THEMES, lib/auth.php —
  * the same set the bookshelf picks from), then anything built in the Themes workbench,
- * read but never written. A workbench palette is the same twelve roles under the same
- * names, so both kinds land in one shape and render through one path.
+ * read but never written, then the four proposals above. A workbench palette is the same
+ * twelve roles under the same names, so both kinds land in one shape and render through
+ * one path; a proposal additionally carries its own item palette and kind overrides.
  */
 function up_themes(string $file): array
 {
@@ -123,6 +179,11 @@ function up_themes(string $file): array
         $out[] = ['key'  => 'user-' . (string) ($p['id'] ?? count($out)),
                   'name' => (string) ($p['name'] ?? 'Untitled'), 'src' => 'from Themes',
                   'vars' => $vars];
+    }
+    foreach (UP_PROPOSALS as $i => [$name, $base, $over, $pal, $kinds]) {
+        $out[] = ['key' => 'prop-' . $i, 'name' => $name, 'src' => 'proposal',
+                  'vars' => array_merge(theme_vars($base)['vars'], $over),
+                  'pal' => $pal, 'kinds' => $kinds];
     }
     return $out;
 }
@@ -200,12 +261,13 @@ function up_tier(string $label, array $colors, array $vars): string
  * shape per kind of use: a folder heading and its section dots, a calendar day's dots, a
  * habits month pie.
  */
-function up_demo(string $shape, array $mine, array $shared, array $vars): string
+function up_demo(string $shape, array $mine, array $shared, array $vars, array $kinds = []): string
 {
     if ($shape === 'cal') {
         // A month cell: a dot per event in its calendar's colour, then one for reminders
-        // and one for notes — the counts the calendar actually draws.
-        $k = up_kind_colors();
+        // and one for notes — the counts the calendar actually draws. A proposal board's
+        // kind overrides win over the live set.
+        $k = $kinds + up_kind_colors();
         $d = fn($c) => '<i class="cdot" style="background:' . e($c) . '"></i>';
         return '<div class="demo"><div class="cell"><span class="cnum">1</span><span class="cdots">'
              . $d($mine[0]) . $d($mine[3]) . $d($shared[4])
@@ -382,6 +444,9 @@ $kindRows = [
     asking of a palette: a swatch under <b>3:1</b> against its own background is flagged, since a
     dot or a wash that faint is one you have to go looking for. Nothing here is editable —
     page palettes are built in <b>Themes</b>; this page only reports what the apps use.
+    The one exception: the four <b>proposal</b> boards at the end sketch retunes of
+    Midnight, Sage &amp; Cream, Forest and Olive &amp; Slate on which every swatch clears
+    3:1 — drawn to be judged, read by nothing.
   </p>
 
   <div class="toolbar">
@@ -394,12 +459,21 @@ $kindRows = [
   <?php endif; ?>
 
   <?php foreach ($themes as $t): $v = $t['vars'];
+        // A proposal board carries its own item palette and kind overrides; every other
+        // board draws the one set the apps really use.
+        $bp = fn(string $app, bool $sh) => $t['pal'][$app][$sh ? 1 : 0] ?? app_palette($app, $sh);
+        $bk = $t['kinds'] ?? [];
+        $rowsK = [];
+        foreach ($kindRows as $k) {
+            $key = '--k-' . strtolower($k[0]);
+            $rowsK[] = isset($bk[$key]) ? [$k[0], $bk[$key], folder_tint($bk[$key])] : $k;
+        }
         // Everything the board draws, counted once, so the head can say up front whether
         // this theme is one the palettes survive.
         $low = 0; $tot = 0;
         foreach (PAL_APPS as $app => $_m) {
             foreach ([false, true] as $sh) {
-                foreach (app_palette($app, $sh) as $hex) {
+                foreach ($bp($app, $sh) as $hex) {
                     $tot++;
                     $r = up_worst($hex, $v);
                     if ($r !== null && $r < 3.0) { $low++; }
@@ -418,23 +492,25 @@ $kindRows = [
       </div>
       <div class="tbody">
         <?php foreach (PAL_APPS as $app => $meta):
-              $mine = app_palette($app);
-              $shrd = app_palette($app, true); ?>
+              $mine = $bp($app, false);
+              $shrd = $bp($app, true); ?>
           <div class="app">
             <div class="an"><b><?= e($meta[0]) ?></b><span><?= e($meta[1]) ?></span></div>
             <div class="tiers">
               <?= up_tier('Mine', $mine, $v) ?>
               <?= up_tier('Shared', $shrd, $v) ?>
             </div>
-            <?= up_demo($meta[2], $mine, $shrd, $v) ?>
+            <?= up_demo($meta[2], $mine, $shrd, $v, $bk) ?>
           </div>
         <?php endforeach; ?>
 
         <div class="app">
-          <div class="an"><b>Kinds</b><span>one palette suite-wide, and deliberately not themed &mdash; these say what a thing <i>is</i></span></div>
+          <div class="an"><b>Kinds</b><span><?= $bk
+              ? 'retuned with this proposal &mdash; the live apps keep one set suite-wide'
+              : 'one palette suite-wide, and deliberately not themed &mdash; these say what a thing <i>is</i>' ?></span></div>
           <div class="tiers">
             <div class="kinds">
-              <?php foreach ($kindRows as $k):
+              <?php foreach ($rowsK as $k):
                     $kr  = up_worst($k[1], $v);
                     $bad = $kr !== null && $kr < 3.0; ?>
                 <span class="kind<?= $bad ? ' low' : '' ?>" style="background:<?= e($k[2]) ?>"
@@ -445,9 +521,9 @@ $kindRows = [
             </div>
           </div>
           <div class="demo">
-            <div class="drow"><i class="ddot" style="background:<?= e($kindRows[0][1]) ?>"></i><span class="dsec" style="color:var(--text)">Pick up the milk</span></div>
-            <div class="drow"><i class="ddot" style="background:<?= e($kindRows[1][1]) ?>"></i><span class="dsec" style="color:var(--text)">Dinner, 7pm</span></div>
-            <div class="drow"><i class="ddot" style="background:<?= e($kindRows[3][1]) ?>"></i><span class="dsec" style="color:var(--muted)">Vet &mdash; overdue</span></div>
+            <div class="drow"><i class="ddot" style="background:<?= e($rowsK[0][1]) ?>"></i><span class="dsec" style="color:var(--text)">Pick up the milk</span></div>
+            <div class="drow"><i class="ddot" style="background:<?= e($rowsK[1][1]) ?>"></i><span class="dsec" style="color:var(--text)">Dinner, 7pm</span></div>
+            <div class="drow"><i class="ddot" style="background:<?= e($rowsK[3][1]) ?>"></i><span class="dsec" style="color:var(--muted)">Vet &mdash; overdue</span></div>
           </div>
         </div>
       </div>
