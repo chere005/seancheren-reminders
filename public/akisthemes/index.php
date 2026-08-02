@@ -286,6 +286,13 @@ $palettes = palettes_load($file);
        app holds nothing you would mind losing, and the two-press confirm is the guard. */
     .pal.editing .paledit { background: var(--accent); border-color: var(--accent);
                             color: var(--accent-ink); }
+    /* Colours are only changeable on the palette that is open. Outside it the swatches
+       are still shown at full strength — they are the point of the page — but they are
+       inert, so a stray tap on a colour can't quietly repaint a palette you were only
+       looking at. pointer-events rather than `disabled`, which would grey them out. */
+    .pal:not(.editing) .role input { pointer-events: none; }
+    .pal:not(.editing) .role input[type=color] { cursor: default; }
+    .pal.editing { border-color: var(--accent); }
     .palact { width: 28px; height: 28px; display: inline-flex; align-items: center;
               justify-content: center; border: 1px solid #333; border-radius: 999px;
               background: none; color: #999; font-size: 1rem; line-height: 1; cursor: pointer; flex: 0 0 auto; }
@@ -576,21 +583,35 @@ $palettes = palettes_load($file);
   // One palette at a time: opening one closes whatever was open, so there is never a
   // second live field further down the page that you have forgotten about. Never
   // persisted — the page always opens with nothing being edited.
+  // Keyboard focus has to be taken away too, or a swatch reached by Tab would still open
+  // its picker on a palette that is supposed to be inert.
+  function setInteractive(sec, on) {
+    sec.querySelectorAll('.role input').forEach(function (i) {
+      i.tabIndex = on ? 0 : -1;
+      if (i.type === 'text') { i.readOnly = !on; }
+    });
+  }
   function closeEditing() {
     document.querySelectorAll('.pal.editing').forEach(function (s) {
       s.classList.remove('editing');
+      setInteractive(s, false);
       var n = s.querySelector('.palname');
-      if (n) { n.readOnly = true; n.blur(); }
+      if (n) { n.readOnly = true; }
     });
+    // Dropping focus is what actually dismisses an open native colour picker.
+    if (document.activeElement && document.activeElement.blur) { document.activeElement.blur(); }
     document.body.classList.remove('editing');
   }
   function openEditing(sec) {
     closeEditing();
     sec.classList.add('editing');
     document.body.classList.add('editing');   // the back button becomes the x that closes it
+    setInteractive(sec, true);
     var n = sec.querySelector('.palname');
     if (n) { n.readOnly = false; n.focus(); n.select(); }
   }
+  // Everything starts inert; only the palette you open becomes editable.
+  document.querySelectorAll('.pal').forEach(function (s) { setInteractive(s, false); });
   document.querySelectorAll('.pal').forEach(function (sec) {
     var pen = sec.querySelector('.paledit');
     if (!pen) { return; }
@@ -601,6 +622,13 @@ $palettes = palettes_load($file);
   document.getElementById('exitEditBtn').addEventListener('click', closeEditing);
   document.addEventListener('keydown', function (ev) {
     if (ev.key === 'Escape') { closeEditing(); }
+  });
+  // Clicking anywhere outside the open palette closes it — which also drops focus, and
+  // that is what dismisses the colour picker. Bubble phase, so a click on another
+  // palette's pencil has already opened that one by the time this runs and is left be.
+  document.addEventListener('click', function (ev) {
+    var open = document.querySelector('.pal.editing');
+    if (open && !open.contains(ev.target)) { closeEditing(); }
   });
 </script>
 </body>
