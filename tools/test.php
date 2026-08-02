@@ -927,6 +927,37 @@ t('a note folder renames in place, carrying its notes and its prefs', function (
 // ---------------------------------------------------------------- 7. calendar
 area('calendar');
 
+t('reminder and note folder colours propagate to the calendar dots', function () {
+    $jar = login('example', 'examplepassword');
+    // Colour a reminder folder and drop a dated reminder in it.
+    $rc = app_palette('reminders')[4];
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColR'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColR', 'color' => $rc], $jar, true);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'ColR', 'folder' => 'ColR',
+        'section' => '', 'text' => 'col prop rem', 'due' => date('Y-m-d')], $jar);
+    // Colour a note folder and give it a dated note.
+    $nc = app_palette('notes')[3];
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColN'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColN', 'color' => $nc], $jar, true);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'ColN', 'folder' => 'ColN', 'section' => ''], $jar);
+    // Date that note (find it, save with today's date).
+    $nid = null;
+    foreach (stored('notes', 'example') as $n) { if (($n['type'] ?? '') !== 'section' && ($n['folder'] ?? '') === 'ColN') { $nid = $n['id']; } }
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'save', 'view' => 'All', 'id' => $nid,
+        'title' => 'col prop note', 'date' => date('Y-m-d'), 'body' => '', 'folder' => 'ColN', 'section' => ''], $jar);
+    // The calendar's byDay entries carry those folder colours.
+    $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
+    preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
+    $byDay = json_decode($m[1] ?? '{}', true);
+    $rem = $note = null;
+    foreach ($byDay[date('Y-m-d')] ?? [] as $it) {
+        if (($it['text'] ?? '') === 'col prop rem')  { $rem  = $it; }
+        if (($it['text'] ?? '') === 'col prop note') { $note = $it; }
+    }
+    eq($rc, $rem['color'] ?? null, "the reminder dot wears its folder's colour");
+    eq($nc, $note['color'] ?? null, "the note dot wears its folder's colour");
+});
+
 t('the day panel payload groups by day', function () {
     $jar = login('example', 'examplepassword');
     $r = req('GET', '/calendar/', [], $jar);
@@ -946,18 +977,32 @@ t('the add/edit modal hides Time and Repeat behind + buttons', function () {
     ok(strpos($b, 'id="mRepN"') < strpos($b, 'id="mRepUnit"'), 'the every-N count comes before the unit select');
 });
 
-t('the calendar draws a dot legend keyed by owner and kind', function () {
-    // example has events, dated reminders and dated notes seeded, so its own row lists all
-    // three kinds; each kind's glyph precedes its calendar/folder dots.
+t('the calendar ships the data its in-view legend is built from', function () {
+    // The legend is drawn in JS from the cells actually on screen, so it can shrink to the
+    // shown week(s) in week mode — the harness runs no JS, so this checks the ingredients the
+    // page hands that renderer: an empty container, the owners (with canonical order), the
+    // calendar-name map, the three kind glyphs, and the render call wired into the view apply.
     $jar = login('example', 'examplepassword');
     $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
-    has('<div class="cal-legend"', $r['body'], 'the legend renders');
-    // Each item is the kind glyph tinted the item's own colour (no separate dot).
-    ok(preg_match_all('/class="cleg-ico" style="color:#[0-9a-fA-F]{6}"/', $r['body']) >= 1,
-       'each item is a colour-tinted kind glyph');
+    has('<div class="cal-legend" id="calLegend"', $r['body'], 'the legend container renders');
     hasnt('cleg-dot', $r['body'], 'the separate colour dot is gone');
-    has('cleg-item', $r['body'], 'items still render with their names');
+    // The legend is empty until JS fills it — no server-rendered item elements (the CSS
+    // rules for .cleg-item still exist; it's the rendered class="cleg-item" that must not).
+    hasnt('class="cleg-item"', $r['body'], 'the legend is JS-built, not server-rendered');
+    has('const LEG_OWNERS', $r['body'], 'the owners key is shipped');
+    has('function renderLegend', $r['body'], 'the renderer is shipped');
+    has('renderLegend();', $r['body'], 'and is called when the view applies');
+    // The owners payload names example and carries a per-kind canonical order.
+    ok(preg_match('/const LEG_OWNERS = (\[.*?\]);/s', $r['body'], $m), 'the owners payload parses');
+    $owners = json_decode($m[1], true);
+    ok(is_array($owners) && count($owners) >= 1, 'at least the viewer is an owner');
+    eq('', $owners[0]['key'], "the viewer's own row has the empty owner key");
+    ok(isset($owners[0]['order']['event'], $owners[0]['order']['reminder'],
+       $owners[0]['order']['note']), 'each owner carries an order for all three kinds');
+    // The calendar-name map lets the JS name an event dot from its calendar id.
+    has('const LEG_CALS', $r['body'], 'the calendar-name map is shipped');
+    has('const LEG_ICONS', $r['body'], 'the three kind glyphs are shipped');
 });
 
 t("a day's reminders sort undated first, then oldest, then by time", function () {
