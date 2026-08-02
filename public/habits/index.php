@@ -34,12 +34,12 @@ function is_section(array $it): bool { return ($it['type'] ?? '') === 'section';
 
 /**
  * A habits section's colour, defaulting by position so a new section is distinct as
- * soon as it exists. Habits has no palette tier of its own — it borrows the lighter
- * "shared" set (app_palette(…, true)), which sits closer to this app's soft violet
- * than the saturated folder colours do. Stored on the section row itself, keyed by id
+ * soon as it exists. Habits wears its own tier of the suite's six hues — the muted
+ * slate shade (app_palette('habits')), which sits closer to this app's soft violet
+ * than the vivid folder colours do. Stored on the section row itself, keyed by id
  * like everything else here, rather than in a side file.
  */
-function habits_palette(): array { return app_palette('habits'); }   // its own tier now (a similar shade to the other apps)
+function habits_palette(): array { return app_palette('habits'); }
 
 function habit_section_color(array $s, int $i): string
 {
