@@ -286,16 +286,19 @@ function up_tier(string $label, array $colors, array $vars): string
 function up_demo(string $shape, array $mine, array $shared, array $vars, array $kinds = []): string
 {
     if ($shape === 'cal') {
-        // A month cell: a dot per event in its calendar's colour, then one for reminders
-        // and one for notes — the counts the calendar actually draws. A proposal board's
-        // kind overrides win over the live set.
-        $k = $kinds + up_kind_colors();
-        $d = fn($c) => '<i class="cdot" style="background:' . e($c) . '"></i>';
+        // A month cell as the calendar now draws it: the legend's kind icons, at most
+        // one of each, each in its item's colour. A proposal board's kind overrides win.
+        $k   = $kinds + up_kind_colors();
+        $svg = fn($p) => '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"'
+             . ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $p . '</svg>';
+        $ic  = fn(string $c, string $p) => '<i class="cico" style="color:' . e($c) . '">' . $svg($p) . '</i>';
+        $ev  = '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/>';
+        $rem = '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7.5 12.5l3 3 6-7"/>';
+        $nt  = '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9.5 13h6M9.5 17h4"/>';
         return '<div class="demo"><div class="cell"><span class="cnum">1</span><span class="cdots">'
-             . $d($mine[0]) . $d($mine[3]) . $d($shared[4])
-             . $d($k['--k-reminder'] ?? '#34d399') . $d($k['--k-note'] ?? '#8b6ef0')
+             . $ic($mine[0], $ev) . $ic($mine[3], $rem) . $ic($shared[4], $nt)
              . '</span></div><div class="cell today"><span class="cnum">2</span><span class="cdots">'
-             . $d($mine[2]) . $d($k['--k-overdue'] ?? '#f0a860') . '</span></div></div>';
+             . $ic($mine[2], $ev) . $ic($k['--k-overdue'] ?? '#f0a860', $rem) . '</span></div></div>';
     }
     if ($shape === 'habits') {
         // A month pie is a conic-gradient of the section colours, as the habits grid draws it.
@@ -439,8 +442,10 @@ $kindRows = [
             display: grid; gap: 0.2rem; }
     .cell.today { border: 2px solid var(--accent); }
     .cnum { font-size: 0.65rem; color: var(--text); }
-    .cdots { display: flex; gap: 3px; }
-    .cdot { width: 6px; height: 6px; border-radius: 999px; }
+    .cdots { display: flex; gap: 4px; }
+    .cico { display: inline-flex; align-items: center; justify-content: center;
+            width: 11px; height: 11px; }
+    .cico svg { display: block; }
     .pies { display: flex; gap: 0.35rem; }
     .pie { width: 26px; height: 26px; border-radius: 999px; display: block;
            border: 1px solid var(--line); }
