@@ -867,14 +867,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell.today { border-color: var(--accent); }
     .cell.today .num { color: var(--accent); font-weight: 700; }
     .cell.selected { border-color: var(--text); background: var(--surface-2); }
-    .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
-    .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
-    .cell .dot.reminder { background: var(--k-reminder); }
-    .cell .dot.reminder.overdue { background: var(--k-overdue); }
-    .cell .dot.reminder.done { background: var(--k-done); }
-    body:not(.show-done) .cell .dot.reminder.done { display: none; }
-    .cell .dot.note { background: var(--k-note); }
-    .cell .dot.event { background: var(--k-event); }
+    /* The legend's kind icons, at most one of each per day — the icon says what kinds
+       the day holds, its colour says whose calendar or folder; the panel has the rest. */
+    .cell .dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; min-height: 12px; }
+    .cell .ico { display: inline-flex; align-items: center; justify-content: center;
+                 width: 12px; height: 12px; color: var(--muted); }
+    .cell .ico svg { display: block; width: 11px; height: 11px; }
+    .cell .ico.reminder.done { color: var(--k-done) !important; }
+    body:not(.show-done) .cell .ico.reminder.done { display: none; }
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
     .cell.wk-hide { display: none; }
 
@@ -1272,54 +1272,51 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     $weekOf = function () use (&$cellNo) { return intdiv($cellNo++, 7); };
   ?>
   <?php
-    // One month cell: the number, then at most two event dots in their calendars'
-    // colours, one for the day's reminders and one for its notes. $other greys the
-    // days either side of the month — they're still tappable.
+    // One month cell: the number, then the legend's kind icons — at most one of each,
+    // in the legend's order (event, reminder, note), each wearing its item's colour.
+    // $other greys the days either side of the month — they're still tappable.
     $cell = function (string $ymd, int $num, bool $other, int $week) use ($byDay, $todayYmd): string {
         $events  = $byDay[$ymd] ?? [];
         $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
-        $hasNote = (bool) array_filter($events, fn($ev) => $ev['kind'] === 'note');
-        // The single reminder dot takes the worst state of the day's reminders:
-        // overdue beats open, and it only goes grey once every one of them is ticked.
+        // The reminder icon takes the worst state of the day's reminders: overdue beats
+        // open, and it only goes grey once every one of them is ticked.
         $remCls = '';
         if ($remDots) {
             $open    = array_filter($remDots, fn($ev) => !$ev['done']);
             $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
             $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
         }
-        // One dot per distinct calendar colour that day, not one per event — several
-        // events on the same calendar read as a single dot in that colour.
-        $dots = '';
-        $evColors = [];
+        $icons = '';
+        // One event icon, wearing the first event's calendar colour — a busy day reads
+        // from the count of *kinds*, and the panel has the per-calendar detail.
         foreach ($events as $ev) {
             if ($ev['kind'] !== 'event') { continue; }
-            $col = (string) ($ev['color'] ?? '');
-            if (!in_array($col, $evColors, true)) { $evColors[] = $col; }
-        }
-        foreach ($evColors as $col) {
-            $dots .= '<span class="dot event" style="background:' . e($col) . '"></span>';
+            $icons .= '<span class="ico event" style="color:' . e((string) ($ev['color'] ?? '')) . '">'
+                    . cal_legend_icon('event') . '</span>';
+            break;
         }
         if ($remDots) {
-            // Colour the single reminder dot by the folder of the "worst" reminder that
-            // day (overdue, else open, else done); state still rides in the class.
+            // Colour the reminder icon by the folder of the "worst" reminder that day
+            // (overdue, else open, else done); state still rides in the class.
             $repRem = null;
             foreach ($remDots as $rd) { if (!$rd['done'] && ($ymd < $todayYmd || !empty($rd['rolled']))) { $repRem = $rd; break; } }
             if (!$repRem) { foreach ($remDots as $rd) { if (!$rd['done']) { $repRem = $rd; break; } } }
             if (!$repRem) { $repRem = $remDots[0]; }
             $rc = (string) ($repRem['color'] ?? '');
-            $dots .= '<span class="dot reminder' . $remCls . '"'
-                   . ($rc !== '' ? ' style="background:' . e($rc) . '"' : '') . '></span>';
+            $icons .= '<span class="ico reminder' . $remCls . '"'
+                    . ($rc !== '' ? ' style="color:' . e($rc) . '"' : '') . '>'
+                    . cal_legend_icon('reminder') . '</span>';
         }
-        if ($hasNote) {
-            $noteColor = '';
-            foreach ($events as $ev) { if ($ev['kind'] === 'note') { $noteColor = (string) ($ev['color'] ?? ''); break; } }
-            $dots .= '<span class="dot note"'
-                   . ($noteColor !== '' ? ' style="background:' . e($noteColor) . '"' : '') . '></span>';
+        foreach ($events as $ev) {
+            if ($ev['kind'] !== 'note') { continue; }
+            $icons .= '<span class="ico note" style="color:' . e((string) ($ev['color'] ?? '')) . '">'
+                    . cal_legend_icon('note') . '</span>';
+            break;
         }
         $cls = 'cell' . ($other ? ' other' : '') . ($ymd === $todayYmd ? ' today' : '');
         return '<div class="' . $cls . '" data-date="' . $ymd . '" data-week="' . $week . '"'
              . ' role="button" tabindex="0"><div class="num">' . $num . '</div>'
-             . '<div class="dots">' . $dots . '</div></div>';
+             . '<div class="dots">' . $icons . '</div></div>';
     };
   ?>
   <div class="grid" id="calGrid">

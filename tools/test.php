@@ -995,6 +995,22 @@ t('the add/edit modal hides Time and Repeat behind + buttons', function () {
     ok(strpos($b, 'id="mRepN"') < strpos($b, 'id="mRepUnit"'), 'the every-N count comes before the unit select');
 });
 
+t('a month cell shows the legend icons, at most one of each kind', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/calendar/?ym=' . date('Y-m'), [], $jar)['body'];
+    has('class="ico event"', $b, 'days with events wear the calendar glyph');
+    has('class="ico reminder', $b, 'days with reminders wear the tick glyph');
+    hasnt('class="dot event"', $b, 'the old dots are gone');
+    // Never more than one icon of a kind in any one cell — the icon says which kinds
+    // the day holds; the panel carries the per-item detail.
+    foreach (array_slice(explode('<div class="cell', $b), 1) as $i => $chunk) {
+        $chunk = substr($chunk, 0, strpos($chunk, '</div></div>') ?: strlen($chunk));
+        foreach (['event', 'reminder', 'note'] as $kind) {
+            ok(substr_count($chunk, 'class="ico ' . $kind) <= 1, "cell $i has at most one $kind icon");
+        }
+    }
+});
+
 t('the calendar ships the data its in-view legend is built from', function () {
     // The legend is drawn in JS from the cells actually on screen, so it can shrink to the
     // shown week(s) in week mode — the harness runs no JS, so this checks the ingredients the
