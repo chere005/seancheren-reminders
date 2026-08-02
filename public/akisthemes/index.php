@@ -273,17 +273,19 @@ $palettes = palettes_load($file);
     .pal { border: 1px solid #262626; border-radius: 12px; margin-bottom: 1.1rem; overflow: hidden; }
     .palhead { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem;
                background: #161616; border-bottom: 1px solid #262626; }
-    /* The name reads as plain text until you turn editing on, then it is a field. Same
-       element either way, so switching modes shifts nothing. */
+    /* The name reads as plain text until that palette's pencil is on, then it is a field.
+       Same element either way, so turning editing on shifts nothing. Editing is per
+       palette rather than a mode for the whole page: only one is ever open, so the field
+       you are typing in is never in doubt. */
     .palname { flex: 1 1 auto; min-width: 0; background: none; border: 1px solid transparent;
                border-radius: 6px; color: #eee; font: 600 1rem inherit; padding: 0.2rem 0.4rem; }
-    body:not(.editing) .palname { pointer-events: none; }
-    body.editing .palname:hover { border-color: #333; }
+    .pal:not(.editing) .palname { pointer-events: none; }
+    .pal.editing .palname { border-color: #333; }
     .palname:focus { outline: none; border-color: var(--accent); background: #1a1a1a; }
-    /* Destructive control, so it is hidden unless editing — the suite's rule. Duplicate
-       is not destructive and stays. visibility, not display, so nothing moves. */
-    .paldel { visibility: hidden; }
-    body.editing .paldel { visibility: visible; }
+    /* The pencil lights up for whichever palette is open. Delete is always shown — this
+       app holds nothing you would mind losing, and the two-press confirm is the guard. */
+    .pal.editing .paledit { background: var(--accent); border-color: var(--accent);
+                            color: var(--accent-ink); }
     .palact { width: 28px; height: 28px; display: inline-flex; align-items: center;
               justify-content: center; border: 1px solid #333; border-radius: 999px;
               background: none; color: #999; font-size: 1rem; line-height: 1; cursor: pointer; flex: 0 0 auto; }
@@ -292,14 +294,17 @@ $palettes = palettes_load($file);
     /* The strip is the palette read at a glance; the grid is where it is edited. */
     .strip { display: flex; height: 34px; }
     .strip i { flex: 1; display: block; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-            gap: 0.5rem; padding: 0.75rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+            gap: 0.5rem 0.75rem; padding: 0.75rem; }
     .role { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
     .role input[type=color] { width: 30px; height: 30px; padding: 0; border: 1px solid #333;
                               border-radius: 6px; background: none; cursor: pointer; flex: 0 0 auto; }
-    .role .rl { min-width: 0; }
-    .role .rn { font-size: 0.8rem; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .role .rj { font-size: 0.68rem; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* These two must be blocks: text-overflow does nothing on an inline span, so the
+       longer descriptions ran on underneath the hex field instead of ellipsing. */
+    .role .rl { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+    .role .rn, .role .rj { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .role .rn { font-size: 0.8rem; color: #ddd; }
+    .role .rj { font-size: 0.68rem; color: #666; }
     .role input[type=text] { width: 74px; background: #1a1a1a; border: 1px solid #333;
                              border-radius: 6px; color: #ccc; font: 0.72rem ui-monospace, monospace;
                              padding: 0.25rem 0.3rem; text-align: center; flex: 0 0 auto; }
@@ -346,8 +351,9 @@ $palettes = palettes_load($file);
       <button type="button" class="backbtn exitedit" id="exitEditBtn" title="Done editing" aria-label="Leave edit mode">&times;</button>
       <h1>Themes</h1>
     </div>
+    <?php // No page-wide Edit button: editing belongs to one palette at a time, so the
+          // pencil lives on the palette. The x above still closes whichever is open. ?>
     <div class="hright">
-      <button type="button" class="hedit" id="editBtn" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
       <span class="who"><?= e($me) ?></span>
     </div>
   </header>
@@ -380,6 +386,9 @@ $palettes = palettes_load($file);
     <section class="pal" id="p-<?= e($p['id']) ?>" data-id="<?= e($p['id']) ?>">
       <div class="palhead">
         <input class="palname" value="<?= e($p['name']) ?>" maxlength="40" aria-label="Palette name" readonly>
+        <?php // Edit, then duplicate, then delete. Edit is per-palette — only one is ever
+              // open, so the field you are typing in is never ambiguous. ?>
+        <button type="button" class="palact paledit" title="Rename" aria-label="Rename">&#9998;&#65038;</button>
         <form method="post" style="display:inline-flex">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="add">
@@ -405,8 +414,8 @@ $palettes = palettes_load($file);
           <div class="role">
             <input type="color" value="<?= e($c[$role]) ?>" data-role="<?= e($role) ?>" aria-label="<?= e($meta[0]) ?>">
             <span class="rl">
-              <span class="rn"><?= e($meta[0]) ?></span><br>
-              <span class="rj"><?= e($meta[1]) ?></span>
+              <span class="rn"><?= e($meta[0]) ?></span>
+              <span class="rj" title="<?= e($meta[1]) ?>"><?= e($meta[1]) ?></span>
             </span>
             <input type="text" value="<?= e($c[$role]) ?>" data-hex="<?= e($role) ?>" maxlength="7" spellcheck="false">
           </div>
@@ -563,25 +572,35 @@ $palettes = palettes_load($file);
   });
   document.getElementById('addCancel').addEventListener('click', function () { row.classList.remove('on'); });
 
-  // --- Edit mode -----------------------------------------------------------------
-  // Deliberately never persisted — the page always opens out of it, so arriving here
-  // can't leave you one tap from deleting a palette. The name fields are readonly
-  // until it is on, which is what makes the pencil mean something.
-  function setEditing(on) {
-    document.body.classList.toggle('editing', on);
-    document.querySelectorAll('.palname').forEach(function (n) { n.readOnly = !on; });
-    if (!on) {
-      // Leaving edit mode disarms any delete that was waiting for its second press.
-      document.querySelectorAll('.needs-confirm.armed').forEach(function (b) { b.classList.remove('armed'); });
-    }
+  // --- Editing a name ---------------------------------------------------------------
+  // One palette at a time: opening one closes whatever was open, so there is never a
+  // second live field further down the page that you have forgotten about. Never
+  // persisted — the page always opens with nothing being edited.
+  function closeEditing() {
+    document.querySelectorAll('.pal.editing').forEach(function (s) {
+      s.classList.remove('editing');
+      var n = s.querySelector('.palname');
+      if (n) { n.readOnly = true; n.blur(); }
+    });
+    document.body.classList.remove('editing');
   }
-  document.getElementById('editBtn').addEventListener('click', function () {
-    setEditing(!document.body.classList.contains('editing'));
+  function openEditing(sec) {
+    closeEditing();
+    sec.classList.add('editing');
+    document.body.classList.add('editing');   // the back button becomes the x that closes it
+    var n = sec.querySelector('.palname');
+    if (n) { n.readOnly = false; n.focus(); n.select(); }
+  }
+  document.querySelectorAll('.pal').forEach(function (sec) {
+    var pen = sec.querySelector('.paledit');
+    if (!pen) { return; }
+    pen.addEventListener('click', function () {
+      if (sec.classList.contains('editing')) { closeEditing(); } else { openEditing(sec); }
+    });
   });
-  document.getElementById('exitEditBtn').addEventListener('click', function () { setEditing(false); });
+  document.getElementById('exitEditBtn').addEventListener('click', closeEditing);
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && document.body.classList.contains('editing')
-        && document.activeElement === document.body) { setEditing(false); }
+    if (ev.key === 'Escape') { closeEditing(); }
   });
 </script>
 </body>
