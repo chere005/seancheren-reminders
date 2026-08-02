@@ -1587,6 +1587,18 @@ t('every app palette offers six colours and validates its own', function () {
     }
 });
 
+t('the palettes viewer grades every hex label by its contrast', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/userpalettes/', [], $jar);
+    eq(200, $r['status'], 'the viewer renders');
+    // Every rated swatch label carries a graded colour (red poor → green good) and sits
+    // on the little surface chip; a label with no style would mean the grading is gone.
+    $graded = preg_match_all('/<b style="color:#[0-9a-f]{6}">/', $r['body']);
+    ok($graded > 300, "the labels are graded ($graded found)");
+    has('background: var(--surface-2)', $r['body'], 'the label sits on a chip');
+    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+});
+
 t('the folder migration is idempotent', function () {
     $old = [
         ['id' => 'a', 'type' => 'section', 'name' => 'Calendar', 'folder' => 'General'],
