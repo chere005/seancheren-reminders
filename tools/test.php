@@ -3083,6 +3083,81 @@ t('an empty message is not stored', function () {
     eq($before, count(store_read($file)), 'whitespace is nothing');
 });
 
+// ---------------------------------------------------------------------------- themes
+// A workbench for building colour palettes. The point of these is the boundary: it seeds
+// itself from the bookshelf's eight but is a separate app, so editing here must never
+// reach that one — and every value it stores ends up inside a style attribute, so nothing
+// but a #rrggbb may ever be written.
+area('themes');
+
+t('the palette workbench is behind the login and opens with the eight starters', function () {
+    $r = req('GET', '/akisthemes/');
+    has('Sign in', $r['body'], 'signed out you get the login page');
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/akisthemes/', [], $jar);
+    eq(200, $r['status'], 'it renders for a signed-in user');
+    eq(8, substr_count($r['body'], 'class="pal"'), 'seeded with the eight starters');
+    eq(96, substr_count($r['body'], 'input type="color"'), 'twelve editable roles each');
+    foreach (['Midnight', 'Neon', 'Forest'] as $n) { has('value="' . $n . '"', $r['body'], "$n is there"); }
+    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+});
+
+t('a colour change is stored, and only a real colour in a real role', function () {
+    $jar  = login('example', 'examplepassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    $id = $m[1];
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--accent', 'hex' => '#ff0000'], $jar, true);
+    has('"ok":true', $r['body'], 'a good colour is accepted');
+    has('#ff0000', req('GET', '/akisthemes/', [], $jar)['body'], 'and it stuck');
+    // Both of these end up inside style="…", so neither may ever be written.
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--accent', 'hex' => 'javascript:alert(1)'], $jar, true);
+    has('"ok":false', $r['body'], 'a non-colour is refused');
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--evil', 'hex' => '#112233'], $jar, true);
+    has('"ok":false', $r['body'], 'an unknown role is refused, and says so');
+    hasnt('--evil', req('GET', '/akisthemes/', [], $jar)['body'], 'and nothing was written');
+});
+
+t('palettes can be added and deleted, and deleting takes two presses', function () {
+    $jar  = login('example', 'examplepassword');
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add', 'name' => 'Workbench one'], $jar);
+    $b = req('GET', '/akisthemes/', [], $jar)['body'];
+    has('value="Workbench one"', $b, 'the new palette is there');
+    eq(9, substr_count($b, 'class="pal"'), 'nine now');
+    preg_match('/id="p-([a-f0-9]+)"/', $b, $m);
+    $id = $m[1];   // new rows land at the top
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id], $jar);
+    eq(9, substr_count(req('GET', '/akisthemes/', [], $jar)['body'], 'class="pal"'),
+        'an unconfirmed delete destroys nothing');
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id, 'confirm' => '1'], $jar);
+    eq(8, substr_count(req('GET', '/akisthemes/', [], $jar)['body'], 'class="pal"'),
+        'the confirmed one does');
+});
+
+t("editing a palette never reaches Aki's Bookshelf", function () {
+    // The whole reason this app is separate. It seeds from the same eight names, so the
+    // only thing proving they are not shared is that a change on one side stays invisible
+    // on the other.
+    ensure_account('aki', 'akipassword');
+    $jar  = login('aki', 'akipassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $m[1], 'role' => '--bg', 'hex' => '#abcdef'], $jar, true);
+    has('#abcdef', req('GET', '/akisthemes/', [], $jar)['body'], 'the workbench changed');
+    $shelf = req('GET', '/akisbookshelf/', [], $jar)['body'];
+    hasnt('#abcdef', $shelf, 'the bookshelf did not');
+    has('--bg: #111111', $shelf, 'it still wears its own Midnight');
+});
+
 // ---------------------------------------------------------------- Aki's Bookshelf
 // One username's app, sitting behind the shared login. The gate is the only thing
 // between it and everyone else who has an account on the suite.

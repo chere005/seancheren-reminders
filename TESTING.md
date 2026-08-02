@@ -282,6 +282,15 @@ anonymous write.
 Open to anyone, no login. A message posts and shows. A message and a name are escaped
 rather than rendered. Whitespace is not a message.
 
+### `themes`
+The palette workbench (`public/akisthemes/`). Behind the login; opens seeded with the eight
+starters, twelve editable roles each. A colour is stored only when it is a real `#rrggbb` in
+a real role — a `javascript:` value and an unknown role are both refused, and the refusal is
+reported rather than being reported as success. Add works, delete takes two presses. The one
+that matters most: **editing a palette here leaves Aki's Bookshelf untouched**, which is the
+entire reason the app is separate. **Not covered:** the live preview card, the contrast chips
+and the colour picker are all JS, so how any of it looks or feels is by eye.
+
 ### `bookshelf`
 Behind the shared login. A signed-in stranger gets the refusal page and none of the app's
 markup. Aki — made through the real sign-up — gets the app.
