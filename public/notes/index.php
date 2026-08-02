@@ -243,15 +243,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'delete_folder') {
         $name  = (string) ($_POST['name'] ?? '');
         folders_delete($cfg['data_dir'], 'notes', $name);
-        // If the folder is still there, the delete was refused (the permanent "General") —
-        // don't touch its notes.
+        // If the folder is still there, the delete was refused (the last folder) — don't
+        // touch its notes.
         if (in_array($name, folders_load($cfg['data_dir'])['notes'], true)) {
             header('Location: ' . _self_path() . '?folder=All' . (!empty($_POST['edit']) ? '&edit=1' : '') . '&fm=1');
             exit;
         }
-        $notes = load_notes($dataFile);
+        // Move the folder's notes into the Manage-folders default folder + its default
+        // section (validated), the same as Reminders — not a hardcoded fallback.
+        $destFolder = folder_default_get($cfg['data_dir'], 'notes');
+        $notes = sections_normalize(load_notes($dataFile), folders_load($cfg['data_dir'])['notes']);
+        $destSecs = [];
+        foreach ($notes as $it) {
+            if (is_section($it) && ($it['folder'] ?? FOLDER_DEFAULT) === $destFolder) { $destSecs[] = (string) $it['name']; }
+        }
+        $defSecRaw = folder_default_section_get($cfg['data_dir'], 'notes');
+        $destSec   = in_array($defSecRaw, $destSecs, true) ? $defSecRaw : ($destSecs[0] ?? SECTION_DEFAULT_NAME);
         foreach ($notes as &$n) {
-            if (!is_section($n) && ($n['folder'] ?? FOLDER_DEFAULT) === $name) { $n['folder'] = FOLDER_DEFAULT; }
+            if (!is_section($n) && ($n['folder'] ?? FOLDER_DEFAULT) === $name) { $n['folder'] = $destFolder; $n['section'] = $destSec; }
         }
         unset($n);
         save_notes($dataFile, $notes);
@@ -920,13 +929,14 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
     /* The "+" that adds a section to this folder — right of its name, always shown so a
        section can be added without first entering edit mode. */
+    /* The + that adds a section wears the section-title colour (gold). */
     .fsec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
-      color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #4a3f2a;
+      color: #f0b429; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .fsec-add:hover { border-color: #888; color: #fff; }
+    .fsec-add:hover { border-color: #f0b429; color: #f0b429; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Every section — named
@@ -947,13 +957,14 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     /* Same grey outlined pill as "+ Section" on the list bar (.listedit) — the same act,
        just against one section — only kept at its small icon size. */
+    /* The + that adds a note wears the theme (accent) colour. */
     .sec-add {
-      flex: 0 0 auto; background: none; border: 1px solid #333; color: #ccc;
+      flex: 0 0 auto; background: none; border: 1px solid #2a4a3d; color: var(--accent);
       border-radius: 999px; width: 20px; height: 20px; font-size: 0.85rem; line-height: 1;
       cursor: pointer; font-family: inherit; display: inline-flex; align-self: center;
       align-items: center; justify-content: center; padding: 0;
     }
-    .sec-add:hover { border-color: #888; color: #fff; }
+    .sec-add:hover { border-color: var(--accent); color: var(--accent); }
     .section-del {
       background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
       padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;

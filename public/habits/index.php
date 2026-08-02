@@ -90,11 +90,13 @@ function msec_hidden_set(string $prefsFile, array $hidden): void
 // The "+" that adds a habit to a section — it rides in the section header, right of the
 // name, and shows whether or not you're in edit mode. Tapping it swaps the button for an
 // inline name field (wireAdd), the way "+ Section" does elsewhere.
-function render_habit_add(string $section, string $csrf): void
+function render_habit_add(string $section, string $csrf, string $color = ''): void
 {
     $id = 'addh-' . $section;
+    // The + wears the section's own colour, so it reads as "add to *this* section".
+    $style = preg_match('/^#[0-9a-fA-F]{6}$/', $color) ? ' style="color:' . e($color) . ';border-color:' . e($color . '66') . '"' : '';
     ?>
-    <button type="button" class="hsec-add addhabit" data-target="<?= e($id) ?>"
+    <button type="button" class="hsec-add addhabit"<?= $style ?> data-target="<?= e($id) ?>"
             title="Add habit" aria-label="Add habit"><?= plus_icon_svg(13) ?></button>
     <form method="post" action="" class="hadd-form" id="<?= e($id) ?>" hidden
           onsubmit="return this.name.value.trim()!==''">
@@ -626,26 +628,33 @@ function render_habit_section_modal(array $sections, string $csrf): void
                   <?php endforeach; ?>
                 </form>
               </details>
-              <?php // The name is an editable field: Enter or blur posts rename_section by id
-                    // and reopens the manager (mgr=1). Uses the shared .frename machinery. ?>
-              <form method="post" action="" class="frename-form">
-                <input type="hidden" name="csrf" value="<?= $csrf ?>">
-                <input type="hidden" name="action" value="rename_section">
-                <input type="hidden" name="mgr" value="1">
-                <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
-                <input type="hidden" name="name" value="<?= htmlspecialchars((string) ($s['name'] ?? ''), ENT_QUOTES) ?>">
-                <input class="fname frename" name="newname" value="<?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?>"
-                       maxlength="40" autocomplete="off" aria-label="Section name">
-              </form>
-              <?php if (!$only): ?>
-                <form method="post" action="" style="display:inline">
+              <?php // The name reads as plain text; the pencil in the actions turns it into a
+                    // field that posts rename_section by id (mgr=1). The last section shows the
+                    // pencil only — it can be renamed but not deleted. ?>
+              <span class="fname-cell">
+                <span class="fname frename-label"><?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?></span>
+                <form method="post" action="" class="frename-form" hidden>
                   <input type="hidden" name="csrf" value="<?= $csrf ?>">
-                  <input type="hidden" name="action" value="delete_section">
+                  <input type="hidden" name="action" value="rename_section">
                   <input type="hidden" name="mgr" value="1">
                   <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
-                  <button type="submit" class="fdel needs-confirm" title="Delete section">&times;</button>
+                  <input type="hidden" name="name" value="<?= htmlspecialchars((string) ($s['name'] ?? ''), ENT_QUOTES) ?>">
+                  <input class="fname frename" name="newname" value="<?= htmlspecialchars((string) ($s['name'] ?? 'Section'), ENT_QUOTES) ?>"
+                         maxlength="40" autocomplete="off" aria-label="Section name">
                 </form>
-              <?php endif; ?>
+              </span>
+              <span class="frow-actions">
+                <button type="button" class="frename-edit" title="Rename" aria-label="Rename"><?= pencil_icon_svg() ?></button>
+                <?php if (!$only): ?>
+                  <form method="post" action="" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                    <input type="hidden" name="action" value="delete_section">
+                    <input type="hidden" name="mgr" value="1">
+                    <input type="hidden" name="id" value="<?= htmlspecialchars($sid, ENT_QUOTES) ?>">
+                    <button type="submit" class="fdel needs-confirm" title="Delete section">&times;</button>
+                  </form>
+                <?php endif; ?>
+              </span>
             </li>
           <?php endforeach; ?>
         </ul>
@@ -690,6 +699,18 @@ function render_habit_section_modal(array $sections, string $csrf): void
         fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body }).catch(function () {});
         var sum = det && det.querySelector('summary'); if (sum) sum.style.background = col;
         if (det) det.open = false;
+        // Repaint the grid live — the section's name wash and every row/cell that carries its
+        // colour — so a recolour applies without a refresh.
+        try {
+          var sid = f.querySelector('input[name=id]').value;
+          var tint = /^#[0-9a-fA-F]{6}$/.test(col) ? col + '33' : 'transparent';
+          document.querySelectorAll('.hsection[data-section="' + sid + '"] .hsec-wash').forEach(function (el) { el.style.background = tint; });
+          document.querySelectorAll('.hname[data-section="' + sid + '"], .cell[data-section="' + sid + '"]').forEach(function (el) {
+            el.style.setProperty('--hc', col); el.style.setProperty('--hc-soft', col + '24'); el.style.setProperty('--hc-line', col + '66');
+          });
+          document.querySelectorAll('.hsec-add[data-target="addh-' + sid + '"]').forEach(function (b) { b.style.color = col; b.style.borderColor = col + '66'; });
+        } catch (_) {}
+        dirty = true;
       });
 
       // Drag a row by its handle to reorder the sections; on drop, POST the new order
@@ -1121,7 +1142,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
                   '<input type="hidden" name="id" value="' . e($s['id']) . '">') ?>
           </span>
           <?php // The "+" to add a habit to this section, right of the name, always shown. ?>
-          <?php render_habit_add((string) $s['id'], $csrf); ?>
+          <?php render_habit_add((string) $s['id'], $csrf, $scol); ?>
           <form method="post" action="" class="hsec-del" style="display:inline">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete_section">

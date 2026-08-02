@@ -912,9 +912,10 @@ t('a note folder renames in place, carrying its notes and its prefs', function (
     $moved = '';
     foreach (stored('notes', 'example') as $n) { if (($n['id'] ?? '') === $id) { $moved = $n['folder'] ?? ''; } }
     eq('Reborn', $moved, 'the note in it moved with the rename');
-    // The permanent folder is not renameable, and nothing may take a fixed name.
-    ok(!folders_rename(datadir(), 'notes', 'General', 'Misc'), 'the fixed folder is not renameable');
-    ok(!folders_rename(datadir(), 'notes', 'Reborn', 'General'), 'a rename onto a fixed name is refused');
+    // Notes has no permanent folder now — even "General" is ordinary (not fixed), so it can
+    // be renamed. A rename onto a name that already exists is still refused.
+    ok(!folder_is_fixed('notes', 'General'), '"General" is not a fixed folder in notes');
+    ok(!folders_rename(datadir(), 'notes', 'Reborn', 'General'), 'a rename onto an existing name is refused');
     // The list heading is an editable field in the list view (out of edit mode a plain label).
     has('class="folder-label foldertitle', req('GET', '/notes/?folder=All', [], $jar)['body'],
         'the folder heading renders as a rename field');
@@ -2613,6 +2614,37 @@ t('sections_normalize merges duplicate same-named sections without losing items 
     $items = array_values(array_filter($out, fn($x) => ($x['type'] ?? '') !== 'section'));
     eq(2, count($items), 'both items survive the merge');
     foreach ($items as $it) { eq('General', $it['section'], 'and still point at the surviving section'); }
+});
+
+t('notes has no permanent folder; the last one is undeletable but renameable', function () {
+    // Notes' "General" is ordinary now (not fixed) — deletable when others exist, renameable
+    // always. But an app always keeps at least one folder: the last can't be deleted.
+    ok(folders_fixed('notes') === [], 'notes declares no permanent folder');
+    ok(!folder_is_fixed('notes', 'General'), 'General is not fixed');
+    // Reminders still has exactly "Calendar" permanent.
+    ok(folders_fixed('reminders') === ['Calendar'], 'reminders keeps only Calendar permanent');
+    // Deleting down to the last notes folder is refused (a fresh scratch user for isolation).
+    $_SESSION['user'] = 'lastfoldertest';
+    folders_add(datadir(), 'notes', 'Solo');           // now: [General, Solo] (General seeded)
+    // delete everything except one, then the last delete must be refused.
+    folders_delete(datadir(), 'notes', 'General');     // -> [Solo]
+    $one = folders_load(datadir(), 'lastfoldertest')['notes'];
+    ok(count($one) === 1, 'down to one notes folder');
+    folders_delete(datadir(), 'notes', $one[0]);       // refused — it's the last
+    eq($one, folders_load(datadir(), 'lastfoldertest')['notes'], 'the last folder is never deleted');
+    $_SESSION['user'] = 'example';
+});
+
+t('manage menus show the name as text with a pencil to rename (last row: pencil, no ×)', function () {
+    $jar = login('example', 'examplepassword');
+    foreach (['/reminders/', '/notes/'] as $page) {
+        $b = req('GET', $page, [], $jar)['body'];
+        has('class="frename-edit"', $b, "$page folder manager carries a rename pencil");
+        has('frename-label', $b, "$page name reads as a plain label");
+    }
+    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    has('class="frename-edit"', $h, 'habits section manager carries a rename pencil');
+    has('frename-label', $h, 'and the section name reads as a label');
 });
 
 t('folders reorder and keep every folder', function () {
