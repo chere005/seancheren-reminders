@@ -155,39 +155,36 @@ const UP_PROPOSALS = [
 ];
 
 /**
- * Draft 3 — the newest sketch: four shades of each hue leaned apart within the family,
- * not just lightened. Reminders stays the vivid anchor; calendar is electric-deep with a
- * touch of violet lean; notes leans the other way and brightens (sky blue, rose red);
- * habits leans clockwise at full saturation (indigo, crimson, amber). Every own colour
- * was walked to clear 3:1 on Midnight's card. Cream is untuned here on purpose — its
- * board shows honestly how much of this draft survives a light page.
+ * Draft 1, kept for the record — the earlier lightness tiers (vivid / deep / light /
+ * dark, same hue throughout), frozen at the values the apps used before the leaned
+ * palette went live. Drawn so the iterations stay comparable side by side.
  */
-const UP_DRAFT3 = [
+const UP_DRAFT1 = [
     'reminders' => [['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'],
                     ['#aecbf8', '#f6b4b2', '#baedcf', '#fad1ad', '#d3b6f1', '#ced2d9']],
-    'calendar'  => [['#0379f6', '#ed0d10', '#2ad05f', '#fa6800', '#803ce7', '#6b778f'],
-                    ['#8ec3fb', '#f79293', '#9feab7', '#fdbb8c', '#c6a7f4', '#bcc2cd']],
-    'notes'     => [['#7dc2ed', '#e9818a', '#8fdb9d', '#efa37b', '#a088e2', '#adb2bd'],
-                    ['#b8ddf5', '#f3babf', '#c1ebc9', '#f6ccb6', '#cbbeef', '#d2d5db']],
-    'habits'    => [['#3e53ef', '#e44525', '#3ecb9f', '#f09a19', '#b131d8', '#758094'],
-                    ['#9fa9f7', '#f2a292', '#9fe5cf', '#f8cd8c', '#d898ec', '#bac0ca']],
+    'calendar'  => [['#0361f6', '#ee140d', '#2ad070', '#fa7400', '#7d1bdf', '#6b778f'],
+                    ['#8eb8fb', '#f79592', '#9feabf', '#fdc08c', '#c598f1', '#bcc2cd']],
+    'notes'     => [['#84aceb', '#e78c89', '#94dbb2', '#edb482', '#b88ee1', '#b0b5bf'],
+                    ['#c2d6f5', '#f3c6c4', '#caedd9', '#f6dac1', '#dcc7f0', '#d8dadf']],
+    'habits'    => [['#3a77d9', '#d34641', '#53c081', '#dc8437', '#8a4aca', '#7e8695'],
+                    ['#a6c2ee', '#ebacaa', '#b2e3c6', '#efc8a5', '#caaee7', '#c5c9cf']],
 ];
 
 /**
- * Every theme this page draws a board for, grouped into drafts: Draft 1 is the suite's
- * own eight themes (THEMES, lib/auth.php) plus anything built in the Themes workbench,
- * all wearing the palette the apps really use; Draft 2 is the four II proposals above;
- * Draft 3 is the leaned sketch, drawn on the same four themes. A workbench palette is
- * the same twelve roles under the same names, so everything lands in one shape and
- * renders through one path; a later-draft board additionally carries its own item
- * palette and kind overrides.
+ * Every theme this page draws a board for, grouped into drafts, newest first: Draft 3
+ * is the suite's own eight themes (THEMES, lib/auth.php) plus anything built in the
+ * Themes workbench, all wearing the leaned palette the apps really use now; Draft 2 is
+ * the four II proposals above; Draft 1 is the frozen earlier tiers, on the same four
+ * themes. A workbench palette is the same twelve roles under the same names, so
+ * everything lands in one shape and renders through one path; a non-live board
+ * additionally carries its own item palette and kind overrides.
  */
 function up_themes(string $file): array
 {
     $out = [];
     foreach (THEMES as $key => $row) {
         $out[] = ['key' => 'suite-' . $key, 'name' => $row[0], 'src' => 'suite theme',
-                  'vars' => theme_vars($key)['vars'], 'draft' => 1];
+                  'vars' => theme_vars($key)['vars'], 'draft' => 3];
     }
     foreach (store_read($file) as $p) {
         $vars = [];
@@ -199,7 +196,7 @@ function up_themes(string $file): array
         if (!isset($vars['--bg'], $vars['--surface'], $vars['--text'], $vars['--line'])) { continue; }
         $out[] = ['key'  => 'user-' . (string) ($p['id'] ?? count($out)),
                   'name' => (string) ($p['name'] ?? 'Untitled'), 'src' => 'from Themes',
-                  'vars' => $vars, 'draft' => 1];
+                  'vars' => $vars, 'draft' => 3];
     }
     foreach (UP_PROPOSALS as $i => [$name, $base, $over, $pal, $kinds]) {
         $out[] = ['key' => 'prop-' . $i, 'name' => $name, 'src' => 'proposal',
@@ -207,8 +204,8 @@ function up_themes(string $file): array
                   'pal' => $pal, 'kinds' => $kinds, 'draft' => 2];
     }
     foreach (['midnight', 'forest', 'olive', 'sage'] as $i => $base) {
-        $out[] = ['key' => 'd3-' . $i, 'name' => THEMES[$base][0], 'src' => 'draft 3',
-                  'vars' => theme_vars($base)['vars'], 'pal' => UP_DRAFT3, 'draft' => 3];
+        $out[] = ['key' => 'd1-' . $i, 'name' => THEMES[$base][0], 'src' => 'draft 1',
+                  'vars' => theme_vars($base)['vars'], 'pal' => UP_DRAFT1, 'draft' => 1];
     }
     return $out;
 }
@@ -482,9 +479,10 @@ $kindRows = [
     asking of a palette: a swatch under <b>3:1</b> against its own background is flagged, since a
     dot or a wash that faint is one you have to go looking for. Nothing here is editable —
     page palettes are built in <b>Themes</b>. The boards are grouped into <b>drafts</b>:
-    Draft 1 is the palette the apps read today, on every theme; Draft 2 is the four II
-    retunes, on which every swatch clears 3:1; Draft 3 is the newest sketch. Only Draft 1
-    is real — the later drafts are drawn to be judged, read by nothing.
+    Draft 3 — the leaned palette — is what the apps read today, on every theme; Draft 2
+    is the four II retunes, on which every swatch clears 3:1; Draft 1 is the earlier
+    lightness tiers, kept for the record. Only Draft 3 is real — the older drafts are
+    history, read by nothing.
   </p>
 
   <div class="toolbar">
@@ -496,9 +494,9 @@ $kindRows = [
     <p class="empty">No themes to draw.</p>
   <?php endif; ?>
 
-  <?php $draftNames = [1 => 'Draft 1 — what the apps use today',
+  <?php $draftNames = [3 => 'Draft 3 — live: what the apps use today',
                        2 => 'Draft 2 — the II retunes: everything clears 3:1',
-                       3 => 'Draft 3 — four shades leaned apart within each hue'];
+                       1 => 'Draft 1 — the earlier lightness tiers'];
         $lastDraft = 0;
         foreach ($themes as $t): $v = $t['vars'];
         // A later-draft board carries its own item palette and kind overrides; every

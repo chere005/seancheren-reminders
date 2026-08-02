@@ -2,12 +2,14 @@
 /**
  * The suite's colour palettes, generated from one base set of six hues.
  *
- * Every app offers the same six hues (blue, red, green, orange, purple, grey), but each
- * app wears them at its own distinct shade: reminders vivid (the base itself), calendar
- * deep and rich, notes soft and dusty, habits muted slate. So a blue folder, a blue
- * calendar and a blue habit section are all recognisably blue — and recognisably not
- * each other's blue. Each app's *shared* (a partner's) set is that app's own six pushed
- * clearly toward white, a matching lighter version of the same shade, so "mine vs
+ * Every app offers the same six hues (blue, red, green, orange, purple, grey), and each
+ * wears them as its own unmistakable shade — not a lightness ladder but a lean within
+ * the family: reminders is the vivid anchor (the base itself); calendar is electric
+ * deep with a touch of violet lean; notes leans the other way and brightens (sky blue,
+ * rose red); habits leans clockwise at full strength (indigo, crimson, amber). Every
+ * own colour additionally clears 3:1 against the dark themes' card (#1a1a1a), so a dot
+ * is never a thing you squint for. Each app's *shared* (a partner's) set is its own six
+ * mixed toward white — a matching lighter version of the same shade, so "mine vs
  * theirs" reads the same way in every app. Kept generated (not hand-typed) so the
  * tiers stay consistent and easy to tune.
  */
@@ -16,15 +18,21 @@
 const PAL_BASE = ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aaa'];
 
 /**
- * Per app: [saturation multiplier, lightness shift, shared lighten fraction]. The first
- * two shape the app's own shade from the base (which sits at HSL lightness 0.62
- * throughout); the third mixes that own shade toward white for the partner's tier.
+ * How much of an app's hue lean each hue takes: red and orange start only 26° apart, so
+ * they lean at half strength or they walk into each other, and grey has no hue to lean.
+ */
+const PAL_LEAN = [1.0, 0.5, 1.0, 0.5, 1.0, 0.0];
+
+/**
+ * Per app: [hue lean °, saturation multiplier, HSL lightness (null = the base as-is),
+ * grey lightness, shared lighten fraction]. Grey can only separate by lightness, so it
+ * gets its own rung rather than riding the app's coloured one.
  */
 const PAL_TONES = [
-    'reminders' => [1.00,  0.00, 0.55],   // vivid — the base itself
-    'calendar'  => [1.15, -0.13, 0.55],   // deep and rich
-    'notes'     => [0.85,  0.10, 0.50],   // light and clearly coloured
-    'habits'    => [0.80, -0.08, 0.55],   // dark and clearly coloured
+    'reminders' => [  0, 1.00, null, null,  0.55],   // the vivid anchor
+    'calendar'  => [ -6, 1.15, 0.49, 0.47,  0.55],   // electric deep, violet-leaned
+    'notes'     => [-14, 0.90, 0.71, 0.71,  0.47],   // leaned back and brightened: sky, rose
+    'habits'    => [ 16, 1.00, 0.52, 0.545, 0.50],   // leaned on at full strength: indigo, crimson, amber
 ];
 
 /** #rrggbb → [hue 0–360, saturation 0–1, lightness 0–1]. */
@@ -75,12 +83,37 @@ function pal_lighten(string $hex, float $f): string
     return sprintf('#%02x%02x%02x', $mix($r), $mix($g), $mix($b));
 }
 
-/** An app's shade of one base hue: saturation scaled, lightness shifted, both clamped. */
-function pal_tone(string $hex, float $sMul, float $lShift): string
+/** Relative luminance of a #rrggbb (the WCAG one). */
+function pal_lum(string $hex): float
 {
-    if ($sMul == 1.0 && $lShift == 0.0) { return $hex; }   // the base, byte-identical
+    $lin = function (int $p) use ($hex): float {
+        $c = hexdec(substr($hex, $p, 2)) / 255;
+        return $c <= 0.03928 ? $c / 12.92 : pow(($c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * $lin(1) + 0.7152 * $lin(3) + 0.0722 * $lin(5);
+}
+
+/** Lift a colour until it clears 3:1 (plus a whisker) on the dark themes' #1a1a1a card. */
+function pal_floor(string $hex): string
+{
     [$h, $s, $l] = pal_hsl($hex);
-    return pal_hex($h, min(1.0, $s * $sMul), min(1.0, max(0.0, $l + $lShift)));
+    $card = pal_lum('#1a1a1a');
+    while ((pal_lum($hex) + 0.05) / ($card + 0.05) < 3.05 && $l < 0.9) {
+        $l += 0.01;
+        $hex = pal_hex($h, $s, $l);
+    }
+    return $hex;
+}
+
+/** An app's shade of base hue $i: leaned, saturated, re-lit, then floored. */
+function pal_shade(int $i, string $hex, float $lean, float $sMul, ?float $l, ?float $greyL): string
+{
+    if ($l === null) { return $hex; }   // the anchor keeps the base byte-identical
+    [$h, $s] = pal_hsl($hex);
+    $h = fmod($h + $lean * PAL_LEAN[$i] + 360, 360);
+    $s = min(1.0, $s * $sMul);
+    if ($i === 5 && $greyL !== null) { $l = $greyL; }
+    return pal_floor(pal_hex($h, $s, $l));
 }
 
 /**
@@ -89,9 +122,10 @@ function pal_tone(string $hex, float $sMul, float $lShift): string
  */
 function app_palette(string $app, bool $shared = false): array
 {
-    [$sMul, $lShift, $sharedF] = PAL_TONES[$app] ?? PAL_TONES['reminders'];
-    $own = array_map(fn($h) => pal_tone($h, $sMul, $lShift), PAL_BASE);
-    return $shared ? array_map(fn($h) => pal_lighten($h, $sharedF), $own) : $own;
+    [$lean, $sMul, $l, $greyL, $f] = PAL_TONES[$app] ?? PAL_TONES['reminders'];
+    $own = [];
+    foreach (PAL_BASE as $i => $hex) { $own[] = pal_shade($i, $hex, $lean, $sMul, $l, $greyL); }
+    return $shared ? array_map(fn($h) => pal_lighten($h, $f), $own) : $own;
 }
 
 /** True if $hex is one of an app's colours (own or shared) — used to validate a choice. */
