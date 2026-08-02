@@ -3981,6 +3981,55 @@ t('a tick with no token changes nothing', function () {
 // Static checks, because a deploy is the one thing here that can destroy data and the
 // one thing no test run may actually perform. These are the promises deploy.sh makes in
 // its own header; this is the test that it still keeps them.
+// ---------------------------------------------------------------- the shared spec
+// spec/*.json is the one behavior contract the three cores implement — web (lib/),
+// iOS (ios/Shared/) and Android (android/core/). Each platform's suite replays the
+// same vectors; a behavior change starts in spec/ and is done when all three are green.
+area('spec');
+
+/** One spec file, decoded, or fail loudly — a missing vector file is itself a failure. */
+function spec_load(string $name): array
+{
+    global $root;
+    $raw = file_get_contents($root . '/spec/' . $name);
+    ok($raw !== false, "spec/$name is readable");
+    $data = json_decode($raw, true);
+    ok(is_array($data), "spec/$name is valid JSON");
+    return $data;
+}
+
+t('every parse vector holds', function () {
+    foreach (spec_load('parse.json') as $c) {
+        [$text, $date, $time] = parse_when_from_text($c['input'], $c['today']);
+        eq($c['text'], $text, "{$c['name']}: text");
+        eq($c['date'], $date, "{$c['name']}: date");
+        eq($c['time'], $time, "{$c['name']}: time");
+    }
+});
+
+t('every repeat vector holds', function () {
+    $spec = spec_load('repeats.json');
+    foreach ($spec['step'] as $c) {
+        eq($c['expect'], repeat_step($c['start'], ['n' => $c['n'], 'unit' => $c['unit']], $c['i']),
+           $c['name']);
+    }
+    foreach ($spec['window'] as $c) {
+        eq($c['expect'], repeat_dates($c['start'], $c['repeat'], $c['from'], $c['to']),
+           $c['name']);
+    }
+    foreach ($spec['next'] as $c) {
+        eq($c['expect'], repeat_next($c['start'], ['n' => $c['n'], 'unit' => $c['unit']], $c['after']),
+           $c['name']);
+    }
+});
+
+t('every sort vector holds', function () {
+    foreach (spec_load('sort.json') as $c) {
+        $got = array_column(sort_by_date($c['rows']), 'id');
+        eq($c['expect'], $got, $c['name']);
+    }
+});
+
 area('deploy');
 
 t('the seeding wrapper refuses everything by default', function () use ($root) {

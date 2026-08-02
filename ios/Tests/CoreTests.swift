@@ -94,7 +94,9 @@ final class CoreTests: XCTestCase {
         store.toggle(plain)
         XCTAssertTrue(store.data.reminders.first { $0.text == "plain" }!.done)
 
-        let due = day(2020, 1, 1)   // safely in the past, so next() rolls forward from today
+        // Recently overdue, so next() (which, like the web's repeat_next, computes
+        // occurrences from the start with a 400-step cap) can reach forward past today.
+        let due = cal.date(byAdding: .day, value: -2, to: Date())!.day
         var rep = Reminder(text: "rep", due: due, recurrence: Recurrence(n: 1, unit: .day))
         store.add(rep)
         rep = store.data.reminders.first { $0.text == "rep" }!

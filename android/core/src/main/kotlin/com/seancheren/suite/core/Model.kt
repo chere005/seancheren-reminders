@@ -86,9 +86,10 @@ data class Recurrence(
      * The occurrence `i` steps after `start` (i = 0 is `start` itself), computed from
      * `start` EVERY time — not incrementally — so a month/year repeat keeps the original
      * day-of-month and can't drift (Jan 31 → Feb 28 → Mar 31, never → Feb 28 → Mar 28).
-     * Mirrors the web's `repeat_step($start, $rep, $i)`.
+     * Mirrors the web's `repeat_step($start, $rep, $i)` and iOS's `occurrence`;
+     * internal so the spec vectors (spec/repeats.json) exercise it directly.
      */
-    private fun occurrence(start: LocalDate, i: Int): LocalDate {
+    internal fun occurrence(start: LocalDate, i: Int): LocalDate {
         val steps = maxOf(1, n) * i
         return when (unit) {
             RepeatUnit.day -> start.plusDays(steps.toLong())

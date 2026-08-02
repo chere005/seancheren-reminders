@@ -104,8 +104,10 @@ function parse_time_from_text(string $text): array
  * Accepts m/d, m/d/yy and m/d/yyyy, with one or two digits for month and day.
  * A bare m/d means the next occurrence — this year, or next year if it's past.
  * Deliberately US-order and slash-only, so it can't swallow other numbers.
+ * $today ("YYYY-MM-DD") anchors the next-occurrence rule; it defaults to the real
+ * today and exists so the spec vectors (spec/parse.json) run deterministically.
  */
-function parse_date_from_text(string $text): array
+function parse_date_from_text(string $text, ?string $today = null): array
 {
     if (!preg_match('#(?<![\d/])(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?(?![\d/])#', $text, $m)) {
         return [$text, null];
@@ -116,13 +118,14 @@ function parse_date_from_text(string $text): array
         return [$text, null];
     }
 
+    $today = $today ?? date('Y-m-d');
     if (($m[3] ?? '') !== '') {
         $yr = (int) $m[3];
         if (strlen($m[3]) === 2) { $yr += 2000; }
     } else {
         // No year given: this year, unless that date has already gone by.
-        $yr = (int) date('Y');
-        if (sprintf('%04d-%02d-%02d', $yr, $mo, $dy) < date('Y-m-d')) { $yr++; }
+        $yr = (int) substr($today, 0, 4);
+        if (sprintf('%04d-%02d-%02d', $yr, $mo, $dy) < $today) { $yr++; }
     }
     if (!checkdate($mo, $dy, $yr)) {
         return [$text, null];
@@ -133,9 +136,9 @@ function parse_date_from_text(string $text): array
 }
 
 /** Both parsers at once: returns [cleanedText, "YYYY-MM-DD"|null, "HH:MM"|null]. */
-function parse_when_from_text(string $text): array
+function parse_when_from_text(string $text, ?string $today = null): array
 {
-    [$text, $date] = parse_date_from_text($text);
+    [$text, $date] = parse_date_from_text($text, $today);
     [$text, $time] = parse_time_from_text($text);
     return [$text, $date, $time];
 }
@@ -220,6 +223,33 @@ function repeat_next(string $start, array $rep, string $after): string
         if ($d > $after) { return $d; }
     }
     return $start;
+}
+
+/**
+ * Display order inside a section: undated first, then by due date, soonest first.
+ * Ties keep the stored (drag) order, so dragging still decides who sits where among
+ * items that share a date. Completed items sink to the bottom either way (CSS order).
+ * Part of the cross-platform behavior spec (spec/sort.json) — the mobile cores'
+ * `sorted` must match this exactly.
+ */
+function sort_by_date(array $rows): array
+{
+    // Sort in outline blocks, not row by row: a top-level reminder carries the subtasks
+    // that follow it in stored order. Sorting the flat list instead tore a family apart
+    // the moment the two disagreed — an undated subtask under a dated parent sorted to
+    // the head of the section, where it read as a subtask of whatever now sat above it.
+    $blocks = [];
+    foreach ($rows as $r) {
+        if ($blocks && (int) ($r['indent'] ?? 0) > 0) { $blocks[count($blocks) - 1]['rows'][] = $r; }
+        else { $blocks[] = ['due' => ($r['due'] ?? '') ?: '', 'seq' => count($blocks), 'rows' => [$r]]; }
+    }
+    // '' (undated) sorts before any real date; stored order breaks a tie.
+    usort($blocks, fn($a, $b) => $a['due'] !== $b['due']
+        ? strcmp($a['due'], $b['due'])
+        : ($a['seq'] <=> $b['seq']));
+    $out = [];
+    foreach ($blocks as $b) { foreach ($b['rows'] as $r) { $out[] = $r; } }
+    return $out;
 }
 
 /** "Every 2 weeks" / "Every day", for showing on a row. */

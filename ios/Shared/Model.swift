@@ -56,53 +56,63 @@ struct Recurrence: Codable, Hashable {
 
     var label: String { n == 1 ? "every \(unit.rawValue)" : "every \(n) \(unit.rawValue)s" }
 
-    /// One step on. Month and year keep the day of the month and clamp it — the 31st
-    /// repeats as the 30th, the 28th — rather than sliding into the next month the way
-    /// naive date arithmetic does.
-    func step(_ date: Date) -> Date {
+    /// The occurrence `i` steps after `start` (i = 0 is `start` itself), computed from
+    /// `start` EVERY time — not incrementally — so a month/year repeat keeps the original
+    /// day-of-month and can't drift (Jan 31 → Feb 28 → Mar 31, never → Feb 28 → Mar 28).
+    /// Mirrors the web's `repeat_step($start, $rep, $i)` and Android's `occurrence`;
+    /// internal so the spec vectors (spec/repeats.json) exercise it directly.
+    func occurrence(_ start: Date, _ i: Int) -> Date {
         let cal = Calendar.current
-        let step = max(1, n)
+        let steps = max(1, n) * i
         switch unit {
-        case .day:   return cal.date(byAdding: .day, value: step, to: date) ?? date
-        case .week:  return cal.date(byAdding: .day, value: step * 7, to: date) ?? date
-        case .month: return clamped(date, months: step)
-        case .year:  return clamped(date, months: step * 12)
+        case .day:   return cal.date(byAdding: .day, value: steps, to: start) ?? start
+        case .week:  return cal.date(byAdding: .day, value: steps * 7, to: start) ?? start
+        case .month: return clampedFrom(start, months: steps)
+        case .year:  return clampedFrom(start, months: steps * 12)
         }
     }
 
-    private func clamped(_ date: Date, months: Int) -> Date {
+    /// `months` on from `start`, keeping the day-of-month and clamping to the target month.
+    private func clampedFrom(_ start: Date, months: Int) -> Date {
         let cal = Calendar.current
-        var parts = cal.dateComponents([.year, .month, .day], from: date)
+        var parts = cal.dateComponents([.year, .month, .day], from: start)
         let wanted = parts.day ?? 1
         parts.day = 1
         guard let first = cal.date(from: parts),
               let moved = cal.date(byAdding: .month, value: months, to: first),
               let span = cal.range(of: .day, in: .month, for: moved)
-        else { return date }
-        return cal.date(byAdding: .day, value: min(wanted, span.count) - 1, to: moved) ?? date
+        else { return start }
+        return cal.date(byAdding: .day, value: min(wanted, span.count) - 1, to: moved) ?? start
     }
 
+    /// One step on from `date` — the 31st repeats monthly as the 30th, the 28th, and so on.
+    func step(_ date: Date) -> Date { occurrence(date, 1) }
+
     /// Every occurrence inside the window being drawn. There's only ever the one stored
-    /// row — this expands it for whatever range the caller is showing.
+    /// row — this expands it for whatever range the caller is showing, from `start` so
+    /// it can't drift.
     func dates(start: Date, from: Date, to: Date) -> [Date] {
-        guard start <= to else { return [] }
+        guard start.day <= to else { return [] }
         var out: [Date] = []
-        var d = start.day
-        var hops = 0
-        while d <= to, hops < 400 {
+        var i = 0
+        while i < 400 {
+            let d = occurrence(start.day, i)
+            if d > to { break }
             if d >= from { out.append(d) }
-            d = step(d).day
-            hops += 1
+            i += 1
         }
         return out
     }
 
-    /// Where a repeat lands next once it's been ticked off.
+    /// The first occurrence strictly after `after` — where a ticked repeat rolls to.
     func next(from start: Date, after: Date) -> Date {
-        var d = start.day
-        var hops = 0
-        while d <= after, hops < 400 { d = step(d).day; hops += 1 }
-        return d
+        var i = 1
+        while i < 400 {
+            let d = occurrence(start.day, i)
+            if d > after { return d }
+            i += 1
+        }
+        return start.day
     }
 }
 

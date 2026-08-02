@@ -97,30 +97,8 @@ function load_reminders(string $file): array
 }
 function save_reminders(string $file, array $list): void { store_write($file, array_values($list)); }
 
-/**
- * Display order inside a section: undated first, then by due date, soonest first.
- * Ties keep the stored (drag) order, so dragging still decides who sits where among
- * items that share a date. Completed items sink to the bottom either way (CSS order).
- */
-function sort_by_date(array $rows): array
-{
-    // Sort in outline blocks, not row by row: a top-level reminder carries the subtasks
-    // that follow it in stored order. Sorting the flat list instead tore a family apart
-    // the moment the two disagreed — an undated subtask under a dated parent sorted to
-    // the head of the section, where it read as a subtask of whatever now sat above it.
-    $blocks = [];
-    foreach ($rows as $r) {
-        if ($blocks && (int) ($r['indent'] ?? 0) > 0) { $blocks[count($blocks) - 1]['rows'][] = $r; }
-        else { $blocks[] = ['due' => ($r['due'] ?? '') ?: '', 'seq' => count($blocks), 'rows' => [$r]]; }
-    }
-    // '' (undated) sorts before any real date; stored order breaks a tie.
-    usort($blocks, fn($a, $b) => $a['due'] !== $b['due']
-        ? strcmp($a['due'], $b['due'])
-        : ($a['seq'] <=> $b['seq']));
-    $out = [];
-    foreach ($blocks as $b) { foreach ($b['rows'] as $r) { $out[] = $r; } }
-    return $out;
-}
+// sort_by_date() — the outline sort inside a section — lives in lib/util.php now: it's
+// pure behavior (part of the cross-platform spec in spec/sort.json), not page chrome.
 
 /** Stable DOM id tying a section's "+" button to the row it opens. Keyed by folder and
  *  name, since two folders may hold same-named sections (both visible in the All view). */
