@@ -220,7 +220,7 @@ function token_user(string $dir, string $token): ?string
  * is a distinct cookie *name*, so each instance gets one — derived from its link
  * prefix, so a new instance is separate for free. Config 'session_name' overrides it.
  */
-function session_cookie_name(array $cfg): string
+function session_cookie_name(array $cfg): ?string
 {
     // Stripped to characters that are safe in a Set-Cookie name, so a mistyped config
     // can't break out of the header. PHP refuses an all-digit session name, so that
@@ -228,7 +228,11 @@ function session_cookie_name(array $cfg): string
     $n = preg_replace('/[^A-Za-z0-9_]/', '', (string) ($cfg['session_name'] ?? ''));
     if ($n !== '' && !ctype_digit($n)) { return $n; }
     $b = preg_replace('/[^A-Za-z0-9]/', '', trim((string) ($cfg['base'] ?? ''), '/'));
-    return 'SCSESS' . ($b === '' ? '' : '_' . strtoupper($b));
+    // No base means production, which keeps PHP's own session name. Renaming its cookie
+    // would sign every single person out the moment this deployed, and buy nothing:
+    // production is the thing the sandboxes are being kept away from, so it is the
+    // sandboxes that need a different name, not it.
+    return $b === '' ? null : 'SCSESS_' . strtoupper($b);
 }
 
 /**
@@ -239,6 +243,9 @@ function session_cookie_name(array $cfg): string
  */
 function session_store_dir(array $cfg): ?string
 {
+    // Sandboxes only, for the same reason as the cookie name: moving production's
+    // session files somewhere new would end every signed-in session at once.
+    if (trim((string) ($cfg['base'] ?? ''), '/') === '') { return null; }
     $d = rtrim((string) ($cfg['data_dir'] ?? ''), '/');
     if ($d === '') { return null; }
     $s = $d . '/sessions';
@@ -262,7 +269,8 @@ function session_boot(): void
     // separates them), its own cookie path, and its own session files. Being signed into
     // production must not sign you into /test/ or /dev/, or the sandboxes are only a
     // sandbox for data and not for who you are.
-    session_name(session_cookie_name($cfg));
+    $name = session_cookie_name($cfg);
+    if ($name !== null) { session_name($name); }
     $store = session_store_dir($cfg);
     if ($store !== null) { @session_save_path($store); }
     // '/dev' rather than '/' keeps the sandbox's cookie out of production's requests.
