@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct SeancherenWatchApp: App {
+struct CalMindWatchApp: App {
     var body: some Scene {
         WindowGroup {
             RemindersView()

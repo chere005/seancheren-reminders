@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct SeancherenApp: App {
+struct CalMindApp: App {
     // The one store, made once and shared with every screen. It also drives the watch:
     // whenever the data changes, the connectivity object ships a fresh list over.
     @StateObject private var store = Store()

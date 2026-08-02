@@ -1,4 +1,4 @@
-# Editing `Seancheren.xcodeproj` by hand
+# Editing `CalMind.xcodeproj` by hand
 
 The project is **hand-maintained** with stable numeric ids — treat `project.pbxproj`
 as source you edit deliberately, not a black box Xcode regenerates. Info.plists
@@ -25,9 +25,9 @@ to confirm it parses — a malformed pbxproj fails with an opaque error.
 
 ## Targets, bundle ids, and the watch suffix
 
-- Two targets: `Seancheren` (iOS) and `SeancherenWatch` (watchOS), the watch
+- Two targets: `CalMind` (iOS) and `CalMindWatch` (watchOS), the watch
   embedded in the phone app — that's why they're one project. Building/running
-  `Seancheren` installs both.
+  `CalMind` installs both.
 - Bundle ids: `com.seancheren.suite` (phone) and
   `com.seancheren.suite.watchkitapp` (watch). **The watch id must stay a
   `.watchkitapp` suffix of the phone's** — break that relationship and the pair
@@ -55,11 +55,11 @@ To typecheck/build without opening Xcode (fastest feedback that Swift compiles):
 
 ```sh
 cd ios
-xcodebuild -project Seancheren.xcodeproj -scheme Seancheren \
+xcodebuild -project CalMind.xcodeproj -scheme CalMind \
   -destination 'generic/platform=iOS' build      # or an installed simulator
 
 # List what's available if a scheme/destination name is uncertain:
-xcodebuild -list -project Seancheren.xcodeproj
+xcodebuild -list -project CalMind.xcodeproj
 xcrun simctl list devices
 ```
 

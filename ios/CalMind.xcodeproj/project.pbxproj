@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5E4C00000000000000000100 /* SeancherenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000020 /* SeancherenApp.swift */; };
+		5E4C00000000000000000100 /* CalMindApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000020 /* CalMindApp.swift */; };
 		5E4C00000000000000000101 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000021 /* RootView.swift */; };
 		5E4C00000000000000000103 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000023 /* SettingsView.swift */; };
 		5E4C00000000000000000104 /* PhoneConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000024 /* PhoneConnectivity.swift */; };
@@ -16,7 +16,7 @@
 		5E4C00000000000000000121 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000041 /* RemindersView.swift */; };
 		5E4C00000000000000000122 /* WatchConnectivityReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000042 /* WatchConnectivityReceiver.swift */; };
 		5E4C00000000000000000130 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000043 /* Assets.xcassets */; };
-		5E4C00000000000000000140 /* SeancherenWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000011 /* SeancherenWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5E4C00000000000000000140 /* CalMindWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000011 /* CalMindWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5E4C00000000000000000150 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000026 /* Theme.swift */; };
 		5E4C00000000000000000151 /* Pickers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000027 /* Pickers.swift */; };
 		5E4C00000000000000000152 /* RemindersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000028 /* RemindersView.swift */; };
@@ -36,7 +36,7 @@
 			containerPortal = 5E4C00000000000000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 5E4C00000000000000000301;
-			remoteInfo = SeancherenWatch;
+			remoteInfo = CalMindWatch;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -47,7 +47,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				5E4C00000000000000000140 /* SeancherenWatch.app in Embed Watch Content */,
+				5E4C00000000000000000140 /* CalMindWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -56,9 +56,9 @@
 
 /* Begin PBXFileReference section */
 		5E4C00000000000000000007 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		5E4C00000000000000000010 /* Seancheren.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Seancheren.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5E4C00000000000000000011 /* SeancherenWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SeancherenWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5E4C00000000000000000020 /* SeancherenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeancherenApp.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000010 /* CalMind.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CalMind.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E4C00000000000000000011 /* CalMindWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CalMindWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E4C00000000000000000020 /* CalMindApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalMindApp.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000021 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000023 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000024 /* PhoneConnectivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneConnectivity.swift; sourceTree = "<group>"; };
@@ -111,8 +111,8 @@
 		5E4C00000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5E4C00000000000000000010 /* Seancheren.app */,
-				5E4C00000000000000000011 /* SeancherenWatch.app */,
+				5E4C00000000000000000010 /* CalMind.app */,
+				5E4C00000000000000000011 /* CalMindWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -120,7 +120,7 @@
 		5E4C00000000000000000004 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				5E4C00000000000000000020 /* SeancherenApp.swift */,
+				5E4C00000000000000000020 /* CalMindApp.swift */,
 				5E4C00000000000000000021 /* RootView.swift */,
 				5E4C00000000000000000028 /* RemindersView.swift */,
 				5E4C00000000000000000029 /* NotesView.swift */,
@@ -160,9 +160,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5E4C00000000000000000300 /* Seancheren */ = {
+		5E4C00000000000000000300 /* CalMind */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5E4C00000000000000000431 /* Build configuration list for PBXNativeTarget "Seancheren" */;
+			buildConfigurationList = 5E4C00000000000000000431 /* Build configuration list for PBXNativeTarget "CalMind" */;
 			buildPhases = (
 				5E4C00000000000000000200 /* Sources */,
 				5E4C00000000000000000201 /* Frameworks */,
@@ -174,14 +174,14 @@
 			dependencies = (
 				5E4C00000000000000000310 /* PBXTargetDependency */,
 			);
-			name = Seancheren;
-			productName = Seancheren;
-			productReference = 5E4C00000000000000000010 /* Seancheren.app */;
+			name = CalMind;
+			productName = CalMind;
+			productReference = 5E4C00000000000000000010 /* CalMind.app */;
 			productType = "com.apple.product-type.application";
 		};
-		5E4C00000000000000000301 /* SeancherenWatch */ = {
+		5E4C00000000000000000301 /* CalMindWatch */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5E4C00000000000000000432 /* Build configuration list for PBXNativeTarget "SeancherenWatch" */;
+			buildConfigurationList = 5E4C00000000000000000432 /* Build configuration list for PBXNativeTarget "CalMindWatch" */;
 			buildPhases = (
 				5E4C00000000000000000210 /* Sources */,
 				5E4C00000000000000000211 /* Frameworks */,
@@ -191,9 +191,9 @@
 			);
 			dependencies = (
 			);
-			name = SeancherenWatch;
-			productName = SeancherenWatch;
-			productReference = 5E4C00000000000000000011 /* SeancherenWatch.app */;
+			name = CalMindWatch;
+			productName = CalMindWatch;
+			productReference = 5E4C00000000000000000011 /* CalMindWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -214,7 +214,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 5E4C00000000000000000430 /* Build configuration list for PBXProject "Seancheren" */;
+			buildConfigurationList = 5E4C00000000000000000430 /* Build configuration list for PBXProject "CalMind" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -227,8 +227,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5E4C00000000000000000300 /* Seancheren */,
-				5E4C00000000000000000301 /* SeancherenWatch */,
+				5E4C00000000000000000300 /* CalMind */,
+				5E4C00000000000000000301 /* CalMindWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -257,7 +257,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5E4C00000000000000000100 /* SeancherenApp.swift in Sources */,
+				5E4C00000000000000000100 /* CalMindApp.swift in Sources */,
 				5E4C00000000000000000101 /* RootView.swift in Sources */,
 				5E4C00000000000000000152 /* RemindersView.swift in Sources */,
 				5E4C00000000000000000153 /* NotesView.swift in Sources */,
@@ -290,7 +290,7 @@
 /* Begin PBXTargetDependency section */
 		5E4C00000000000000000310 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 5E4C00000000000000000301 /* SeancherenWatch */;
+			target = 5E4C00000000000000000301 /* CalMindWatch */;
 			targetProxy = 5E4C00000000000000000311 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -503,7 +503,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5E4C00000000000000000430 /* Build configuration list for PBXProject "Seancheren" */ = {
+		5E4C00000000000000000430 /* Build configuration list for PBXProject "CalMind" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5E4C00000000000000000400 /* Debug */,
@@ -512,7 +512,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5E4C00000000000000000431 /* Build configuration list for PBXNativeTarget "Seancheren" */ = {
+		5E4C00000000000000000431 /* Build configuration list for PBXNativeTarget "CalMind" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5E4C00000000000000000410 /* Debug */,
@@ -521,7 +521,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5E4C00000000000000000432 /* Build configuration list for PBXNativeTarget "SeancherenWatch" */ = {
+		5E4C00000000000000000432 /* Build configuration list for PBXNativeTarget "CalMindWatch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5E4C00000000000000000420 /* Debug */,

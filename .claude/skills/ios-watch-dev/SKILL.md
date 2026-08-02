@@ -5,7 +5,7 @@ description: >-
   network, local-only Codable app (Reminders/Calendar/Notes/Habits on iOS 17+,
   a read-only reminder list on watchOS 10+). Use when writing or reviewing Swift/
   SwiftUI, changing the `Store`/`AppData` data layer, the phone↔watch
-  WatchConnectivity bridge, or the hand-maintained `Seancheren.xcodeproj`
+  WatchConnectivity bridge, or the hand-maintained `CalMind.xcodeproj`
   (project.pbxproj, targets, signing, bundle ids, generated Info.plists). This
   app shares no code with the PHP website — editing one never touches the other.
 ---
@@ -14,8 +14,8 @@ description: >-
 
 A fully native SwiftUI app: **no web view, no login, no token, no network.** All
 data is one `Codable` tree (`AppData`) saved to a single `suite.json` in
-Application Support. Two targets in one project (`Seancheren.xcodeproj`): the
-iOS app `Seancheren` (iOS 17+) and the embedded watch app `SeancherenWatch`
+Application Support. Two targets in one project (`CalMind.xcodeproj`): the
+iOS app `CalMind` (iOS 17+) and the embedded watch app `CalMindWatch`
 (watchOS 10+). Read `ios/README.md` — it's the authoritative map.
 
 **This is a separate codebase from the PHP suite.** They look alike on purpose
@@ -35,7 +35,7 @@ but share nothing; a change here never affects the website and vice versa. Don't
 - **`Shared/Parse.swift`** — the slash-only US-order text parser, ported from the
   web suite's `parse_when_from_text`.
 - **`App/…`** — one SwiftUI view per tab, plus `PhoneConnectivity` (the watch
-  bridge), `Pickers`, `Theme`, `RootView`, `SeancherenApp`.
+  bridge), `Pickers`, `Theme`, `RootView`, `CalMindApp`.
 - **`Watch/…`** — the watchOS target: decode the pushed list and draw it.
 - **`Shared/WatchPayload.swift`** — the tiny `WatchList` the two ends exchange,
   compiled into **both** targets so they can't drift apart.
@@ -91,8 +91,8 @@ means editing four places in the pbxproj — and a *shared* file needs entries i
 **both** targets. Get this wrong and the build breaks in confusing ways. Full
 procedure and the bundle-id rule: `references/xcode-project.md`.
 
-**Three files here are committed and easy to lose.** `Seancheren.xcodeproj/` must
-contain `project.pbxproj` and `xcshareddata/xcschemes/{Seancheren,SeancherenWatch}.xcscheme`.
+**Three files here are committed and easy to lose.** `CalMind.xcodeproj/` must
+contain `project.pbxproj` and `xcshareddata/xcschemes/{CalMind,CalMindWatch}.xcscheme`.
 They have gone missing once already — commit `a944ab9 "random ios changes?"` deleted
 all three and nothing else, which went unnoticed because *the Swift files were all
 still there*: the app simply stopped being openable, and the failure looks like
@@ -100,10 +100,10 @@ Xcode's problem rather than git's. If a build or an open fails oddly, check they
 exist before debugging anything else:
 
 ```sh
-ls ios/Seancheren.xcodeproj/project.pbxproj \
-   ios/Seancheren.xcodeproj/xcshareddata/xcschemes/
-git log --diff-filter=D -- 'ios/Seancheren.xcodeproj/*'   # when did it go?
-git checkout <last-good-commit> -- ios/Seancheren.xcodeproj/project.pbxproj
+ls ios/CalMind.xcodeproj/project.pbxproj \
+   ios/CalMind.xcodeproj/xcshareddata/xcschemes/
+git log --diff-filter=D -- 'ios/CalMind.xcodeproj/*'   # when did it go?
+git checkout <last-good-commit> -- ios/CalMind.xcodeproj/project.pbxproj
 ```
 
 `.gitignore` deliberately excludes only per-user state (`xcuserdata/`, `*.xcuserdatad`,
@@ -112,8 +112,8 @@ the repo. Never add the `.xcodeproj` wholesale to `.gitignore` to quiet a diff.
 
 ## Building / checking a change
 
-- Open `ios/Seancheren.xcodeproj`, set your team under Signing & Capabilities
-  for **both** targets, run `Seancheren` (that installs the embedded watch app
+- Open `ios/CalMind.xcodeproj`, set your team under Signing & Capabilities
+  for **both** targets, run `CalMind` (that installs the embedded watch app
   too).
 - From the CLI you can typecheck/build with `xcodebuild` (see
   `references/xcode-project.md`) if Xcode's toolchain is installed — the fastest
