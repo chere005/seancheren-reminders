@@ -3160,6 +3160,130 @@ t('an empty message is not stored', function () {
     eq($before, count(store_read($file)), 'whitespace is nothing');
 });
 
+// ---------------------------------------------------------------------------- themes
+// A workbench for building colour palettes. The point of these is the boundary: it seeds
+// itself from the bookshelf's eight but is a separate app, so editing here must never
+// reach that one — and every value it stores ends up inside a style attribute, so nothing
+// but a #rrggbb may ever be written.
+area('themes');
+
+t('the palette workbench is behind the login and opens with the eight starters', function () {
+    $r = req('GET', '/akisthemes/');
+    has('Sign in', $r['body'], 'signed out you get the login page');
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/akisthemes/', [], $jar);
+    eq(200, $r['status'], 'it renders for a signed-in user');
+    eq(8, substr_count($r['body'], 'class="pal"'), 'seeded with the eight starters');
+    eq(96, substr_count($r['body'], 'input type="color"'), 'twelve editable roles each');
+    // Palettes are numbered, not named — a workbench palette earns a name later.
+    foreach (['Theme 1', 'Theme 5', 'Theme 8'] as $n) { has('value="' . $n . '"', $r['body'], "$n is there"); }
+    hasnt('value="Midnight"', $r['body'], 'the bookshelf names are not carried over');
+    // The name is a field but read-only until the pencil is on, and delete is hidden
+    // outside edit mode — arriving here must never be one tap from destroying a palette.
+    has('class="palname"', $r['body'], 'the name is an editable field');
+    has('readonly', $r['body'], "but read-only until that palette's pencil is on");
+    // Edit belongs to the palette, not the page, and sits left of duplicate. Delete is
+    // always shown — the two-press confirm is the guard, not hiding the control.
+    hasnt('id="editBtn"', $r['body'], 'there is no page-wide Edit button');
+    eq(8, substr_count($r['body'], 'palact paledit'), 'every palette has its own pencil');
+    // First occurrence of each in the document is the first palette's row, so their
+    // order in the source is the order they render in.
+    $pen = strpos($r['body'], 'palact paledit');
+    $dup = strpos($r['body'], 'aria-label="Duplicate"');
+    $del = strpos($r['body'], 'paldel needs-confirm');
+    eq(true, $pen !== false && $dup !== false && $del !== false, 'all three controls are there');
+    eq(true, $pen < $dup, 'the pencil comes before the duplicate button');
+    eq(true, $dup < $del, 'and duplicate before delete');
+    has('paldel needs-confirm', $r['body'], 'delete takes two presses');
+    hasnt('.paldel { visibility: hidden', $r['body'], 'and is never hidden');
+    has('backbtn goback', $r['body'], 'there is a back button');
+    has('backbtn exitedit', $r['body'], 'which becomes the x that closes an open editor');
+    // Colours are only changeable on the palette that is open, so a stray tap on a
+    // swatch can't repaint a palette you were only looking at. The rule has to be in
+    // the stylesheet — the JS half (tabindex, readonly) can't be seen from here.
+    has('.pal:not(.editing) .role input { pointer-events: none; }', $r['body'],
+        'swatches are inert outside their palette\'s edit mode');
+    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    // Both of these return bare CSS and must sit INSIDE the style block; emitted after
+    // </style> they render as text down the top of the page, which is how this was found.
+    $head = substr($r['body'], 0, strpos($r['body'], '</style>'));
+    has('--accent:', $head, 'theme_css() lands inside the stylesheet');
+    has('needs-confirm', $head, 'and so does confirm_delete_styles()');
+});
+
+t('a duplicate says it is one, and a new palette takes the next number', function () {
+    $jar  = login('example', 'examplepassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add', 'id' => $m[1]], $jar);
+    $b = req('GET', '/akisthemes/', [], $jar)['body'];
+    has('value="Theme 1 (New)"', $b, 'the copy is named for its original');
+    // A plain add takes the lowest free number rather than reusing one.
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add'], $jar);
+    has('value="Theme 9"', req('GET', '/akisthemes/', [], $jar)['body'], 'a new one is Theme 9');
+});
+
+t('a colour change is stored, and only a real colour in a real role', function () {
+    $jar  = login('example', 'examplepassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    $id = $m[1];
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--accent', 'hex' => '#ff0000'], $jar, true);
+    has('"ok":true', $r['body'], 'a good colour is accepted');
+    has('#ff0000', req('GET', '/akisthemes/', [], $jar)['body'], 'and it stuck');
+    // Both of these end up inside style="…", so neither may ever be written.
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--accent', 'hex' => 'javascript:alert(1)'], $jar, true);
+    has('"ok":false', $r['body'], 'a non-colour is refused');
+    $r = req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $id, 'role' => '--evil', 'hex' => '#112233'], $jar, true);
+    has('"ok":false', $r['body'], 'an unknown role is refused, and says so');
+    hasnt('--evil', req('GET', '/akisthemes/', [], $jar)['body'], 'and nothing was written');
+});
+
+t('palettes can be added and deleted, and deleting takes two presses', function () {
+    $jar = login('example', 'examplepassword');
+    // Counted relative to whatever is already there: earlier tests in this area add
+    // palettes of their own, and an absolute count here just breaks when one is added.
+    $count = fn() => substr_count(req('GET', '/akisthemes/', [], $GLOBALS['__pjar'])['body'], 'class="pal"');
+    $GLOBALS['__pjar'] = $jar;
+    $before = $count();
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add', 'name' => 'Workbench one'], $jar);
+    $b = req('GET', '/akisthemes/', [], $jar)['body'];
+    has('value="Workbench one"', $b, 'the new palette is there');
+    eq($before + 1, substr_count($b, 'class="pal"'), 'one more than before');
+    preg_match('/id="p-([a-f0-9]+)"/', $b, $m);
+    $id = $m[1];   // new rows land at the top
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id], $jar);
+    eq($before + 1, $count(), 'an unconfirmed delete destroys nothing');
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id, 'confirm' => '1'], $jar);
+    eq($before, $count(), 'the confirmed one does');
+});
+
+t("editing a palette never reaches Aki's Bookshelf", function () {
+    // The whole reason this app is separate. It seeds from the same eight names, so the
+    // only thing proving they are not shared is that a change on one side stays invisible
+    // on the other.
+    ensure_account('aki', 'akipassword');
+    $jar  = login('aki', 'akipassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'set_color',
+        'id' => $m[1], 'role' => '--bg', 'hex' => '#abcdef'], $jar, true);
+    has('#abcdef', req('GET', '/akisthemes/', [], $jar)['body'], 'the workbench changed');
+    $shelf = req('GET', '/akisbookshelf/', [], $jar)['body'];
+    hasnt('#abcdef', $shelf, 'the bookshelf did not');
+    has('--bg: #111111', $shelf, 'it still wears its own Midnight');
+});
+
 // ---------------------------------------------------------------- Aki's Bookshelf
 // One username's app, sitting behind the shared login. The gate is the only thing
 // between it and everyone else who has an account on the suite.
