@@ -356,16 +356,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $sectionRows = [];
         $placed      = [];   // section id => true
         $namesIn     = [];   // folder => [name => true], so a move can't create a duplicate
-        // Seed with the sections that are *staying* (not listed in this drag), keyed by their
-        // current folder — so a section can't be re-filed into a folder that already holds
-        // that name (a stale/partial payload used to slip one in, creating a duplicate that
-        // then lost items). A section the drag *does* list frees up its old folder's name.
-        $inMap = [];
-        foreach ($secMap as $ids) { if (is_array($ids)) { foreach ($ids as $sid) { $inMap[(string) $sid] = true; } } }
+        // A move into a folder that already holds that name must be refused (a duplicate
+        // loses items when one is deleted). Names are claimed by every section that is
+        // *staying put*: the ones the drag never listed, and the ones listed under their
+        // own stored folder — a whole-screen payload lists every folder's run, so the
+        // destination's own same-named section is in the map too, and it mustn't free
+        // its name just by being mentioned.
+        $inMap = [];   // section id => the folder the map lists it under
+        foreach ($secMap as $f => $ids) {
+            if (!is_array($ids)) { continue; }
+            foreach ($ids as $sid) { $inMap[(string) $sid] ??= (string) $f; }
+        }
         foreach ($notes as $it) {
-            if (is_section($it) && !isset($inMap[(string) $it['id']])) {
-                $namesIn[(string) ($it['folder'] ?? FOLDER_DEFAULT)][(string) $it['name']] = true;
-            }
+            if (!is_section($it)) { continue; }
+            $home = (string) ($it['folder'] ?? FOLDER_DEFAULT);
+            $to   = $inMap[(string) $it['id']] ?? null;
+            if ($to === null || $to === $home) { $namesIn[$home][(string) $it['name']] = true; }
         }
         foreach ($secMap as $f => $ids) {
             if (!is_array($ids)) { continue; }
@@ -375,9 +381,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 if ($sid === '' || !isset($secById[$sid]) || isset($placed[$sid])) { continue; }
                 $srow = $secById[$sid];
                 $name = (string) $srow['name'];
-                // Re-file to $f if it's one of mine and doesn't already hold that name;
-                // otherwise the section stays where it was.
-                $dest = ($folderOk && !isset($namesIn[$f][$name])) ? $f : (string) ($srow['folder'] ?? FOLDER_DEFAULT);
+                $home = (string) ($srow['folder'] ?? FOLDER_DEFAULT);
+                // Re-file to $f if it's one of mine and no *staying* section there holds
+                // the name; otherwise the section keeps its folder (but takes its slot).
+                $dest = ($folderOk && ($f === $home || !isset($namesIn[$f][$name]))) ? $f : $home;
                 $srow['folder'] = $dest;
                 $namesIn[$dest][$name] = true;
                 $sectionRows[] = $srow;
@@ -1471,7 +1478,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       });
       const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
         order: JSON.stringify(order), sections: JSON.stringify(sections) });
-      fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+      return fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+    };
+    // Whether a folder emptied by a section drag may be deleted: any of mine may go,
+    // except the very last one (the server refuses that too).
+    const CAN_DELETE_FOLDER = <?= json_encode(!$isShared && count($myFolders) > 1) ?>;
+    // Deleting the folder a drag just emptied, after the reorder has landed — chained so
+    // the two writes can't race each other over the same file.
+    const deleteEmptiedFolder = (name) => {
+      const body = new URLSearchParams({ csrf: CSRF, action: 'delete_folder', view: 'All', name, confirm: '1' });
+      return fetch('', { method: 'POST', body });
     };
     const beginRow = (li) => {
       dragLi = li; li.classList.add('dragging');
@@ -1550,12 +1566,34 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       cancelPress();
       const dragged = dragSec || dragLi;
       if (!dragged) { clearLine(); return; }
+      // Dragging a folder's last section into another folder leaves it empty. Ask: OK
+      // moves the section and deletes the emptied folder with it; Cancel reverts the
+      // whole drop. The last remaining folder is never offered (it can't be deleted).
+      let emptied = null;
+      if (dragSec && dropLine) {
+        const src = dragSec.closest('.folder-block');
+        const dst = dropLine.parentNode && dropLine.parentNode.closest('.folder-block');
+        if (src && dst && src !== dst
+            && ![...src.querySelectorAll(':scope > .section-group')].some(g => g !== dragSec)) {
+          const name = src.dataset.folder || '';
+          if (CAN_DELETE_FOLDER) {
+            if (confirm('Move the last section out of “' + name + '” and delete the empty folder?')) emptied = name;
+            else {   // revert: no move, no persist
+              clearLine();
+              dragged.classList.remove('dragging'); dragLi = null; dragSec = null;
+              suppressClick = true; setTimeout(() => { suppressClick = false; }, 350);
+              return;
+            }
+          }
+        }
+      }
       if (dropLine) { dropLine.parentNode.insertBefore(dragged, dropLine); }   // land it on the line
       clearLine();
       dragged.classList.remove('dragging'); dragLi = null; dragSec = null;
       suppressClick = true;                             // swallow the click that follows a drag
       setTimeout(() => { suppressClick = false; }, 350);
-      persist();
+      if (emptied) { persist().then(() => deleteEmptiedFolder(emptied)).then(() => location.reload()).catch(() => location.reload()); }
+      else { persist(); }
     };
     document.addEventListener('pointerup', end);
     document.addEventListener('pointercancel', end);

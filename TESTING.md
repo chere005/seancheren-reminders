@@ -384,6 +384,16 @@ failures only exist in standalone mode.
 - [ ] Two-press delete fills red on the first press and only deletes on the second.
 - [ ] Drag: a reminder between sections; a whole section as a block; a note; a habit;
       a habit section; a folder in the manager; a calendar in the manager.
+- [ ] Drag **across folders** (Reminders and Notes, All view): a row into another folder's
+      section; a whole section into another folder — both survive a reload. (The payload
+      side of this is covered by the `drag` test area; the gesture itself is by-eye.)
+- [ ] Dragging a section into a folder that already holds one by that name snaps back on
+      reload rather than making a duplicate.
+- [ ] Dragging a folder's **last** section into another folder asks before deleting the
+      emptied folder — OK moves the section and the folder disappears; Cancel puts the
+      section back and nothing posts. The permanent Calendar folder (Reminders) and the
+      last remaining Notes folder are never offered for deletion.
+- [ ] A drop line never appears over a partner's shared block, for rows or for sections.
 - [ ] Habits: the section filter sits by the Week/Month switch in **both** views, and its
       menu opens and stays open (over the grid below) while you tick through it.
 - [ ] Habits, month view: each day's pie is drawn in its sections' own colours, and a full
