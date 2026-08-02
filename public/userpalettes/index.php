@@ -155,8 +155,22 @@ function up_worst(string $hex, array $vars): ?float
 }
 
 /**
+ * The hex label's colour, grading the ratio from red (poor) through orange to green
+ * (good): red at 1.5:1 or worse, green from 5.5:1 up, hue steps between. Kept legible
+ * on the board itself — deep tones on the cream themes, light ones on the dark.
+ */
+function up_grade(float $r, array $vars): string
+{
+    $t    = min(1.0, max(0.0, ($r - 1.5) / 4.0));
+    $bg   = up_hex($vars['--bg'] ?? null);
+    $lite = $bg !== null && up_lum($bg) > 0.5;
+    return pal_hex(120 * $t, $lite ? 0.70 : 0.60, $lite ? 0.34 : 0.62);
+}
+
+/**
  * One swatch: the colour as a dot, its hex under it, and its worst contrast on this
- * theme. Under 3:1 is flagged in place, which is the whole point of the board.
+ * theme. Under 3:1 is flagged in place, which is the whole point of the board; the
+ * label wears up_grade()'s verdict, so the number reads at a glance.
  */
 function up_swatch(string $hex, string $label, array $vars): string
 {
@@ -168,7 +182,8 @@ function up_swatch(string $hex, string $label, array $vars): string
                           . ($low ? ' (under 3:1, hard to see)' : ''));
     return '<span class="sw' . ($low ? ' low' : '') . '" title="' . e($t) . '">'
          . '<i style="background:' . e($hex) . '"></i>'
-         . '<b>' . e(substr($hex, 1)) . '</b></span>';
+         . '<b' . ($r === null ? '' : ' style="color:' . up_grade($r, $vars) . '"') . '>'
+         . e(substr($hex, 1)) . '</b></span>';
 }
 
 /** A row of six swatches under a tier label ("Mine" / "Shared"). */
@@ -306,7 +321,8 @@ $kindRows = [
     .sw { display: inline-flex; flex-direction: column; align-items: center; gap: 0.15rem; width: 46px; }
     .sw i { width: 22px; height: 22px; border-radius: 999px; display: block;
             border: 1px solid var(--line); }
-    .sw b { font: 0.55rem ui-monospace, monospace; color: var(--muted); font-weight: 400; }
+    .sw b { font: 0.55rem ui-monospace, monospace; color: var(--muted); font-weight: 400;
+            background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 5px; }
     /* A colour that can't be seen on this theme is marked where it fails, not in a list. */
     .sw.low i { border: 1px dashed #f5a3ad; box-shadow: 0 0 0 2px rgba(245, 163, 173, 0.25); }
     .sw.low b { color: #f5a3ad; }
