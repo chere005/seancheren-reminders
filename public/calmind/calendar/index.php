@@ -867,7 +867,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell.today { border-color: var(--accent); }
     .cell.today .num { color: var(--accent); font-weight: 700; }
     .cell.selected { border-color: var(--text); background: var(--surface-2); }
-    /* The legend's kind icons, at most one of each per day — the icon says what kinds
+    /* The legend's kind icons, one per kind and colour per day — the icon says what kinds
        the day holds, its colour says whose calendar or folder; the panel has the rest. */
     .cell .dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; min-height: 12px; }
     .cell .ico { display: inline-flex; align-items: center; justify-content: center;
@@ -1272,46 +1272,46 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     $weekOf = function () use (&$cellNo) { return intdiv($cellNo++, 7); };
   ?>
   <?php
-    // One month cell: the number, then the legend's kind icons — at most one of each,
-    // in the legend's order (event, reminder, note), each wearing its item's colour.
+    // One month cell: the number, then the legend's kind icons — one per kind *and
+    // colour*, in the legend's order (event, reminder, note), colours in first-appearance
+    // order within each kind. A day with events on two calendars wears two calendar
+    // glyphs; the panel still carries the per-item detail.
     // $other greys the days either side of the month — they're still tappable.
     $cell = function (string $ymd, int $num, bool $other, int $week) use ($byDay, $todayYmd): string {
-        $events  = $byDay[$ymd] ?? [];
-        $remDots = array_values(array_filter($events, fn($ev) => $ev['kind'] === 'reminder'));
-        // The reminder icon takes the worst state of the day's reminders: overdue beats
-        // open, and it only goes grey once every one of them is ticked.
-        $remCls = '';
-        if ($remDots) {
-            $open    = array_filter($remDots, fn($ev) => !$ev['done']);
-            $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
-            $remCls  = !$open ? ' done' : ($overdue ? ' overdue' : '');
-        }
-        $icons = '';
-        // One event icon, wearing the first event's calendar colour — a busy day reads
-        // from the count of *kinds*, and the panel has the per-calendar detail.
+        $events = $byDay[$ymd] ?? [];
+        $icons  = '';
+        $seen   = [];
         foreach ($events as $ev) {
             if ($ev['kind'] !== 'event') { continue; }
-            $icons .= '<span class="ico event" style="color:' . e((string) ($ev['color'] ?? '')) . '">'
+            $c = (string) ($ev['color'] ?? '');
+            if (isset($seen[$c])) { continue; }
+            $seen[$c] = true;
+            $icons .= '<span class="ico event" style="color:' . e($c) . '">'
                     . cal_legend_icon('event') . '</span>';
-            break;
         }
-        if ($remDots) {
-            // Colour the reminder icon by the folder of the "worst" reminder that day
-            // (overdue, else open, else done); state still rides in the class.
-            $repRem = null;
-            foreach ($remDots as $rd) { if (!$rd['done'] && ($ymd < $todayYmd || !empty($rd['rolled']))) { $repRem = $rd; break; } }
-            if (!$repRem) { foreach ($remDots as $rd) { if (!$rd['done']) { $repRem = $rd; break; } } }
-            if (!$repRem) { $repRem = $remDots[0]; }
-            $rc = (string) ($repRem['color'] ?? '');
-            $icons .= '<span class="ico reminder' . $remCls . '"'
-                    . ($rc !== '' ? ' style="color:' . e($rc) . '"' : '') . '>'
+        // Reminders group by folder colour, and each colour's icon takes the worst state
+        // of *its* reminders: overdue beats open, and it only goes grey (hidden unless
+        // Completed) once every one of that colour is ticked.
+        $remByColor = [];
+        foreach ($events as $ev) {
+            if ($ev['kind'] === 'reminder') { $remByColor[(string) ($ev['color'] ?? '')][] = $ev; }
+        }
+        foreach ($remByColor as $c => $rems) {
+            $open    = array_filter($rems, fn($ev) => !$ev['done']);
+            $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
+            $cls     = !$open ? ' done' : ($overdue ? ' overdue' : '');
+            $icons .= '<span class="ico reminder' . $cls . '"'
+                    . ($c !== '' ? ' style="color:' . e((string) $c) . '"' : '') . '>'
                     . cal_legend_icon('reminder') . '</span>';
         }
+        $seen = [];
         foreach ($events as $ev) {
             if ($ev['kind'] !== 'note') { continue; }
-            $icons .= '<span class="ico note" style="color:' . e((string) ($ev['color'] ?? '')) . '">'
+            $c = (string) ($ev['color'] ?? '');
+            if (isset($seen[$c])) { continue; }
+            $seen[$c] = true;
+            $icons .= '<span class="ico note" style="color:' . e($c) . '">'
                     . cal_legend_icon('note') . '</span>';
-            break;
         }
         $cls = 'cell' . ($other ? ' other' : '') . ($ymd === $todayYmd ? ' today' : '');
         return '<div class="' . $cls . '" data-date="' . $ymd . '" data-week="' . $week . '"'

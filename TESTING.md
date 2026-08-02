@@ -127,7 +127,9 @@ reminders, then notes; a day's reminders are undated-first, then oldest, then by
 undated Calendar-folder reminder rides on today and is **not** flagged overdue. Adding,
 editing and deleting an item from the day panel, with delete needing the second press.
 Calendars add, recolour, default and delete. A calendar row tap leaves only it showing and
-`All` puts them back. Ticking a repeat from the calendar rolls it. The **dot legend** is
+`All` puts them back. Ticking a repeat from the calendar rolls it. A month cell wears **one
+kind icon per colour** — two calendars' events on one day draw two calendar glyphs, and no
+cell repeats a kind+colour pair. The **dot legend** is
 built in JS from the cells on screen (keyed by owner and kind — a calendar/checkbox/page
 glyph, tinted the item's own colour, before each kind's names); the page only ships its
 key (`LEG_OWNERS` order, `LEG_CALS` names, `LEG_ICONS` glyphs) and the empty container. The

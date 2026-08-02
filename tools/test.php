@@ -995,20 +995,53 @@ t('the add/edit modal hides Time and Repeat behind + buttons', function () {
     ok(strpos($b, 'id="mRepN"') < strpos($b, 'id="mRepUnit"'), 'the every-N count comes before the unit select');
 });
 
-t('a month cell shows the legend icons, at most one of each kind', function () {
+t('a month cell shows the legend icons, one per kind and colour', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/calmind/calendar/?ym=' . date('Y-m'), [], $jar)['body'];
     has('class="ico event"', $b, 'days with events wear the calendar glyph');
     has('class="ico reminder', $b, 'days with reminders wear the tick glyph');
     hasnt('class="dot event"', $b, 'the old dots are gone');
-    // Never more than one icon of a kind in any one cell — the icon says which kinds
-    // the day holds; the panel carries the per-item detail.
-    foreach (array_slice(explode('<div class="cell', $b), 1) as $i => $chunk) {
+
+    // Two calendars in two colours, each with an event on the same day, draw two
+    // event icons in that cell — one per colour, not one per kind.
+    $r = req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+        'action' => 'cal_add', 'name' => 'TwoTone'], $jar, true);
+    $list = json_decode($r['body'], true)['list'];
+    $calA = $list[0];
+    $calB = $list[count($list) - 1];
+    $pal  = app_palette('calendar');
+    $colB = $pal[0] === ($calA['color'] ?? '') ? $pal[1] : $pal[0];
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+        'action' => 'cal_color', 'id' => $calB['id'], 'color' => $colB], $jar, true);
+    $day = date('Y-m-d', strtotime('+9 days'));
+    foreach ([['Two tone A', $calA['id']], ['Two tone B', $calB['id']]] as $pair) {
+        req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_event',
+            'kind' => 'event', 'text' => $pair[0], 'day' => $day, 'date' => $day,
+            'cal' => $pair[1], 'ym' => substr($day, 0, 7)], $jar);
+    }
+    $b2 = req('GET', '/calmind/calendar/?ym=' . substr($day, 0, 7), [], $jar)['body'];
+    $twoTone = null;
+    // Within any cell an icon's (kind, colour) pair never repeats — a second item of
+    // the same kind only earns a second icon when it brings a colour of its own.
+    foreach (array_slice(explode('<div class="cell', $b2), 1) as $i => $chunk) {
         $chunk = substr($chunk, 0, strpos($chunk, '</div></div>') ?: strlen($chunk));
-        foreach (['event', 'reminder', 'note'] as $kind) {
-            ok(substr_count($chunk, 'class="ico ' . $kind) <= 1, "cell $i has at most one $kind icon");
+        if (strpos($chunk, 'data-date="' . $day . '"') !== false) { $twoTone = $chunk; }
+        preg_match_all('/class="ico (event|reminder|note)[^"]*"(?: style="color:([^"]*)")?/', $chunk, $mm, PREG_SET_ORDER);
+        $pairs = array_map(fn($m) => $m[1] . '|' . ($m[2] ?? ''), $mm);
+        eq(count($pairs), count(array_unique($pairs)), "cell $i repeats no kind+colour pair");
+    }
+    ok($twoTone !== null, 'the two-calendar day renders');
+    ok(substr_count($twoTone, 'class="ico event"') >= 2, 'and wears an event icon per calendar colour');
+
+    // Tidy up: drop the events, then the extra calendar.
+    foreach (stored('events', 'example') as $e) {
+        if (in_array($e['text'] ?? '', ['Two tone A', 'Two tone B'], true)) {
+            req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'delete_item',
+                'kind' => 'event', 'id' => $e['id'], 'ym' => substr($day, 0, 7)], $jar);
         }
     }
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+        'action' => 'cal_delete', 'id' => $calB['id'], 'confirm' => '1'], $jar, true);
 });
 
 t('the calendar ships the data its in-view legend is built from', function () {
