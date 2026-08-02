@@ -23,8 +23,8 @@ const PAL_BASE = ['#4c8bf0', '#ea5853', '#66d695', '#f39849', '#9e5ce0', '#929aa
 const PAL_TONES = [
     'reminders' => [1.00,  0.00, 0.55],   // vivid — the base itself
     'calendar'  => [1.15, -0.13, 0.55],   // deep and rich
-    'notes'     => [0.70,  0.09, 0.50],   // soft — lighter but still clearly coloured
-    'habits'    => [0.58, -0.06, 0.55],   // slate — darker but still clearly coloured
+    'notes'     => [0.85,  0.10, 0.50],   // light and clearly coloured
+    'habits'    => [0.80, -0.08, 0.55],   // dark and clearly coloured
 ];
 
 /** #rrggbb → [hue 0–360, saturation 0–1, lightness 0–1]. */
