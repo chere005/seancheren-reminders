@@ -127,12 +127,16 @@ reminders, then notes; a day's reminders are undated-first, then oldest, then by
 undated Calendar-folder reminder rides on today and is **not** flagged overdue. Adding,
 editing and deleting an item from the day panel, with delete needing the second press.
 Calendars add, recolour, default and delete. A calendar row tap leaves only it showing and
-`All` puts them back. Ticking a repeat from the calendar rolls it. The **dot legend** renders
-under the grid, keyed by owner and kind (calendar/checkbox/page glyph before each kind's
-dots). The **add/edit modal** hides Time and Repeat behind **+ Time** / **+ Repeat** buttons
-(both start hidden), with the repeat count before its unit selector. *(By eye: the day-panel
-reminder picker lists real sections and lands new reminders in one; the + buttons reveal
-their fields and the × folds them; the modal legend colours match the day dots.)*
+`All` puts them back. Ticking a repeat from the calendar rolls it. The **dot legend** is
+built in JS from the cells on screen (keyed by owner and kind — a calendar/checkbox/page
+glyph, tinted the item's own colour, before each kind's names); the page only ships its
+key (`LEG_OWNERS` order, `LEG_CALS` names, `LEG_ICONS` glyphs) and the empty container. The
+**add/edit modal** hides Time and Repeat behind **+ Time** / **+ Repeat** buttons (both start
+hidden), with the repeat count before its unit selector. *(By eye: the day-panel reminder
+picker lists real sections and lands new reminders in one; the + buttons reveal their fields
+and the × folds them. **The legend renders only the dots actually in view** — the whole month
+in month mode, only the shown week(s) in week mode, updating as you page weeks — and its glyph
+colours match the day dots, including colours propagated from a Reminders/Notes folder.)*
 
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A

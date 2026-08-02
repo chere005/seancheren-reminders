@@ -656,52 +656,13 @@ foreach ($byDay as $d => $list) {
     $byDay[$d] = $list;
 }
 
-// --- Legend: a key to the day dots. One block per owner (mine, then the partner), each
-// grouped events → reminders → notes in the legend's kind order. Within a kind it lists
-// every calendar/folder that actually has an item in the drawn window, with its own dot
-// colour and name, in the picker's order — so a colour in a cell can be read back to what
-// it belongs to. Built straight off $byDay, so it always matches what's on the grid. ---
+// --- Legend: a key to the day dots. The legend itself is drawn in JS (see renderLegend),
+// from the cells actually on screen, so it shrinks to the shown week(s) in week mode. Here
+// we only prepare the naming/ordering key it reads: the calendar id→name map and the note
+// folder list; the owners + per-kind canonical order are shipped to JS beside ITEMS. ---
 $calNameById = [];
 foreach (array_merge($calList, $theirCals) as $c) { $calNameById[(string) ($c['id'] ?? '')] = (string) ($c['name'] ?? ''); }
-$legendSeen = [];   // owner => kind => [name => color], present in the window
-foreach ($byDay as $list) {
-    foreach ($list as $it) {
-        $owner = (string) ($it['owner'] ?? '');
-        $kind  = (string) ($it['kind'] ?? '');
-        $nm = $kind === 'event' ? ($calNameById[(string) ($it['cal'] ?? '')] ?? '') : (string) ($it['folder'] ?? '');
-        if ($nm === '') { continue; }
-        $legendSeen[$owner][$kind][$nm] = (string) ($it['color'] ?? '');
-    }
-}
-// Put one owner+kind's names into the picker's order, dropping any not in the window and
-// keeping stragglers (a name with no canonical position) at the end.
-$legendOrdered = function (array $names, array $canonical): array {
-    $out = [];
-    foreach ($canonical as $n) { if (array_key_exists($n, $names)) { $out[] = [$n, $names[$n]]; unset($names[$n]); } }
-    foreach ($names as $n => $c) { $out[] = [$n, $c]; }
-    return $out;
-};
 $noteFolders = folders_load($cfg['data_dir'])['notes'];
-// [ ['who' => label, 'kinds' => [ ['kind' => …, 'items' => [[name,color],…]], … ] ], … ]
-$legendBlocks = [];
-$ownerBlock = function (string $owner, array $calNames, array $remNames, array $noteNames)
-    use ($legendSeen, $legendOrdered): array {
-    $seen = $legendSeen[$owner] ?? [];
-    $kinds = [];
-    foreach ([['event', $calNames], ['reminder', $remNames], ['note', $noteNames]] as [$kind, $canon]) {
-        if (empty($seen[$kind])) { continue; }
-        $kinds[] = ['kind' => $kind, 'items' => $legendOrdered($seen[$kind], $canon)];
-    }
-    return $kinds;
-};
-$mineKinds = $ownerBlock('', array_column($calList, 'name'), $remFolders, $noteFolders);
-if ($mineKinds) { $legendBlocks[] = ['who' => share_name($me), 'kinds' => $mineKinds]; }
-if ($partner) {
-    // The partner's notes aren't drawn on the calendar, so their block only ever has events
-    // and reminders — pass an empty note-folder list.
-    $theirKinds = $ownerBlock($partner, array_column($sharedCals, 'name'), $sharedFolders, []);
-    if ($theirKinds) { $legendBlocks[] = ['who' => share_name($partner), 'kinds' => $theirKinds]; }
-}
 
 /** The little kind glyph the legend puts before a kind's dots: a calendar for events, a
  *  checkbox for reminders, a page for notes — matching how each kind reads in the panel. */
@@ -1371,25 +1332,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   </div>
 
   <?php // A key to the dots: one row per owner, each grouped events → reminders → notes,
-        // with the calendars/folders in view under their own colour. Shown in both views. ?>
-  <?php if ($legendBlocks): ?>
-    <div class="cal-legend" aria-label="Legend">
-      <?php foreach ($legendBlocks as $blk): ?>
-        <div class="cleg-row">
-          <span class="cleg-who"><?= e($blk['who']) ?></span>
-          <?php foreach ($blk['kinds'] as $g): ?>
-            <div class="cleg-kind">
-              <?php // Each item is the kind's glyph (calendar / checkbox / page) tinted the
-                    // item's own colour, then its name — no separate dot. ?>
-              <?php foreach ($g['items'] as [$nm, $col]): ?>
-                <span class="cleg-item"><span class="cleg-ico" style="color:<?= e($col) ?>"><?= cal_legend_icon($g['kind']) ?></span><?= e($nm) ?></span>
-              <?php endforeach; ?>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  <?php endif; ?>
+        // with the calendars/folders under their own colour. Built in JS from the cells that
+        // are actually on screen, so it reflects only what's in view — the whole month in
+        // month mode, just the shown week(s) in week mode — and updates as you page weeks. ?>
+  <div class="cal-legend" id="calLegend" aria-label="Legend"></div>
  </div>
 </div>
 
@@ -1742,6 +1688,85 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 
   // ---- Split view: tap a day (top) -> list its items (bottom) ----
   const ITEMS   = <?= $itemsJson ?: '{}' ?>;
+
+  // ---- Legend, built from the cells actually on screen ----
+  // Everything the legend needs to name and colour a dot: the calendar id→name map, the
+  // three kind glyphs, the owners in draw order (mine, then the partner), and each owner's
+  // canonical calendar/folder order so the legend lists names the way the pickers do. The
+  // dots themselves come from ITEMS at render time, so this is only the naming/ordering key.
+  const LEG_CALS  = <?= json_encode($calNameById, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const LEG_ICONS = {
+    event:    <?= json_encode(cal_legend_icon('event')) ?>,
+    reminder: <?= json_encode(cal_legend_icon('reminder')) ?>,
+    note:     <?= json_encode(cal_legend_icon('note')) ?>
+  };
+  const LEG_OWNERS = <?= json_encode(array_values(array_filter([
+      ['key' => '', 'label' => share_name($me),
+       'order' => ['event' => array_values(array_column($calList, 'name')),
+                   'reminder' => array_values($remFolders),
+                   'note' => array_values($noteFolders)]],
+      $partner ? ['key' => $partner, 'label' => share_name($partner),
+       'order' => ['event' => array_values(array_column($sharedCals, 'name')),
+                   'reminder' => array_values($sharedFolders),
+                   'note' => []]] : null,
+  ])), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+
+  // Rebuild the legend from the day cells currently visible (all of them in month mode,
+  // only the shown week(s) in week mode), so it always keys exactly the dots on screen.
+  function renderLegend() {
+    const box = document.getElementById('calLegend');
+    if (!box) { return; }
+    const dates = {};
+    document.querySelectorAll('.cell[data-date]:not(.wk-hide):not(.blank)')
+      .forEach(c => { dates[c.dataset.date] = 1; });
+    const seen = {};   // owner -> kind -> { name: color }
+    Object.keys(dates).forEach(d => {
+      (ITEMS[d] || []).forEach(it => {
+        const owner = it.owner || '', kind = it.kind;
+        const name = kind === 'event' ? (LEG_CALS[it.cal] || '') : (it.folder || '');
+        if (!name) { return; }
+        (seen[owner] = seen[owner] || {});
+        (seen[owner][kind] = seen[owner][kind] || {})[name] = it.color || '';
+      });
+    });
+    box.innerHTML = '';
+    LEG_OWNERS.forEach(ow => {
+      const km = seen[ow.key];
+      if (!km) { return; }
+      const row = document.createElement('div');
+      row.className = 'cleg-row';
+      const who = document.createElement('span');
+      who.className = 'cleg-who';
+      who.textContent = ow.label;
+      row.appendChild(who);
+      let any = false;
+      ['event', 'reminder', 'note'].forEach(kind => {
+        const names = km[kind];
+        if (!names) { return; }
+        // Canonical order first (dropping names not in view), then any stragglers.
+        const canon = (ow.order && ow.order[kind]) || [];
+        const ordered = [];
+        canon.forEach(n => { if (n in names) { ordered.push(n); } });
+        Object.keys(names).forEach(n => { if (canon.indexOf(n) < 0) { ordered.push(n); } });
+        const grp = document.createElement('div');
+        grp.className = 'cleg-kind';
+        ordered.forEach(n => {
+          any = true;
+          const item = document.createElement('span');
+          item.className = 'cleg-item';
+          const ico = document.createElement('span');
+          ico.className = 'cleg-ico';
+          ico.style.color = names[n];
+          ico.innerHTML = LEG_ICONS[kind] || '';
+          item.appendChild(ico);
+          item.appendChild(document.createTextNode(n));
+          grp.appendChild(item);
+        });
+        row.appendChild(grp);
+      });
+      if (any) { box.appendChild(row); }
+    });
+  }
   const dpDate  = document.getElementById('dpDate');
   const dpAdd   = document.getElementById('dpAdd');
   const dpList  = document.getElementById('dpList');
@@ -2416,6 +2441,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         const w = +c.dataset.week;
         c.classList.toggle('wk-hide', weekMode && w !== anchor && w !== anchor + 1);
       });
+      renderLegend();   // key only the dots now on screen
     };
     const setMode = (on) => {
       if (weekMode === on) { return; }
