@@ -290,7 +290,10 @@ Its **themes** are covered too: all eight offer a swatch, an untouched bookshelf
 Midnight, and the suite's accent-only row is hidden here. Picking one repaints the page
 (`--bg`, `--gold`) rather than just the accent, flips `color-scheme` for the two light
 themes, and follows through to the PWA `theme-color`; a plain post redirects, the AJAX one
-the picker actually uses answers JSON. An unknown key changes nothing. The bookshelf theme
+the picker actually uses answers JSON. An unknown key changes nothing. The page also has to
+carry every theme's variables (`var THEMES = {…}`) because picking one **repaints in place
+instead of reloading** — a reload shut the settings window on every pick; that table is
+asserted, but the repaint itself is JS and so is by eye. The bookshelf theme
 and the suite theme are set independently and neither moves the other. **Not covered:** how
 any of it *looks* — the contrast figures were computed once when the palettes were chosen
 (everything clears 4.5:1 on its own background), but nothing re-checks them, so a new or

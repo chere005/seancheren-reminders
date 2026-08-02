@@ -238,20 +238,42 @@ function book_theme_set(string $name): bool
 }
 
 /**
+ * One theme as the custom properties it sets, plus which way round the page is. The
+ * single place the columns of BOOK_THEMES are named: the stylesheet and the picker's
+ * live repaint both read this, so they can't drift into disagreeing about a colour.
+ */
+function book_theme_vars(string $key): array
+{
+    [, $bg, $sf, $sf2, $ln, $lns, $tx, $dim, $mut, $ac, $ink, $soft, $gold] = BOOK_THEMES[$key];
+    // Native controls (selects, scrollbars, date pickers) need telling which way round the
+    // page is, or a cream theme draws a black dropdown over it.
+    $scheme = in_array($key, BOOK_THEMES_LIGHT, true) ? 'light' : 'dark';
+    return ['scheme' => $scheme, 'vars' => [
+        '--bg' => $bg, '--surface' => $sf, '--surface-2' => $sf2, '--line' => $ln,
+        '--line-soft' => $lns, '--text' => $tx, '--text-dim' => $dim, '--muted' => $mut,
+        '--accent' => $ac, '--accent-ink' => $ink, '--accent-soft' => $soft,
+        '--gold' => $gold, '--scheme' => $scheme,
+    ]];
+}
+
+/**
  * The chosen theme as variables. Emitted *after* theme_css() so --accent is this app's
  * rather than the suite's — the bookshelf hides the suite picker for that reason.
  */
 function book_theme_css(): string
 {
-    $key = book_theme_get();
-    [, $bg, $sf, $sf2, $ln, $lns, $tx, $dim, $mut, $ac, $ink, $soft, $gold] = BOOK_THEMES[$key];
-    // Native controls (selects, scrollbars, date pickers) need telling which way round the
-    // page is, or a cream theme draws a black dropdown over it.
-    $scheme = in_array($key, BOOK_THEMES_LIGHT, true) ? 'light' : 'dark';
-    return "    :root { --bg: $bg; --surface: $sf; --surface-2: $sf2; --line: $ln;"
-         . " --line-soft: $lns; --text: $tx; --text-dim: $dim; --muted: $mut;"
-         . " --accent: $ac; --accent-ink: $ink; --accent-soft: $soft; --gold: $gold;"
-         . " --scheme: $scheme; color-scheme: $scheme; }\n";
+    $t   = book_theme_vars(book_theme_get());
+    $out = '';
+    foreach ($t['vars'] as $k => $v) { $out .= " $k: $v;"; }
+    return "    :root {{$out} color-scheme: {$t['scheme']}; }\n";
+}
+
+/** Every theme's variables, for the picker's repaint-in-place. */
+function book_themes_js(): string
+{
+    $all = [];
+    foreach (array_keys(BOOK_THEMES) as $k) { $all[$k] = book_theme_vars($k); }
+    return json_encode($all, JSON_UNESCAPED_SLASHES);
 }
 
 /** The page background, for the iOS status bar / PWA chrome. */
@@ -1581,17 +1603,31 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 </script>
 <?= settings_modal_script() ?>
 <script>
-  // The bookshelf theme picker, in the settings window's $extra slot. Posts in the
-  // background then reloads, the same shape as the suite's theme buttons — a theme
-  // changes rules all over the page, so re-rendering is simpler than repainting live.
+  // The bookshelf theme picker, in the settings window's $extra slot. A theme is only
+  // custom properties, so it repaints in place — set them on :root and every rule that
+  // reads them follows. It deliberately does NOT reload: reloading closed the settings
+  // window on every pick, so comparing two themes meant re-opening it each time. The
+  // swatch posts in the background to remember the choice, the same way the folder
+  // manager's colour swatch does.
   (function () {
-    var csrf = <?= json_encode($_SESSION['csrf'] ?? '') ?>;
+    var csrf   = <?= json_encode($_SESSION['csrf'] ?? '') ?>;
+    var THEMES = <?= book_themes_js() ?>;
+    var root   = document.documentElement;
+    var meta   = document.querySelector('meta[name="theme-color"]');
     document.querySelectorAll('.bkthemebtn').forEach(function (b) {
       b.addEventListener('click', function () {
+        var t = THEMES[b.dataset.theme];
+        if (t) {
+          // Inline on :root, so it wins over the stylesheet's own :root block.
+          for (var k in t.vars) { root.style.setProperty(k, t.vars[k]); }
+          root.style.colorScheme = t.scheme;   // native controls follow the page
+          if (meta) { meta.setAttribute('content', t.vars['--bg']); }
+          document.querySelectorAll('.bkthemebtn').forEach(function (x) {
+            x.classList.toggle('on', x === b);
+          });
+        }
         var body = new URLSearchParams({ csrf: csrf, action: 'set_book_theme', theme: b.dataset.theme });
-        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body })
-          .then(function () { location.reload(); })
-          .catch(function () { location.reload(); });
+        fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: body });
       });
     });
   })();

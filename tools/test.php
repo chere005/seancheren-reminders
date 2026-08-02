@@ -3106,6 +3106,14 @@ t('the bookshelf themes are its own, and default to the original look', function
     foreach (['midnight', 'sage', 'blossom', 'dusk', 'neon', 'plum', 'forest', 'olive'] as $k) {
         has('data-theme="' . $k . '"', $r['body'], "$k can be picked");
     }
+    // Picking repaints in place rather than reloading, because a reload shut the settings
+    // window on every pick. That needs every theme's variables on the page, so the JS has
+    // something to set — if this table goes missing the picker silently stops working.
+    has('var THEMES = {', $r['body'], 'the picker carries all the themes for a live repaint');
+    foreach (['midnight', 'sage', 'forest'] as $k) {
+        has('"' . $k . '":{"scheme":', $r['body'], "$k is in the repaint table with its scheme");
+    }
+    has('"--gold"', $r['body'], 'including the themed gold');
 });
 
 t('picking a bookshelf theme repaints the page and sticks', function () {
