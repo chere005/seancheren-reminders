@@ -152,17 +152,13 @@ const THEMES = [
     //             label            bg         surface    surface-2  line       line-soft  text       text-dim   muted      accent     accent-ink accent-soft gold
     'midnight' => ['Midnight',      '#111111', '#1a1a1a', '#2a2a2a', '#333333', '#262626', '#eeeeee', '#cccccc', '#888888', '#34d399', '#06251b', '#14332a', '#f0b429'],
     'sage'     => ['Sage & Cream',  '#fefae0', '#faedcd', '#e9edc9', '#ccd5ae', '#e4e7c9', '#3f3a2e', '#5c5545', '#776e56', '#96632f', '#fefae0', '#efe2c2', '#8a5a12'],
-    'blossom'  => ['Blossom',       '#fdf4f9', '#ffe9f2', '#ffc8dd', '#cdb4db', '#bde0fe', '#3f2e47', '#6a5273', '#7d6486', '#7b4e96', '#fff5fa', '#f0e2f6', '#8a5a12'],
-    'dusk'     => ['Dusk',          '#22223b', '#2e2e4d', '#4a4e69', '#4a4e69', '#34345a', '#f2e9e4', '#c9ada7', '#9a8c98', '#c9ada7', '#22223b', '#33324f', '#e0b877'],
-    'neon'     => ['Neon',          '#12101a', '#1c1830', '#2a2444', '#3a3160', '#241f3c', '#f5f0ff', '#c9bee6', '#9086b0', '#00f5d4', '#072b25', '#10302b', '#fee440'],
-    'plum'     => ['Plum & Mint',   '#2a1327', '#3a1b35', '#4e2a47', '#6b3f60', '#43203d', '#efe4ec', '#b5d8cc', '#a086a6', '#72e1d1', '#10302b', '#1d3b36', '#f0b429'],
     'forest'   => ['Forest',        '#040303', '#16201d', '#3a4e48', '#3a4e48', '#263230', '#e4ddd6', '#beb0a7', '#6a7b76', '#8b9d83', '#0a0f0d', '#1c2a25', '#c9a227'],
     'olive'    => ['Olive & Slate', '#241e2d', '#332a3e', '#443850', '#564a62', '#3b3247', '#eaf0ce', '#c0c5c1', '#848b98', '#bbbe64', '#241e2d', '#3a3448', '#d8c46a'],
 ];
 
 /** The themes whose page is lighter than their ink; they need color-scheme: light so
  *  native controls (selects, scrollbars, date pickers) draw the right way round. */
-const THEMES_LIGHT = ['sage', 'blossom'];
+const THEMES_LIGHT = ['sage'];
 
 function theme_file(): string
 {
@@ -540,7 +536,7 @@ function render_login(string $area, string $error = '', string $stage = 'login',
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Sign in</title>
+  <title>Sign in — CalMind</title>
   <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -623,7 +619,7 @@ function render_login(string $area, string $error = '', string $stage = 'login',
 </head>
 <body>
   <div class="login-box">
-    <h1>Sign in</h1>
+    <h1>CalMind</h1>
     <div class="area"><?= $area ?></div>
     <form method="post" action="<?= $action ?>">
       <label for="username">Username</label>

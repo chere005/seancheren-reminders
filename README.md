@@ -1,3 +1,9 @@
+# CalMind
+
+**CalMind** is the suite — Reminders, Calendar, Add, Notes and Habits — on the web at
+[seancheren.com](https://seancheren.com), with native iOS/watchOS and Android apps in
+`ios/` and `android/`.
+
 I haven't been quite happy with subtle things like not being able to have reminders from previous days on the calendar not continue to show until they are checked off.. I also wanted to tie together reminders, notes, and my calendar.. I also like enforcing date and time patterns.
 
 Feel free to deploy this on your own website, build and deploy the iOS version, etc. 

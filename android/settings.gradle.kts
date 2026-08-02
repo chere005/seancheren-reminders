@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Seancheren"
+rootProject.name = "CalMind"
 include(":core", ":app")
