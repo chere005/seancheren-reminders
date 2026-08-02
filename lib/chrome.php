@@ -355,7 +355,7 @@ function settings_modal_script(): string
   if (shareOpen) { shareOpen.addEventListener('click', function () { back.classList.remove('open'); }); }
   back.addEventListener('click', function (e) { if (e.target === back) { close(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
-  // Themes: post the pick, then reload so every rule picks the new accent up.
+  // Themes: post the pick, then reload so every rule repaints in the new palette.
   back.querySelectorAll('.themebtn').forEach(function (t) {
     t.addEventListener('click', function () {
       var body = new URLSearchParams({ csrf: form.csrf.value, action: 'set_theme', theme: t.dataset.theme });

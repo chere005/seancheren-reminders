@@ -40,7 +40,7 @@ function tabbar_styles(): string
       content: ''; position: absolute; inset: 3px 12px; background: var(--surface-2); border-radius: 8px; z-index: 0;
     }
     .segmented a.active:hover { color: var(--accent); }
-    /* The middle "+" tab: a round green add button that opens the quick-add app. When it's
+    /* The middle "+" tab: a round accent-coloured add button that opens the quick-add app. When it's
        the current tab it just deepens in colour — no pill highlight behind it. */
     /* The circle sits *inside* the bar, centred, rather than overflowing the row. The row
        grows to the circle's height and every tab centres on it (the flex default stretches
