@@ -3098,8 +3098,37 @@ t('the palette workbench is behind the login and opens with the eight starters',
     eq(200, $r['status'], 'it renders for a signed-in user');
     eq(8, substr_count($r['body'], 'class="pal"'), 'seeded with the eight starters');
     eq(96, substr_count($r['body'], 'input type="color"'), 'twelve editable roles each');
-    foreach (['Midnight', 'Neon', 'Forest'] as $n) { has('value="' . $n . '"', $r['body'], "$n is there"); }
+    // Palettes are numbered, not named — a workbench palette earns a name later.
+    foreach (['Theme 1', 'Theme 5', 'Theme 8'] as $n) { has('value="' . $n . '"', $r['body'], "$n is there"); }
+    hasnt('value="Midnight"', $r['body'], 'the bookshelf names are not carried over');
+    // The name is a field but read-only until the pencil is on, and delete is hidden
+    // outside edit mode — arriving here must never be one tap from destroying a palette.
+    has('class="palname"', $r['body'], 'the name is an editable field');
+    has('readonly', $r['body'], 'but read-only until editing is on');
+    has('id="editBtn"', $r['body'], 'there is an Edit button');
+    has('backbtn goback', $r['body'], 'and a back button');
+    has('backbtn exitedit', $r['body'], 'which becomes the leave-edit-mode x');
+    has('paldel', $r['body'], 'delete is marked so it can hide outside edit mode');
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    // Both of these return bare CSS and must sit INSIDE the style block; emitted after
+    // </style> they render as text down the top of the page, which is how this was found.
+    $head = substr($r['body'], 0, strpos($r['body'], '</style>'));
+    has('--accent:', $head, 'theme_css() lands inside the stylesheet');
+    has('needs-confirm', $head, 'and so does confirm_delete_styles()');
+});
+
+t('a duplicate says it is one, and a new palette takes the next number', function () {
+    $jar  = login('example', 'examplepassword');
+    $b    = req('GET', '/akisthemes/', [], $jar)['body'];
+    $csrf = csrf($jar, '/akisthemes/');
+    preg_match('/data-id="([a-f0-9]+)"/', $b, $m);
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add', 'id' => $m[1]], $jar);
+    $b = req('GET', '/akisthemes/', [], $jar)['body'];
+    has('value="Theme 1 (New)"', $b, 'the copy is named for its original');
+    // A plain add takes the lowest free number rather than reusing one.
+    $csrf = csrf($jar, '/akisthemes/');
+    req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add'], $jar);
+    has('value="Theme 9"', req('GET', '/akisthemes/', [], $jar)['body'], 'a new one is Theme 9');
 });
 
 t('a colour change is stored, and only a real colour in a real role', function () {
@@ -3123,22 +3152,25 @@ t('a colour change is stored, and only a real colour in a real role', function (
 });
 
 t('palettes can be added and deleted, and deleting takes two presses', function () {
-    $jar  = login('example', 'examplepassword');
+    $jar = login('example', 'examplepassword');
+    // Counted relative to whatever is already there: earlier tests in this area add
+    // palettes of their own, and an absolute count here just breaks when one is added.
+    $count = fn() => substr_count(req('GET', '/akisthemes/', [], $GLOBALS['__pjar'])['body'], 'class="pal"');
+    $GLOBALS['__pjar'] = $jar;
+    $before = $count();
     $csrf = csrf($jar, '/akisthemes/');
     req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'add', 'name' => 'Workbench one'], $jar);
     $b = req('GET', '/akisthemes/', [], $jar)['body'];
     has('value="Workbench one"', $b, 'the new palette is there');
-    eq(9, substr_count($b, 'class="pal"'), 'nine now');
+    eq($before + 1, substr_count($b, 'class="pal"'), 'one more than before');
     preg_match('/id="p-([a-f0-9]+)"/', $b, $m);
     $id = $m[1];   // new rows land at the top
     $csrf = csrf($jar, '/akisthemes/');
     req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id], $jar);
-    eq(9, substr_count(req('GET', '/akisthemes/', [], $jar)['body'], 'class="pal"'),
-        'an unconfirmed delete destroys nothing');
+    eq($before + 1, $count(), 'an unconfirmed delete destroys nothing');
     $csrf = csrf($jar, '/akisthemes/');
     req('POST', '/akisthemes/', ['csrf' => $csrf, 'action' => 'delete', 'id' => $id, 'confirm' => '1'], $jar);
-    eq(8, substr_count(req('GET', '/akisthemes/', [], $jar)['body'], 'class="pal"'),
-        'the confirmed one does');
+    eq($before, $count(), 'the confirmed one does');
 });
 
 t("editing a palette never reaches Aki's Bookshelf", function () {

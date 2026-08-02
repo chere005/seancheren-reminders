@@ -60,6 +60,11 @@ const ROLES = [
 /**
  * The starting set: Aki's Bookshelf's eight, copied. A copy and not a reference, so an
  * edit here cannot reach that app. Only used to seed an empty file.
+ *
+ * The first column is the name they came in under. Palettes here are *numbered* rather
+ * than named — this is a workbench, and a palette is a thing you are still deciding
+ * about, so a descriptive name is something you give it once it has earned one. The
+ * originals' names are kept only so an already-seeded file can be renumbered (below).
  */
 const STARTERS = [
     ['Midnight',      '#111111', '#1a1a1a', '#2a2a2a', '#333333', '#262626', '#eeeeee', '#cccccc', '#888888', '#34d399', '#06251b', '#14332a', '#f0b429'],
@@ -95,19 +100,43 @@ function palette_clean(array $p): array
     return $out;
 }
 
+/** "Theme 4" — the next free number, so two palettes never carry the same one. */
+function palette_next_name(array $list): string
+{
+    $used = [];
+    foreach ($list as $p) {
+        if (preg_match('/^Theme (\d+)$/', (string) ($p['name'] ?? ''), $m)) { $used[] = (int) $m[1]; }
+    }
+    $n = 1;
+    while (in_array($n, $used, true)) { $n++; }
+    return 'Theme ' . $n;
+}
+
 /** Load, seeding the eight starters the first time so the page opens with something. */
 function palettes_load(string $file): array
 {
     $raw = store_read($file);
     if (!$raw) {
         $raw = [];
-        foreach (STARTERS as $s) {
-            $row = ['id' => bin2hex(random_bytes(6)), 'name' => $s[0], 'colors' => []];
+        foreach (STARTERS as $n => $s) {
+            $row = ['id' => bin2hex(random_bytes(6)), 'name' => 'Theme ' . ($n + 1), 'colors' => []];
             $i = 1;
             foreach (ROLES as $role => $_) { $row['colors'][$role] = $s[$i]; $i++; }
             $raw[] = $row;
         }
         store_write($file, $raw);
+    } else {
+        // A file seeded before palettes were numbered still carries the bookshelf's names.
+        // Renumber those, but *only* where the name is still exactly the one it was seeded
+        // with — anything renamed by hand is someone's decision and is left alone.
+        $legacy = [];
+        foreach (STARTERS as $n => $s) { $legacy[$s[0]] = 'Theme ' . ($n + 1); }
+        $changed = false;
+        foreach ($raw as $k => $p) {
+            $was = (string) ($p['name'] ?? '');
+            if (isset($legacy[$was])) { $raw[$k]['name'] = $legacy[$was]; $changed = true; }
+        }
+        if ($changed) { store_write($file, $raw); }
     }
     return array_map('palette_clean', array_values($raw));
 }
@@ -134,10 +163,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         // Either a copy of an existing palette or a fresh one off the first starter, so a
         // new row is never a blank grid you have to fill in twelve times to see anything.
         $name = mb_substr(trim((string) ($_POST['name'] ?? '')), 0, 40);
-        $new  = ['id' => bin2hex(random_bytes(6)), 'name' => $name !== '' ? $name : 'New palette', 'colors' => []];
+        $new  = ['id' => bin2hex(random_bytes(6)),
+                 'name' => $name !== '' ? $name : palette_next_name($list), 'colors' => []];
         if ($idx !== null) {
+            // A duplicate keeps the colours and says so in the name, so the copy and the
+            // original are told apart at a glance rather than by position.
             $new['colors'] = $list[$idx]['colors'];
-            if ($name === '') { $new['name'] = mb_substr($list[$idx]['name'] . ' copy', 0, 40); }
+            if ($name === '') { $new['name'] = mb_substr($list[$idx]['name'] . ' (New)', 0, 40); }
         } else {
             $i = 1;
             foreach (ROLES as $role => $_) { $new['colors'][$role] = STARTERS[0][$i]; $i++; }
@@ -212,8 +244,19 @@ $palettes = palettes_load($file);
       width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
       border: 1px solid #333; border-radius: 999px; background: #1a1a1a; color: #ccc;
       font-size: 1.35rem; line-height: 1; text-decoration: none; flex: 0 0 auto;
+      font-family: inherit; cursor: pointer; padding: 0;
     }
     .backbtn:hover { border-color: #888; color: #fff; }
+    .backbtn.exitedit { display: none; background: #000; border-color: #444; color: #eee; font-size: 1.2rem; }
+    body.editing .backbtn.exitedit { display: inline-flex; }
+    body.editing .backbtn.goback { display: none; }
+    .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
+    .hedit { height: 32px; display: inline-flex; align-items: center; justify-content: center;
+             padding: 0 0.6rem; background: none; border: 1px solid #333; border-radius: 999px;
+             color: #ccc; font-size: 0.95rem; font-family: inherit; line-height: 1; cursor: pointer; }
+    .hedit:hover { border-color: #888; color: #fff; }
+    body.editing .hedit { background: var(--accent); border-color: var(--accent);
+                          color: var(--accent-ink); font-weight: 700; }
     .who { height: 32px; display: inline-flex; align-items: center; justify-content: center;
            padding: 0 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px;
            background: none; color: var(--accent); font-size: 0.85rem; }
@@ -230,10 +273,17 @@ $palettes = palettes_load($file);
     .pal { border: 1px solid #262626; border-radius: 12px; margin-bottom: 1.1rem; overflow: hidden; }
     .palhead { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem;
                background: #161616; border-bottom: 1px solid #262626; }
+    /* The name reads as plain text until you turn editing on, then it is a field. Same
+       element either way, so switching modes shifts nothing. */
     .palname { flex: 1 1 auto; min-width: 0; background: none; border: 1px solid transparent;
                border-radius: 6px; color: #eee; font: 600 1rem inherit; padding: 0.2rem 0.4rem; }
-    .palname:hover { border-color: #333; }
+    body:not(.editing) .palname { pointer-events: none; }
+    body.editing .palname:hover { border-color: #333; }
     .palname:focus { outline: none; border-color: var(--accent); background: #1a1a1a; }
+    /* Destructive control, so it is hidden unless editing — the suite's rule. Duplicate
+       is not destructive and stays. visibility, not display, so nothing moves. */
+    .paldel { visibility: hidden; }
+    body.editing .paldel { visibility: visible; }
     .palact { width: 28px; height: 28px; display: inline-flex; align-items: center;
               justify-content: center; border: 1px solid #333; border-radius: 999px;
               background: none; color: #999; font-size: 1rem; line-height: 1; cursor: pointer; flex: 0 0 auto; }
@@ -279,18 +329,27 @@ $palettes = palettes_load($file);
                     border-radius: 999px; color: #eee; font-size: 16px; padding: 0.4rem 0.9rem; }
     .addrow input:focus { outline: none; border-color: var(--accent); }
     .empty { color: #666; font-size: 0.9rem; padding: 2rem 0; text-align: center; }
-  </style>
+<?php // Both of these return bare CSS, so they belong INSIDE the block — emitted after
+      // </style> they render as text at the top of the page. ?>
 <?= theme_css() ?>
 <?= confirm_delete_styles() ?>
+  </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div class="hleft">
-      <a class="backbtn" href="<?= suite_base() ?>/" title="Back" aria-label="Back">&lsaquo;</a>
+      <?php // Two buttons in one slot, as everywhere in the suite: "<" normally, and a
+            // black × that leaves edit mode while editing. CSS swaps them, so nothing
+            // beside them shifts. ?>
+      <button type="button" class="backbtn goback" onclick="history.back()" title="Back" aria-label="Back">&lsaquo;</button>
+      <button type="button" class="backbtn exitedit" id="exitEditBtn" title="Done editing" aria-label="Leave edit mode">&times;</button>
       <h1>Themes</h1>
     </div>
-    <span class="who"><?= e($me) ?></span>
+    <div class="hright">
+      <button type="button" class="hedit" id="editBtn" title="Edit" aria-label="Edit">&#9998;&#65038;</button>
+      <span class="who"><?= e($me) ?></span>
+    </div>
   </header>
 
   <p class="lede">
@@ -320,7 +379,7 @@ $palettes = palettes_load($file);
   <?php foreach ($palettes as $p): $c = $p['colors']; ?>
     <section class="pal" id="p-<?= e($p['id']) ?>" data-id="<?= e($p['id']) ?>">
       <div class="palhead">
-        <input class="palname" value="<?= e($p['name']) ?>" maxlength="40" aria-label="Palette name">
+        <input class="palname" value="<?= e($p['name']) ?>" maxlength="40" aria-label="Palette name" readonly>
         <form method="post" style="display:inline-flex">
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="add">
@@ -331,7 +390,7 @@ $palettes = palettes_load($file);
           <input type="hidden" name="csrf" value="<?= $csrf ?>">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="id" value="<?= e($p['id']) ?>">
-          <button type="submit" class="palact needs-confirm" title="Delete" aria-label="Delete">&times;</button>
+          <button type="submit" class="palact paldel needs-confirm" title="Delete" aria-label="Delete">&times;</button>
         </form>
       </div>
 
@@ -503,6 +562,27 @@ $palettes = palettes_load($file);
     document.getElementById('addName').focus();
   });
   document.getElementById('addCancel').addEventListener('click', function () { row.classList.remove('on'); });
+
+  // --- Edit mode -----------------------------------------------------------------
+  // Deliberately never persisted — the page always opens out of it, so arriving here
+  // can't leave you one tap from deleting a palette. The name fields are readonly
+  // until it is on, which is what makes the pencil mean something.
+  function setEditing(on) {
+    document.body.classList.toggle('editing', on);
+    document.querySelectorAll('.palname').forEach(function (n) { n.readOnly = !on; });
+    if (!on) {
+      // Leaving edit mode disarms any delete that was waiting for its second press.
+      document.querySelectorAll('.needs-confirm.armed').forEach(function (b) { b.classList.remove('armed'); });
+    }
+  }
+  document.getElementById('editBtn').addEventListener('click', function () {
+    setEditing(!document.body.classList.contains('editing'));
+  });
+  document.getElementById('exitEditBtn').addEventListener('click', function () { setEditing(false); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && document.body.classList.contains('editing')
+        && document.activeElement === document.body) { setEditing(false); }
+  });
 </script>
 </body>
 </html>
