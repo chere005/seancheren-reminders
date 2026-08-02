@@ -640,7 +640,7 @@ function books_header(string $titleHtml, bool $withEdit = false): void
         <?php // Preferences live in the username's dropdown here too — same menu, no ⋮. ?>
         <div class="usercol">
           <div class="usermenu">
-            <button type="button" class="who" id="userBtn"><?= e(current_user() ?? '') ?> &#9662;</button>
+            <button type="button" class="who" id="userBtn"><span><?= e(current_user() ?? '') ?></span><span class="caret" aria-hidden="true">&#9662;</span></button>
             <div class="menu" id="userMenu" hidden>
               <button type="button" id="setBtn">Settings</button>
               <a href="?logout">Log out</a>
@@ -691,7 +691,9 @@ function books_header(string $titleHtml, bool $withEdit = false): void
 
     /* Username dropdown */
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who { padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: var(--line); }
+    .usermenu .who { padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: var(--line);
+                     gap: 0.35rem; }
+    .usermenu .who .caret { font-size: 0.7em; line-height: 1; }
     .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     /* The "⋮" sits against the username, not at the header's own gap. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }

@@ -520,11 +520,21 @@ $monthFrom   = date('Y-m-d', mktime(0, 0, 0, $month, 1 - $leadBlank, $year));
 $monthTo     = date('Y-m-d', mktime(0, 0, 0, $month, $daysInMo + $tailBlank, $year));
 $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'done'=>bool], ... ]
 
-// Folder colours, so a day's reminder and note dots wear their folder's colour (a
-// partner's shared folders use the lighter "shared" palette). Resolved into each entry.
+// Folder colours, so a day's reminder and note dots wear their folder's colour. A
+// partner's shared folders resolve exactly as the Reminders picker does — my override
+// first, then their own colour, then the lighter shared default by position — so the
+// calendar and the picker can never disagree about whose folder wears what.
 $remFolderColor   = folder_colors($cfg['data_dir'], 'reminders');
 $noteFolderColor  = folder_colors($cfg['data_dir'], 'notes');
-$remFolderTheirs  = $partner ? folder_colors($cfg['data_dir'], 'reminders', $partner) : [];
+$remFolderTheirs  = [];
+if ($partner) {
+    $theirOwn  = folder_colors($cfg['data_dir'], 'reminders', $partner);
+    $overrides = folder_shared_colors($cfg['data_dir'], 'reminders');
+    foreach (array_values($sharedFolders) as $i => $f) {
+        $remFolderTheirs[$f] = folder_shared_color($overrides, $theirOwn, 'reminders',
+                                                   '@' . $partner . ':' . $f, $f, $i);
+    }
+}
 
 /**
  * The days a reminder shows on this month: its own (possibly rolled-forward) due
@@ -1720,8 +1730,12 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     document.querySelectorAll('.cell[data-date]:not(.wk-hide):not(.blank)')
       .forEach(c => { dates[c.dataset.date] = 1; });
     const seen = {};   // owner -> kind -> { name: color }
+    const showDone = document.body.classList.contains('show-done');
     Object.keys(dates).forEach(d => {
       (ITEMS[d] || []).forEach(it => {
+        // A folder whose every reminder in view is ticked draws no dot, so it earns no
+        // legend entry either — unless Completed is showing them.
+        if (it.done && !showDone) { return; }
         const owner = it.owner || '', kind = it.kind;
         const name = kind === 'event' ? (LEG_CALS[it.cal] || '') : (it.folder || '');
         if (!name) { return; }
@@ -2027,6 +2041,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     const on = document.body.classList.toggle('show-done');
     localStorage.setItem('calShowDone', on ? '1' : '0');
     if (selected) renderPanel(selected);
+    renderLegend();   // all-done folders join or leave the key with the toggle
   });
 
   // Day-panel Edit mode: reveal × to quick-delete items. There's no Edit button any

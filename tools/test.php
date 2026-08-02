@@ -994,6 +994,9 @@ t('the calendar ships the data its in-view legend is built from', function () {
     has('const LEG_OWNERS', $r['body'], 'the owners key is shipped');
     has('function renderLegend', $r['body'], 'the renderer is shipped');
     has('renderLegend();', $r['body'], 'and is called when the view applies');
+    // Done items are skipped while Completed is off, so an all-ticked folder drops out
+    // of the key (the skip itself is JS; the wiring is what the harness can see).
+    has('if (it.done && !showDone) { return; }', $r['body'], 'done items skip the legend');
     // The owners payload names example and carries a per-kind canonical order.
     ok(preg_match('/const LEG_OWNERS = (\[.*?\]);/s', $r['body'], $m), 'the owners payload parses');
     $owners = json_decode($m[1], true);
@@ -3909,6 +3912,19 @@ t("recolouring a partner's shared calendar is my own view override, square swatc
     req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
         'id' => 'nosuchcal', 'color' => app_palette('calendar')[1]], $jar, true);
     ok(!isset(stored('calprefs', 'example')['shared_cal_colors']['nosuchcal']), 'a non-shared id is refused');
+});
+
+t("the calendar resolves a partner's folder colour exactly like the picker", function () {
+    global $scratch;
+    $jar = login('example', 'examplepassword');
+    // Give my view of buddy's Dinners an override; the calendar must wear it too. It
+    // used to read buddy's own colours with positional *own-tier* defaults, so an
+    // uncoloured shared folder could land on the same vivid colour as one of mine.
+    $_SESSION['user'] = 'example';                       // the helper writes as "me"
+    $ov = app_palette('reminders', true)[3];
+    folder_shared_color_set($scratch, 'reminders', '@buddy:Dinners', $ov, ['Dinners']);
+    $b = req('GET', '/calendar/', [], $jar)['body'];
+    has($ov, $b, "the shared folder's rows wear the picker's resolved colour");
 });
 
 t('a recolour is stored on the viewer\'s side, keyed by the view name', function () {
