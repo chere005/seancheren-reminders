@@ -3329,6 +3329,51 @@ t('the theme is set over AJAX, refuses a name it does not know, and sticks', fun
     eq($pick, store_read($scratch . '/prefs-example.json')['theme'] ?? null, 'still the one we set');
 });
 
+t('a suite theme paints the whole page, and midnight is the unchanged default', function () use ($scratch) {
+    // Themes went from accent-only to full palettes. Midnight must be byte-for-byte the
+    // old look (#111 page, #eee text, #34d399 accent) so an untouched account sees no
+    // change; a light theme must flip color-scheme so native controls follow.
+    ensure_account('fresh', 'freshpassword');
+    $jar = login('fresh', 'freshpassword');
+    $b = req('GET', '/reminders/', [], $jar)['body'];
+    foreach (['--bg: #111111', '--text: #eeeeee', '--accent: #34d399', '--gold: #f0b429',
+              'color-scheme: dark'] as $v) {
+        has($v, $b, "a fresh account's page carries midnight's $v");
+    }
+    has('name="theme-color" content="#111111"', $b, 'the status-bar colour follows the theme');
+
+    $csrf = csrf($jar, '/reminders/');
+    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'sage'], $jar, true);
+    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('--bg: #fefae0', $b, "$p wears the sage page colour");
+        has('color-scheme: light', $b, "$p flips to a light scheme");
+    }
+    has('name="theme-color" content="#fefae0"', req('GET', '/reminders/', [], $jar)['body'],
+        'and the status-bar colour moved with it');
+    // The widget quick page and the feed setup page carry the vars too — they have their
+    // own style blocks, and a converted rule with no var behind it silently loses colour.
+    has('--bg: #fefae0', req('GET', '/calendar/quick.php', [], $jar)['body'], 'quick.php is themed');
+    has('--bg: #fefae0', req('GET', '/calendar/feed.php', [], $jar)['body'], 'the feed setup page is themed');
+    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar), 'theme' => 'midnight'], $jar, true);
+});
+
+t('the theme picker shows every theme as its own swatch', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/reminders/', [], $jar)['body'];
+    eq(count(THEMES), substr_count($b, 'class="themebtn'), 'one swatch per theme');
+    eq(count(THEMES), substr_count($b, 'class="themedot"'), 'each carrying its accent dot');
+    foreach (THEMES as $key => $row) {
+        has('data-theme="' . $key . '"', $b, "$key is offered");
+    }
+    // A legacy stored name (the old accent-only themes) falls back to midnight rather
+    // than erroring or half-applying.
+    store_write(datadir() . '/prefs-example.json',
+        array_merge(store_read(datadir() . '/prefs-example.json'), ['theme' => 'rose']));
+    $b = req('GET', '/reminders/', [], $jar)['body'];
+    has('--bg: #111111', $b, 'an old stored theme name renders as midnight');
+});
+
 // ---------------------------------------------------------------- token auth
 // The widget and the watch carry a token instead of a session. It is a READ credential
 // and has been handed out as one: anything behind it that wrote would hand that power
@@ -3660,11 +3705,11 @@ t('the bookshelf theme and the suite theme are separate settings', function () {
     req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'neon'], $jar);
     // …then set the *suite* theme from another app, and check neither moved the other.
     $csrf = csrf($jar, '/reminders/');
-    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'rose'], $jar);
+    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'plum'], $jar);
     $r = req('GET', '/akisbookshelf/', [], $jar);
     has('--accent: #00f5d4', $r['body'], 'the bookshelf still wears its own accent');
     $r = req('GET', '/reminders/', [], $jar);
-    has('--accent: #fb7185', $r['body'], 'and the suite kept the one set for it');
+    has('--accent: #72e1d1', $r['body'], 'and the suite kept the one set for it');
 });
 
 // ---------------------------------------------------------------- recolouring a share

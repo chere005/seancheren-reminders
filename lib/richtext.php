@@ -137,46 +137,46 @@ function rt_styles(): string
     .rt-toolbar { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 0.5rem; }
     .rt-btn {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px; cursor: pointer;
-      background: none; border: 1px solid #333; color: #ccc; font-family: inherit; line-height: 1.2;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); font-family: inherit; line-height: 1.2;
     }
-    .rt-btn:hover { border-color: #888; color: #fff; }
+    .rt-btn:hover { border-color: var(--muted); color: #fff; }
     .rt-btn.on { background: var(--accent-ink); border-color: var(--accent); color: var(--accent); font-weight: 700; }
     /* The body itself: a contenteditable wearing the textarea's old clothes. */
     .rt-body {
-      width: 100%; min-height: 40vh; background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
-      padding: 0.75rem; color: #eee; font-family: inherit; font-size: 16px; line-height: 1.5;
+      width: 100%; min-height: 40vh; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.75rem; color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.5;
       overflow-wrap: anywhere;
     }
     .rt-body:focus { outline: none; border-color: var(--accent); }
-    .rt-body:empty::before { content: attr(data-placeholder); color: #666; }
+    .rt-body:empty::before { content: attr(data-placeholder); color: var(--muted); }
     .rt-body blockquote {
       margin: 0.5rem 0; padding: 0.15rem 0 0.15rem 0.9rem;
       border-left: 3px solid var(--accent); color: #dfe; font-style: italic;
     }
     .rt-body ul, .rt-body ol { margin: 0.4rem 0 0.4rem 1.3rem; }
-    .rt-body .rt-meta { color: #888; font-size: 0.8rem; margin: 0.15rem 0 0.6rem; font-style: normal; }
+    .rt-body .rt-meta { color: var(--muted); font-size: 0.8rem; margin: 0.15rem 0 0.6rem; font-style: normal; }
     /* Quote window — the same shape as the calendars/folders managers. */
     .rt-modal {
-      background: #1c1c1c; border: 1px solid #333; border-radius: 12px; padding: 1rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem;
       width: min(420px, 92vw); max-height: 88vh; overflow: auto;
     }
     .rt-modal h2 { font-size: 1rem; margin: 0 0 0.75rem; }
-    .rt-modal label { display: block; font-size: 0.8rem; color: #888; margin: 0.6rem 0 0.2rem; }
+    .rt-modal label { display: block; font-size: 0.8rem; color: var(--muted); margin: 0.6rem 0 0.2rem; }
     .rt-modal textarea, .rt-modal input[type=text] {
-      width: 100%; background: #111; border: 1px solid #333; border-radius: 8px; color: #eee;
+      width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text);
       padding: 0.5rem 0.7rem; font-family: inherit; font-size: 16px; resize: vertical;
     }
     .rt-modal textarea:focus, .rt-modal input:focus { outline: none; border-color: var(--accent); }
     .rt-stamp {
       margin-top: 0.8rem; padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px;
-      background: none; border: 1px solid #333; color: #777; cursor: pointer; font-family: inherit;
+      background: none; border: 1px solid var(--line); color: #777; cursor: pointer; font-family: inherit;
     }
     .rt-stamp[aria-pressed="true"] { background: var(--accent-ink); border-color: var(--accent); color: var(--accent); font-weight: 700; }
     .rt-modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
     .rt-modal-actions button {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px; cursor: pointer; font-family: inherit;
     }
-    .rt-cancel { background: none; border: 1px solid #444; color: #ccc; }
+    .rt-cancel { background: none; border: 1px solid var(--line); color: var(--text-dim); }
     .rt-insert { background: var(--accent); border: none; color: var(--accent-ink); font-weight: 700; }
     CSS;
 }

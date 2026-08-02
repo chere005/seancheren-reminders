@@ -108,35 +108,36 @@ if ($tickId !== '') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Quick add</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <style>
+    <?= theme_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh;
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh;
       display: flex; align-items: center; justify-content: center; padding: 1.5rem 1rem; }
     .wrap { width: 100%; max-width: 460px; }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    h1 .day { font-size: 0.85rem; color: #888; font-weight: 400; margin-left: 0.4rem; }
+    h1 .day { font-size: 0.85rem; color: var(--muted); font-weight: 400; margin-left: 0.4rem; }
     .flash { background: #14251f; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px;
       padding: 0.55rem 0.8rem; font-size: 0.9rem; margin: 0.75rem 0; }
-    .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 10px; color: #eee; font-size: 1.1rem; margin: 1rem 0; }
-    .bar input:focus { outline: none; border-color: #888; }
+    .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 10px; color: var(--text); font-size: 1.1rem; margin: 1rem 0; }
+    .bar input:focus { outline: none; border-color: var(--muted); }
     .btns { display: flex; gap: 0.75rem; }
     .qb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-      padding: 1rem; border: 1px solid #333; border-radius: 12px; font-size: 0.95rem; font-weight: 600;
-      cursor: pointer; background: #1a1a1a; }
+      padding: 1rem; border: 1px solid var(--line); border-radius: 12px; font-size: 0.95rem; font-weight: 600;
+      cursor: pointer; background: var(--surface); }
     .qb :first-child { font-size: 1.7rem; line-height: 1; }
     .qb.rem { color: var(--accent); border-color: #2a4a3d; }
-    .qb.rem:hover { background: #14251f; }
+    .qb.rem:hover { background: var(--accent-soft); }
     .qb.evt { color: #7dd3fc; border-color: #24506a; }
     .qb.evt:hover { background: #0f2734; }
-    .open { display: inline-block; margin-top: 1.25rem; color: #888; text-decoration: none; font-size: 0.9rem; }
-    .open:hover { color: #fff; }
-    .hint { color: #666; font-size: 0.78rem; margin-top: 0.6rem; }
+    .open { display: inline-block; margin-top: 1.25rem; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+    .open:hover { color: var(--text); }
+    .hint { color: var(--muted); font-size: 0.78rem; margin-top: 0.6rem; }
     /* The one reminder the widget's checkbox was pointing at. */
-    .tickwhat { font-size: 1.15rem; color: #ddd; margin: 0.9rem 0 1.25rem; word-break: break-word; }
+    .tickwhat { font-size: 1.15rem; color: var(--text-dim); margin: 0.9rem 0 1.25rem; word-break: break-word; }
     a.qb { text-decoration: none; }
   </style>
 </head>

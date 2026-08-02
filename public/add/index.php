@@ -189,7 +189,7 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Add</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -197,8 +197,7 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
   <style>
     <?= kind_color_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --accent: #34d399; --accent-ink: #06251b; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
     <?= tabbar_styles() ?>
     <?= chrome_styles() ?>
     /* Same top bar as every other app: back + name on the left, username on the right,
@@ -207,32 +206,32 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
     header h1 { font-size: 1.35rem; }
     header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     .wrap { width: 100%; max-width: 460px; margin: 0 auto; padding: 1.5rem 1rem 5rem; }
-    .addhead { font-size: 0.85rem; color: #888; margin: 0.5rem 0 0; }
+    .addhead { font-size: 0.85rem; color: var(--muted); margin: 0.5rem 0 0; }
     .flash { background: #14251f; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px;
       padding: 0.55rem 0.8rem; font-size: 0.9rem; margin: 0.75rem 0; }
-    .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 10px; color: #eee; font-size: 16px; margin: 1rem 0; }
-    .bar input[type=text]:focus { outline: none; border-color: #888; }
+    .bar input[type=text] { width: 100%; padding: 0.85rem 0.9rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 10px; color: var(--text); font-size: 16px; margin: 1rem 0; }
+    .bar input[type=text]:focus { outline: none; border-color: var(--muted); }
     /* The type selector: three toggles, one active at a time. Picking one doesn't submit —
        Done does — so it reads as choosing a kind, not firing three separate actions. */
     .btns { display: flex; gap: 0.6rem; }
     .qb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-      padding: 0.9rem 0.5rem; border: 1px solid #333; border-radius: 12px; font-size: 0.9rem; font-weight: 600;
-      cursor: pointer; background: #1a1a1a; font-family: inherit; color: #888; }
+      padding: 0.9rem 0.5rem; border: 1px solid var(--line); border-radius: 12px; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; background: var(--surface); font-family: inherit; color: var(--muted); }
     .qb :first-child { font-size: 1.6rem; line-height: 1; }
-    .qb.sel.rem { color: var(--k-reminder); border-color: var(--k-reminder); background: #14231c; }
-    .qb.sel.evt { color: var(--k-event); border-color: var(--k-event); background: #142131; }
-    .qb.sel.note { color: var(--k-note); border-color: var(--k-note); background: #23200f; }
+    .qb.sel.rem { color: var(--k-reminder); border-color: var(--k-reminder); background: var(--k-reminder-bg); }
+    .qb.sel.evt { color: var(--k-event); border-color: var(--k-event); background: var(--k-event-bg); }
+    .qb.sel.note { color: var(--k-note); border-color: var(--k-note); background: var(--k-note-bg); }
     /* A pill toggle that reveals a hidden panel, the same shape as "+ Date/Time". */
-    .revbtn { margin-top: 0.9rem; padding: 0.5rem 0.9rem; background: none; border: 1px solid #333;
-      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
-    .revbtn:hover { border-color: #888; color: #fff; }
+    .revbtn { margin-top: 0.9rem; padding: 0.5rem 0.9rem; background: none; border: 1px solid var(--line);
+      color: var(--text-dim); border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
+    .revbtn:hover { border-color: var(--muted); color: #fff; }
     .revrow[hidden], .revbtn[hidden] { display: none; }
     .revrow { display: flex; gap: 0.75rem; margin-top: 0.9rem; }
-    .revrow label { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: #999; }
-    .revrow select, .revrow input { padding: 0.6rem 0.7rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 8px; color: #eee; font-size: 16px; font-family: inherit; }
-    .revrow select:focus, .revrow input:focus { outline: none; border-color: #888; }
+    .revrow label { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--muted); }
+    .revrow select, .revrow input { padding: 0.6rem 0.7rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 8px; color: var(--text); font-size: 16px; font-family: inherit; }
+    .revrow select:focus, .revrow input:focus { outline: none; border-color: var(--muted); }
     /* Repeat row: the "every N" count sits narrow on the left, the unit fills the rest, both
        on one line so the two read as a single control (the count aligned to the selector). */
     .rprow .rpnum { flex: 0 0 auto; }
@@ -242,13 +241,13 @@ $calDef  = add_default_cal($cfg, array_column($calList, 'id'));
     .donerow { margin-top: 1.25rem; }
     .donebtn { width: 100%; padding: 0.85rem; background: var(--accent); color: var(--accent-ink);
       border: none; border-radius: 10px; font-size: 1rem; font-weight: 700; font-family: inherit; cursor: pointer; }
-    .donebtn:hover { background: #52e0ac; }
-    .syntax { margin-top: 1.5rem; color: #999; font-size: 0.82rem; }
-    .syntax .shead { color: #888; margin-bottom: 0.4rem; }
+    .donebtn:hover { filter: brightness(1.1); }
+    .syntax { margin-top: 1.5rem; color: var(--muted); font-size: 0.82rem; }
+    .syntax .shead { color: var(--muted); margin-bottom: 0.4rem; }
     .syntax ul { list-style: none; margin: 0 0 0.9rem; padding: 0; }
     .syntax li { padding: 0.2rem 0; }
-    .syntax li::before { content: '·'; color: #666; margin-right: 0.5rem; }
-    .syntax b { color: #cfcfcf; font-weight: 600; }
+    .syntax li::before { content: '·'; color: var(--muted); margin-right: 0.5rem; }
+    .syntax b { color: var(--text-dim); font-weight: 600; }
   </style>
 </head>
 <body>

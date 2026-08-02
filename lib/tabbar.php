@@ -13,7 +13,7 @@ function tabbar_styles(): string
     .tabbar {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
       display: flex; justify-content: center;
-      background: #161616; border-top: 1px solid #2a2a2a;
+      background: var(--surface); border-top: 1px solid var(--line-soft);
       padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
     }
     /* Sized to its contents and centred, not stretched across the whole width — flex:1
@@ -22,22 +22,22 @@ function tabbar_styles(): string
        distance apart on any screen. */
     .segmented {
       display: flex; align-items: center; justify-content: center; gap: 2px;
-      background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 12px; padding: 3px;
+      background: var(--bg); border: 1px solid var(--line-soft); border-radius: 12px; padding: 3px;
     }
     .segmented a {
       flex: 0 0 auto; width: 54px; display: flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 0.5rem 0; text-decoration: none; color: #888;
+      padding: 0.5rem 0; text-decoration: none; color: var(--muted);
       font-size: 0.82rem; font-weight: 600; border-radius: 8px;
       transition: background 0.12s, color 0.12s;
     }
     .segmented a { position: relative; }
     .segmented a .ico { font-size: 1.35rem; line-height: 1; position: relative; z-index: 1; }
-    .segmented a:hover { color: #ccc; }
+    .segmented a:hover { color: var(--text-dim); }
     /* The selected tab's highlight is inset a little from the tab's edges, so it reads as
        a pill sitting inside the tab rather than filling it corner to corner. */
     .segmented a.active { color: var(--accent); }
     .segmented a.active::before {
-      content: ''; position: absolute; inset: 3px 12px; background: #2a2a2a; border-radius: 8px; z-index: 0;
+      content: ''; position: absolute; inset: 3px 12px; background: var(--surface-2); border-radius: 8px; z-index: 0;
     }
     .segmented a.active:hover { color: var(--accent); }
     /* The middle "+" tab: a round green add button that opens the quick-add app. When it's
@@ -53,9 +53,9 @@ function tabbar_styles(): string
     }
     .segmented a.addtab .ico { display: inline-flex; align-items: center; justify-content: center; }
     .segmented a.addtab .ico svg { display: block; }
-    .segmented a.addtab:hover { background: #52e0ac; color: var(--accent-ink, #06251b); }
+    .segmented a.addtab:hover { filter: brightness(1.1); }
     .segmented a.addtab.active::before { display: none; }   /* no pill behind the + */
-    .segmented a.addtab.active { background: #0f9b73; color: #eafff6; }
+    .segmented a.addtab.active { background: var(--accent); color: var(--accent-ink); }
     CSS;
 }
 

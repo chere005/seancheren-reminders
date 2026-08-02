@@ -860,7 +860,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Notes</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -871,7 +871,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, sans-serif; background: #111; color: #eee;
+      font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
       min-height: 100vh; padding: 1.5rem 1rem;
       overscroll-behavior-y: none;               /* no rubber-band scroll when it all fits */
     }
@@ -882,8 +882,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
-    header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
-    header nav a:hover { color: #fff; }
+    header nav a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    header nav a:hover { color: var(--text); }
     header nav .who {
       color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
@@ -897,16 +897,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* One height for everything on this row, whichever of them is showing. */
     .listbar .listedit, .listbar .newsection input, .listbar .newsection .plus { height: 32px; }
     .listbar .listedit {
-      background: none; border: 1px solid #333; color: #ccc; border-radius: 999px;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; white-space: nowrap;
       font-family: inherit;
     }
-    .listbar .listedit:hover { border-color: #888; color: #fff; }
+    .listbar .listedit:hover { border-color: var(--muted); color: #fff; }
     .listbar select {
-      padding: 0.5rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 0.9rem; color-scheme: dark; cursor: pointer;
+      padding: 0.5rem 0.5rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 0.9rem; color-scheme: dark; cursor: pointer;
     }
-    .listbar select:focus { outline: none; border-color: #888; }
+    .listbar select:focus { outline: none; border-color: var(--muted); }
 
     /* Same side padding as a row, so the section's X lands under the rows' Xs. */
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
@@ -917,7 +917,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     /* The collapse-all button sits above the top folder. */
     .notes-topbar { display: flex; justify-content: flex-start; }
     .notes-topbar + #notes-root > .folder-block:first-child { margin-top: 0.75rem; }
-    .folder-block { border-top: 2px solid #363636; margin-top: 1.5rem; padding-top: 0.55rem; }
+    .folder-block { border-top: 2px solid var(--line); margin-top: 1.5rem; padding-top: 0.55rem; }
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0 0.25rem; }
     /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
        of the folder's own colour — 8-digit hex, inline, from folder_tint(). That wash is
@@ -927,7 +927,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        the wash: the colour identity is the chip, so the name only has to be legible, and
        near-white is the one value that reads on all six folder colours at once. */
     .folder-label {
-      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: #f2f2f2;
+      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: var(--text);
       border-radius: 999px; padding: 0.1rem 0.65rem;
     }
     /* A short rule on the heading's own line, trailing off to the right edge. It rides
@@ -938,12 +938,12 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        section can be added without first entering edit mode. */
     /* The + that adds a section wears the section-title colour (gold). */
     .fsec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #4a3f2a;
-      color: #f0b429; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid var(--gold); opacity: 0.8;
+      color: var(--gold); border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .fsec-add:hover { border-color: #f0b429; color: #f0b429; }
+    .fsec-add:hover { opacity: 1; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Every section — named
@@ -959,7 +959,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .section-head form.sec-add-form { margin-left: -0.45rem; }
     /* The permanent group's plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
-    .section-title { font-weight: 600; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
+    .section-title { font-weight: 600; font-size: 1.15rem; color: var(--gold); line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     /* Same grey outlined pill as "+ Section" on the list bar (.listedit) — the same act,
@@ -973,25 +973,25 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     .sec-add:hover { border-color: var(--accent); color: var(--accent); }
     .section-del {
-      background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px;
       padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
       font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
 
     ul.nlist { list-style: none; margin-bottom: 0.5rem; }
-    ul.nlist li { border-bottom: 1px solid #222; display: flex; align-items: center; padding-right: 0.25rem; }
+    ul.nlist li { border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; padding-right: 0.25rem; }
     ul.nlist li:last-child { border-bottom: none; }   /* no divider under a section's last note */
     .noteitem {
       flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.85rem 0.25rem;
-      text-decoration: none; color: #eee;
+      text-decoration: none; color: var(--text);
     }
-    .noteitem:hover { background: #171717; }
+    .noteitem:hover { background: var(--surface); }
     /* Edit mode: delete buttons hidden until "Edit" */
     .ndel .del, .section-del { display: none; }
     body.editing .ndel .del, body.editing .section-del { display: inline-block; }
     .ndel .del {
-      background: none; border: 1px solid #444; color: #ccc; cursor: pointer; margin-left: 0.5rem;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer; margin-left: 0.5rem;
       border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
     }
     .ndel .del:hover { border-color: #f66; color: #f66; }
@@ -1001,7 +1001,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        The section headers carry a blank one so their names start at the same x. */
     .drag-handle {
       visibility: hidden; flex: 0 0 auto; width: 1rem; display: inline-flex;
-      align-items: center; justify-content: center; color: #666; font-size: 0.9rem;
+      align-items: center; justify-content: center; color: var(--muted); font-size: 0.9rem;
       cursor: grab; touch-action: none; user-select: none;
     }
     body.editing .drag-handle { visibility: visible; }
@@ -1013,7 +1013,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
        edit mode it takes the collapse chevron's slot; the catch-all's is blank. */
     .sec-handle {
       flex: 0 0 auto; width: 1.1rem; display: none; align-items: center; justify-content: center;
-      color: #666; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; line-height: 1;
+      color: var(--muted); cursor: grab; touch-action: none; user-select: none; font-size: 1rem; line-height: 1;
     }
     body.editing .sec-handle { display: inline-flex; }
     body.editing .section-head .sec-collapse { display: none; }   /* handle takes its slot */
@@ -1025,8 +1025,8 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .sec-handle.blank { cursor: default; }
     .sec-handle:active { cursor: grabbing; color: var(--accent); }
     .section-group.dragging { opacity: 0.45; }
-    .section-group.dragging .section-head { background: #1b1f1d; border-radius: 6px; }
-    ul.nlist li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+    .section-group.dragging .section-head { background: var(--surface-2); border-radius: 6px; }
+    ul.nlist li.dragging { background: var(--surface-2); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
     /* The single line that shows where the dragged thing will land — nothing moves until
        the drop, the same as Reminders. An <li> inside a row list, a <div> between sections. */
     .drop-line {
@@ -1035,14 +1035,14 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       pointer-events: none;
     }
     ul.nlist > li.drop-line { display: block; }
-    body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed #333; border-radius: 6px; margin: 0.3rem 0; }
+    body.editing #notes-root ul.nlist:empty { min-height: 1.5rem; border: 1px dashed var(--line); border-radius: 6px; margin: 0.3rem 0; }
     #notes-root li { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     .noteitem .ntitle { flex: 1; font-size: 1.02rem; word-break: break-word; }
     .noteitem .ndate {
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
       border-radius: 999px; white-space: nowrap;
     }
-    .noteitem .nchev { color: #555; font-size: 1.1rem; }
+    .noteitem .nchev { color: var(--muted); font-size: 1.1rem; }
     /* A partner's shared note folder shown read-only in my "All": no link, no delete. */
     .folder-head .fshared-badge {
       flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
@@ -1054,7 +1054,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       font-size: 0.72rem; color: #b9a7f5; background: #241a3a; padding: 0.15rem 0.5rem;
       border-radius: 999px; white-space: nowrap;
     }
-    .empty { color: #666; text-align: center; padding: 2rem 0; }
+    .empty { color: var(--muted); text-align: center; padding: 2rem 0; }
 
     /* Editor view */
     .backbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -1062,27 +1062,27 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .backbar a:hover { text-decoration: underline; }
     /* The folder/section pickers wear the Edit button's pill (.hedit in chrome.php). */
     .backbar select {
-      margin: 0; color: #ccc; font-size: 0.8rem; background: none; border: 1px solid #333;
+      margin: 0; color: var(--text-dim); font-size: 0.8rem; background: none; border: 1px solid var(--line);
       border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-family: inherit;
       color-scheme: dark;
     }
-    .backbar select:hover { border-color: #888; color: #fff; }
-    .backbar select.secsel { border-color: #4a3f2a; color: #f0b429; }
+    .backbar select:hover { border-color: var(--muted); color: #fff; }
+    .backbar select.secsel { border-color: #4a3f2a; color: var(--gold); }
     .editor { display: flex; flex-direction: column; gap: 0.6rem; }
     .editor .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     .editor input[type=text] {
-      flex: 1 1 300px; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 1.05rem; font-weight: 600;
+      flex: 1 1 300px; padding: 0.6rem 0.75rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 1.05rem; font-weight: 600;
     }
     .editor input[type=date] {
-      padding: 0.6rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
+      padding: 0.6rem 0.5rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 0.95rem; color-scheme: dark;
     }
     .editor select {
-      padding: 0.55rem 0.5rem; background: #1a1a1a; border: 1px solid #333;
-      border-radius: 6px; color: #eee; font-size: 0.9rem; color-scheme: dark; cursor: pointer;
+      padding: 0.55rem 0.5rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 0.9rem; color-scheme: dark; cursor: pointer;
     }
-    .editor select.secsel { border-color: #4a3f2a; color: #f0b429; }
+    .editor select.secsel { border-color: #4a3f2a; color: var(--gold); }
     .editor .adddate {
       background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
       padding: 0 0.9rem; min-height: 2.4rem; font-size: 0.9rem; cursor: pointer;
@@ -1091,45 +1091,45 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .editor .datewrap { display: inline-flex; align-items: center; gap: 0.35rem; }
     .editor .datewrap[hidden] { display: none; }   /* make [hidden] win over inline-flex */
     .editor .cleardate {
-      background: none; border: 1px solid #333; color: #999; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.55rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
     }
     .editor .cleardate:hover { border-color: #f66; color: #f66; }
-    .editor input:focus, .editor textarea:focus, .editor select:focus { outline: none; border-color: #888; }
+    .editor input:focus, .editor textarea:focus, .editor select:focus { outline: none; border-color: var(--muted); }
     .editor textarea {
       width: 100%; min-height: 320px; resize: vertical; padding: 0.8rem;
-      background: #1a1a1a; border: 1px solid #333; border-radius: 6px; color: #eee;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
       font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.95rem; line-height: 1.5;
     }
     .editor .actions { display: flex; align-items: center; gap: 0.75rem; }
     .editor button.save {
-      padding: 0.6rem 1.2rem; background: #eee; color: #111; border: none;
+      padding: 0.6rem 1.2rem; background: var(--text); color: var(--bg); border: none;
       border-radius: 6px; font-size: 1rem; font-weight: 700; cursor: pointer;
     }
-    .editor button.save:hover { background: #fff; }
+    .editor button.save:hover { filter: brightness(1.1); }
     .editor button.del {
-      margin-left: auto; background: none; border: none; color: #666;
+      margin-left: auto; background: none; border: none; color: var(--muted);
       font-size: 0.8rem; cursor: pointer;
     }
     .editor button.del:hover { color: #f66; }
-    .editor .meta { font-size: 0.72rem; color: #666; }
+    .editor .meta { font-size: 0.72rem; color: var(--muted); }
 <?= folder_nav_styles() ?>
     .newsection { margin: 0; display: flex; gap: 0.4rem; align-items: center; }
     .newsection[hidden] { display: none; }   /* [hidden] has to win over the flex above */
     /* The + matches the input's height: align-self: stretch fills the flex row, whose
        height the (taller, padding-sized) input sets, so the two line up whatever the input. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: var(--gold); color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
-    .newsection .plus:hover { background: #f7c95a; }
+    .newsection .plus:hover { filter: brightness(1.1); }
     .newsection input {
-      width: 190px; max-width: 100%; padding: 0.35rem 0.9rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
-      border-radius: 999px; color: #f0b429; font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
+      width: 190px; max-width: 100%; padding: 0.35rem 0.9rem; background: var(--surface); border: 1px dashed #5a4a2a;
+      border-radius: 999px; color: var(--gold); font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
     }
-    .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
-    .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .newsection input::placeholder { color: var(--gold); opacity: 0.85; }
+    .newsection input:focus { outline: none; border-style: solid; border-color: var(--gold); }
 <?= tabbar_styles() ?>
 <?= chrome_styles() ?>
 <?= rt_styles() ?>

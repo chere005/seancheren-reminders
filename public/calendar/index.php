@@ -695,7 +695,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Calendar</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -707,7 +707,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
-      font-family: system-ui, sans-serif; background: #111; color: #eee;
+      font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
       display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
     }
     /* Top: the calendar */
@@ -719,7 +719,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Bottom: the selected-day agenda */
     .daypanel {
       flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-      border-top: 1px solid #2a2a2a; background: #141414;
+      border-top: 1px solid var(--line-soft); background: var(--bg);
       padding: 0.9rem 1rem calc(84px + env(safe-area-inset-bottom, 0px));
     }
     .daypanel .wrap { max-width: 640px; margin: 0 auto; }
@@ -731,13 +731,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     /* Widget lives in the manager's button row now, dressed like Share. */
     .modal .buttons .widgetlink {
-      display: inline-flex; align-items: center; background: #2a2a2a; border: none; color: #ccc;
+      display: inline-flex; align-items: center; background: var(--surface-2); border: none; color: var(--text-dim);
       text-decoration: none; padding: 0.55rem 1.1rem; border-radius: 6px; font-size: 0.95rem;
       font-weight: 600; line-height: 1.2;
     }
-    .modal .buttons .widgetlink:hover { background: #333; color: #fff; }
-    header nav a { color: #888; text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
-    header nav a:hover { color: #fff; }
+    .modal .buttons .widgetlink:hover { background: var(--surface-2); color: var(--text); }
+    header nav a { color: var(--muted); text-decoration: none; margin-left: 1rem; font-size: 0.85rem; }
+    header nav a:hover { color: var(--text); }
     header nav .who {
       color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
       border-radius: 999px; padding: 0.15rem 0.6rem;
@@ -750,11 +750,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .calpick-btn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px; padding: 0;
-      background: #1a1a1a; border: 1px solid #333; border-radius: 50%; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 50%; cursor: pointer;
     }
-    .calpick-btn:hover { border-color: #888; }
+    .calpick-btn:hover { border-color: var(--muted); }
     .calpick .cdot {
-      flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: #555;
+      flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--muted);
     }
     /* After the rule above, or it would shrink the button's dot back to menu size. */
     .calpick-btn .cdot { width: 16px; height: 16px; }
@@ -764,24 +764,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .calpick-menu {
       position: fixed; z-index: 90; min-width: 210px;
       max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto; overflow-x: hidden;
-      background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
     }
     .calpick-menu[hidden] { display: none; }
     .calpick-group {
-      color: #777; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      color: var(--muted); font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.06em; padding: 0.5rem 0.6rem 0.25rem;
     }
     .calpick-opt {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem;
-      border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
+      border-radius: 7px; color: var(--text-dim); text-decoration: none; font-size: 0.92rem;
     }
     .calpick-opt .cpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    .calpick-opt:hover { background: #262626; color: #fff; }
+    .calpick-opt:hover { background: var(--surface-2); color: #fff; }
     /* Show/hide checkbox per calendar — a drawn box, exactly like the folder picker's, so
        cancelling the row's link click doesn't fight a real checkbox's toggle. */
     .calpick-opt .cvis {
-      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px;
+      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid var(--line); border-radius: 3px;
       cursor: pointer; position: relative; box-sizing: border-box;
     }
     .calpick-opt .cvis.on { background: var(--accent); border-color: var(--accent); }
@@ -797,32 +797,32 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     /* "Manage calendars", the last row of the picker menu. */
     .calpick-manage {
-      width: 100%; background: none; border: none; border-top: 1px solid #333;
+      width: 100%; background: none; border: none; border-top: 1px solid var(--line);
       margin-top: 0.25rem; padding-top: 0.55rem; cursor: pointer; font-family: inherit;
-      text-align: left; color: #bbb; font-size: 0.92rem;
+      text-align: left; color: var(--text-dim); font-size: 0.92rem;
     }
-    .calpick-manage .cpick-gear { display: inline-flex; width: 16px; justify-content: center; color: #888; }
-    .calpick-manage:hover { color: #fff; }
+    .calpick-manage .cpick-gear { display: inline-flex; width: 16px; justify-content: center; color: var(--muted); }
+    .calpick-manage:hover { color: var(--text); }
 
     .monthnav {
       display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;
     }
     .monthnav a {
-      color: #eee; text-decoration: none; border: 1px solid #333; border-radius: 8px;
-      padding: 0.4rem 1.1rem; font-size: 1.3rem; line-height: 1; background: #1a1a1a;
+      color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.4rem 1.1rem; font-size: 1.3rem; line-height: 1; background: var(--surface);
       user-select: none;
     }
     .monthnav a:hover { border-color: var(--accent); color: var(--accent); }
-    .monthnav a:active { background: #242424; }
+    .monthnav a:active { background: var(--surface-2); }
     .monthnav .label {
-      font-size: 1.05rem; color: #ddd; font-weight: 600; background: none; border: none;
+      font-size: 1.05rem; color: var(--text-dim); font-weight: 600; background: none; border: none;
       cursor: pointer; font-family: inherit; padding: 0.2rem 0.3rem; border-radius: 6px;
     }
-    .monthnav .label:hover { color: #fff; background: #1e1e1e; }
+    .monthnav .label:hover { color: var(--text); background: var(--surface); }
     /* Today sits just left of the month name. */
     .monthnav .mlabel { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
     .monthnav .todaybtn {
-      flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px;
       padding: 0.2rem 0.7rem; font-size: 0.78rem; text-decoration: none; line-height: 1.3;
     }
     .monthnav .todaybtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -830,33 +830,33 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .ym-menu { padding: 0.6rem; }
     .ym-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
     .ym-row select {
-      flex: 1; min-width: 0; padding: 0.4rem 0.5rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; color-scheme: dark; font-family: inherit;
+      flex: 1; min-width: 0; padding: 0.4rem 0.5rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; color-scheme: dark; font-family: inherit;
     }
     .ym-go {
       width: 100%; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; padding: 0.45rem; font-size: 0.9rem; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
-    .ym-go:hover { background: #52e0ac; }
+    .ym-go:hover { filter: brightness(1.1); }
 
     .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
     .dow { margin-bottom: 6px; }
-    .dow span { text-align: center; font-size: 0.7rem; color: #666; padding: 0.25rem 0; }
+    .dow span { text-align: center; font-size: 0.7rem; color: var(--muted); padding: 0.25rem 0; }
     .cell {
-      min-height: 40px; background: #171717; border: 1px solid #242424; border-radius: 6px;
+      min-height: 40px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 6px;
       padding: 4px 4px 3px; cursor: pointer; position: relative;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
-    .cell:not(.blank):hover { border-color: #3a5a4d; background: #1b1f1d; }
+    .cell:not(.blank):hover { border-color: var(--accent-soft); background: var(--surface-2); }
     .cell.blank { background: transparent; border-color: transparent; cursor: default; }
     /* The neighbouring months: there, but clearly not this month. */
-    .cell.other { background: #131313; border-color: #1c1c1c; }
-    .cell.other .num { color: #4a4a4a; }
-    .cell .num { font-size: 0.82rem; color: #999; }
+    .cell.other { background: var(--bg); border-color: var(--line-soft); }
+    .cell.other .num { color: var(--muted); }
+    .cell .num { font-size: 0.82rem; color: var(--muted); }
     .cell.today { border-color: var(--accent); }
     .cell.today .num { color: var(--accent); font-weight: 700; }
-    .cell.selected { border-color: #eee; background: #22262a; }
+    .cell.selected { border-color: var(--text); background: var(--surface-2); }
     .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; min-height: 6px; }
     .cell .dot { width: 6px; height: 6px; border-radius: 50%; }
     .cell .dot.reminder { background: var(--k-reminder); }
@@ -875,13 +875,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cal-legend { margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; }
     .cleg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.75rem; }
     .cleg-who {
-      flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; color: #888;
+      flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.04em;
     }
     .cleg-kind { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; }
     /* The glyph itself carries the item's colour now (inline), so it doubles as the swatch. */
     .cleg-ico { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
-    .cleg-item { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; color: #cbcbcb; white-space: nowrap; }
+    .cleg-item { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; }
 
     /* Day panel (bottom) */
     .dp-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
@@ -894,14 +894,14 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     /* Completed sits just left of + Add — an icon, so narrower than the text buttons. */
     .dp-head #calShowAll {
-      background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px;
       padding: 0.35rem 0.6rem; font-size: 0.95rem; cursor: pointer; font-family: inherit; white-space: nowrap;
     }
-    .dp-head #calShowAll:hover { border-color: #888; color: #ccc; }
+    .dp-head #calShowAll:hover { border-color: var(--muted); color: var(--text-dim); }
     /* Edit is an icon too, so it doesn't need the text buttons' side padding. */
     .dp-head .hedit { padding: 0.35rem 0.6rem; font-size: 0.95rem; }
     body.show-done .dp-head #calShowAll { color: var(--accent); border-color: var(--accent); font-weight: 700; }
-    .dp-item .dp-del { display: none; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+    .dp-item .dp-del { display: none; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
     body.editing .dp-item .dp-del { display: inline-block; }
     .dp-item .dp-del:hover { border-color: #f66; color: #f66; }
@@ -909,7 +909,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; font-weight: 700; cursor: pointer;
     }
-    .dp-head .dp-add:hover { background: #52e0ac; }
+    .dp-head .dp-add:hover { filter: brightness(1.1); }
     .dp-head .dp-add[disabled] { opacity: 0.4; cursor: default; }
     .dp-list { display: flex; flex-direction: column; gap: 0.4rem; }
     /* Kind groups: a small heading with a chevron that folds the list under it. */
@@ -917,24 +917,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-ghead {
       display: flex; align-items: center; gap: 0.35rem; align-self: flex-start;
       background: none; border: none; padding: 0.2rem 0; cursor: pointer; font-family: inherit;
-      color: #777; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
     }
-    .dp-ghead:hover { color: #aaa; }
+    .dp-ghead:hover { color: var(--text-dim); }
     /* The partner's groups sit a shade back, so mine read first at a glance. */
-    .dp-group.shared .dp-ghead { color: #6a6a7a; }
-    .dp-group.shared .dp-ghead:hover { color: #9a9aae; }
+    .dp-group.shared .dp-ghead { color: var(--muted); }
+    .dp-group.shared .dp-ghead:hover { color: var(--text-dim); }
     .dp-gchev { display: inline-block; transform: rotate(90deg); transition: transform 0.12s; font-size: 0.85rem; }
     .dp-group.folded .dp-gchev { transform: rotate(0deg); }
     .dp-glist { display: flex; flex-direction: column; gap: 0.4rem; }
     .dp-group.folded .dp-glist { display: none; }
     .dp-item {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem;
-      background: #1b1b1b; border: 1px solid #262626; border-radius: 8px; cursor: default;
+      background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; cursor: default;
       /* Holding an item to enter edit mode must not paint its text as a selection. */
       -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
     }
     body.editing .dp-item { cursor: pointer; }
-    body.editing .dp-item:hover { border-color: #444; }
+    body.editing .dp-item:hover { border-color: var(--line); }
     .dp-item .tag {
       font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
       padding: 0.15rem 0.4rem; border-radius: 4px; white-space: nowrap;
@@ -945,17 +945,17 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dp-item .dp-check { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
     .dp-item .cdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
     .dp-item .txt { flex: 1; font-size: 0.95rem; word-break: break-word; }
-    .dp-item .origdate { font-size: 0.72rem; color: #666; white-space: nowrap; }
+    .dp-item .origdate { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
     .dp-item .evtime { font-size: 0.75rem; color: var(--k-event-soft); font-weight: 600; white-space: nowrap; }
-    .dp-item.done .txt { color: #666; text-decoration: line-through; }
+    .dp-item.done .txt { color: var(--muted); text-decoration: line-through; }
     /* The pencil (and the tap-to-open it stands for) only appears in edit mode. */
-    .dp-item .chev { color: #555; font-size: 0.9rem; display: none; }
+    .dp-item .chev { color: var(--muted); font-size: 0.9rem; display: none; }
     body.editing .dp-item .chev { display: inline; }
     /* Someone else's item, shown here but owned (and edited) over in their app. Whose
        it is comes from the group heading now, so the row carries no name chip. */
     .dp-item.shared { cursor: default; }
-    .dp-empty { color: #666; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
-    .dp-none { color: #555; font-size: 0.9rem; padding: 1rem 0; text-align: center; }
+    .dp-empty { color: var(--muted); font-size: 0.9rem; padding: 1rem 0; text-align: center; }
+    .dp-none { color: var(--muted); font-size: 0.9rem; padding: 1rem 0; text-align: center; }
 
     /* Quick-add modal */
     .modal-backdrop {
@@ -964,30 +964,30 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     .modal-backdrop.open { display: flex; }
     .modal {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
       width: 100%; max-width: 380px; padding: 1.25rem;
     }
     .modal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
     .modal h2 span { color: var(--accent); }
     .modal input[type=text] {
-      width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 1rem; margin-bottom: 0.85rem;
+      width: 100%; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 1rem; margin-bottom: 0.85rem;
     }
-    .modal input:focus { outline: none; border-color: #888; }
+    .modal input:focus { outline: none; border-color: var(--muted); }
     .modal .kind { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .modal .kind label {
-      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid #3a3a3a;
-      border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
+      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid var(--line);
+      border-radius: 6px; font-size: 0.9rem; color: var(--text-dim); cursor: pointer; user-select: none;
     }
     .modal .kind input { display: none; }
     .modal .kind input:checked + span { color: var(--accent); font-weight: 700; }
     .modal .kind label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .modal .daterow { margin-bottom: 1rem; }
     .modal .timerow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
-    .modal .timerow .tlabel { font-size: 0.85rem; color: #aaa; }
+    .modal .timerow .tlabel { font-size: 0.85rem; color: var(--text-dim); }
     .modal .timerow input[type=time] {
-      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
+      flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 0.95rem; color-scheme: dark;
     }
     .modal .adddate {
       background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
@@ -996,18 +996,18 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .adddate:hover { background: var(--accent-soft); }
     .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
     .modal .datewrap input[type=date] {
-      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 0.95rem; color-scheme: dark;
+      flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 0.95rem; color-scheme: dark;
     }
     /* One X for both rows: clearing the time looks like clearing the date. */
     .modal .cleardate {
-      background: none; border: 1px solid #3a3a3a; color: #999; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
     }
     .modal .cleardate:hover { border-color: #f66; color: #f66; }
     .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
     .modal .buttons .del {
-      margin-right: auto; background: none; border: none; color: #666;
+      margin-right: auto; background: none; border: none; color: var(--muted);
       font-size: 0.85rem; cursor: pointer;
     }
     .modal .buttons .del:hover { color: #f66; }
@@ -1015,20 +1015,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
       font-weight: 600; cursor: pointer;
     }
-    .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
+    .modal .buttons .cancel { background: var(--surface-2); color: var(--text-dim); }
     .modal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
     /* Share sits on the left of the manager's button row. */
-    .modal .buttons .share { margin-right: auto; background: #2a2a2a; color: #ccc; }
-    .modal .buttons .share:hover { background: #333; color: #fff; }
+    .modal .buttons .share { margin-right: auto; background: var(--surface-2); color: var(--text-dim); }
+    .modal .buttons .share:hover { background: var(--surface-2); color: var(--text); }
     .modal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     /* [hidden] has to win over the flex above, or every row shows on every kind. */
     .modal .calrow[hidden], .modal .timerow[hidden], .modal .repevery[hidden] { display: none; }
     /* Repeat row: "every [N]" then the unit selector, the count aligned right before it so
        the two read as one control. The count is a narrow centred box; the unit fills the rest. */
-    .modal .reprow .repevery { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: #aaa; }
+    .modal .reprow .repevery { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-dim); }
     .modal .reprow .repn {
-      width: 3rem; padding: 0.5rem 0.35rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; text-align: center; color-scheme: dark;
+      width: 3rem; padding: 0.5rem 0.35rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; text-align: center; color-scheme: dark;
     }
     .modal .reprow .repunit { flex: 1; min-width: 0; }
     /* Each optional row and the "+" that reveals it share one wrapper; the button and the
@@ -1036,33 +1036,33 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .modal .addrow-wrap { margin-bottom: 1rem; }
     .modal .addrow-wrap .timerow, .modal .addrow-wrap .reprow { margin-bottom: 0; }
     .modal .calrow select {
-      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
+      flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit;
     }
     /* A fixed-width label so every row's control starts at the same x — Time, Repeat,
        Calendar and "Goes in" line up down the window. */
-    .modal .calrow .tlabel { font-size: 0.85rem; color: #aaa; flex: 0 0 auto; width: 4.75rem; }
-    .modal .calrow .secnote { font-size: 0.78rem; color: #777; white-space: nowrap; }
+    .modal .calrow .tlabel { font-size: 0.85rem; color: var(--text-dim); flex: 0 0 auto; width: 4.75rem; }
+    .modal .calrow .secnote { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
     /* The repeat unit keeps its natural width so "every [N]" sits right beside it and the
        number field lines up with the row rather than being pushed to the far edge. */
     .modal .reprow select { flex: 0 0 auto; }
-    .modal .reprow .repevery { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #aaa; }
+    .modal .reprow .repevery { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-dim); }
     .modal .reprow .repevery input {
-      width: 48px; text-align: center; padding: 0.5rem 0.5rem; background: #222; border: 1px solid #444;
-      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit;
+      width: 48px; text-align: center; padding: 0.5rem 0.5rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit;
     }
-    .modal .reprow .repevery input:focus { outline: none; border-color: #888; }
+    .modal .reprow .repevery input:focus { outline: none; border-color: var(--muted); }
     /* A repeating row says so next to its time. */
-    .dp-item .rep { font-size: 0.7rem; color: #777; white-space: nowrap; }
+    .dp-item .rep { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 
     /* --- Manage-calendars modal --- */
     .calmodal { max-height: 85vh; overflow-y: auto; }
     .calmodal h2 { margin-bottom: 0.7rem; }
-    .calmodal .cdiv { border: none; border-top: 1px solid #333; margin: 1.2rem 0 1rem; }
+    .calmodal .cdiv { border: none; border-top: 1px solid var(--line); margin: 1.2rem 0 1rem; }
     /* Collapsible manager sections: tap the heading to fold Calendars / Sets / Folders. */
-    .calmodal .cm-section + .cm-section { border-top: 1px solid #333; margin-top: 1.1rem; padding-top: 0.9rem; }
+    .calmodal .cm-section + .cm-section { border-top: 1px solid var(--line); margin-top: 1.1rem; padding-top: 0.9rem; }
     .calmodal .cm-head { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none; margin-bottom: 0.7rem; }
-    .calmodal .cm-chev { color: #888; font-size: 0.7rem; margin-left: auto; transition: transform 0.15s ease; }
+    .calmodal .cm-chev { color: var(--muted); font-size: 0.7rem; margin-left: auto; transition: transform 0.15s ease; }
     .calmodal .cm-section.collapsed .cm-chev { transform: rotate(-90deg); }
     .calmodal .cm-section.collapsed .cm-body { display: none; }
     .calmodal .cm-section.collapsed .cm-head { margin-bottom: 0; }
@@ -1073,29 +1073,29 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .addrow .plus:hover { background: #52e0ac; }
+    .addrow .plus:hover { filter: brightness(1.1); }
     .callist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
     .callist li {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
-      background: #222; border: 1px solid #333; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
     }
     .callist li.dragging { opacity: 0.6; border-color: var(--accent); }
-    .callist .chandle { color: #666; cursor: grab; touch-action: none; user-select: none; font-size: 1rem; }
+    .callist .chandle { color: var(--muted); cursor: grab; touch-action: none; user-select: none; font-size: 1rem; }
     .callist .cname { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .callist .cswatch {
-      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; border: 1px solid #444;
+      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line);
       cursor: pointer; padding: 0;
     }
     /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
     /* Read-only colour dot for a partner's shared calendar (no swatch button). */
-    .callist .cdot-ro { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #444; }
+    .callist .cdot-ro { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); }
     /* Badge marking a shared calendar as the partner's, in place of an owner heading. */
     .callist .cshared-badge {
       flex: 0 0 auto; font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
     }
     .callist .cdel {
-      flex: 0 0 auto; background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .callist .cdel:hover { border-color: #f66; color: #f66; }
@@ -1104,42 +1104,42 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .rfmode { position: relative; flex: 0 0 auto; }
     .rfmode-btn {
       width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
-      background: #1a1a1a; border: 1px solid #444; border-radius: 999px; color: var(--accent);
+      background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--accent);
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit; padding: 0;
     }
-    .rfmode-btn.off { color: #777; }
-    .rfmode-btn:hover { border-color: #888; }
+    .rfmode-btn.off { color: var(--muted); }
+    .rfmode-btn:hover { border-color: var(--muted); }
     .rfmode-menu {
-      position: absolute; right: 0; top: 36px; z-index: 20; background: #1c1c1c;
-      border: 1px solid #333; border-radius: 8px; padding: 0.25rem; min-width: 118px;
+      position: absolute; right: 0; top: 36px; z-index: 20; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 8px; padding: 0.25rem; min-width: 118px;
       box-shadow: 0 8px 20px rgba(0,0,0,0.5);
     }
     .rfmode-menu[hidden] { display: none; }
     .rfmode-opt {
       display: flex; align-items: center; gap: 0.5rem; width: 100%; text-align: left;
-      background: none; border: none; color: #ddd; padding: 0.45rem 0.5rem; border-radius: 6px;
+      background: none; border: none; color: var(--text-dim); padding: 0.45rem 0.5rem; border-radius: 6px;
       font-size: 0.9rem; font-family: inherit; cursor: pointer;
     }
-    .rfmode-opt:hover { background: #262626; color: #fff; }
+    .rfmode-opt:hover { background: var(--surface-2); color: #fff; }
     .rfmode-opt .rfmode-ic { width: 16px; text-align: center; color: var(--accent); }
-    .calempty { color: #666; font-size: 0.85rem; padding: 0.4rem 0.1rem; }
+    .calempty { color: var(--muted); font-size: 0.85rem; padding: 0.4rem 0.1rem; }
     /* Default-calendar picker, under the calendar list. */
     .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
-    .defrow label { font-size: 0.85rem; color: #999; white-space: nowrap; }
+    .defrow label { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
     .defrow select {
-      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit; cursor: pointer;
     }
-    .defrow select:focus { outline: none; border-color: #888; }
-    .calmodal .chint { color: #777; font-size: 0.78rem; margin: -0.4rem 0 0.7rem; }
+    .defrow select:focus { outline: none; border-color: var(--muted); }
+    .calmodal .chint { color: var(--muted); font-size: 0.78rem; margin: -0.4rem 0 0.7rem; }
     /* Colour palette popover */
     .swatches {
-      position: fixed; z-index: 80; background: #1c1c1c; border: 1px solid #444; border-radius: 10px;
+      position: fixed; z-index: 80; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
       padding: 0.5rem; display: grid; grid-template-columns: repeat(5, 26px); gap: 0.4rem;
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .swatches[hidden] { display: none; }
-    .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0; }
+    .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
 <?= tabbar_styles() ?>
 <?= kind_color_css() ?>
 <?= share_modal_styles() ?>

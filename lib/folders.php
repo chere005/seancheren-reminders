@@ -901,23 +901,23 @@ function folder_nav_styles(): string
     .folderpick-btn {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px; padding: 0;
-      background: #1a1a1a; border: 1px solid #333; border-radius: 50%; cursor: pointer;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 50%; cursor: pointer;
     }
-    .folderpick-btn:hover { border-color: #888; }
-    .fdot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; background: #555; }
+    .folderpick-btn:hover { border-color: var(--muted); }
+    .fdot { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); }
     .fdot.all {
       background: conic-gradient(#60a5fa, var(--accent), #facc15, #f472b6, #60a5fa);
     }
     .folderpick-menu {
       position: absolute; right: 0; top: calc(100% + 5px); z-index: 45; min-width: 200px;
       max-width: min(320px, 90vw); max-height: 60vh; overflow-y: auto; overflow-x: hidden;
-      background: #1c1c1c; border: 1px solid #333; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
       box-shadow: 0 8px 22px rgba(0,0,0,0.6); padding: 0.3rem;
     }
     .folderpick-menu[hidden] { display: none; }
     .folderpick-opt {
       display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem;
-      border-radius: 7px; color: #ddd; text-decoration: none; font-size: 0.92rem;
+      border-radius: 7px; color: var(--text-dim); text-decoration: none; font-size: 0.92rem;
       /* Reset the native <button> look (some rows are buttons — the Habits filter — and
          showed a white background with unreadable text) so every row matches the <a> ones. */
       background: none; border: 0; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
@@ -932,12 +932,12 @@ function folder_nav_styles(): string
       font-size: 0.68rem; color: #cbb8ff; background: #2a2440;
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
     }
-    .folderpick-opt:hover { background: #262626; color: #fff; }
+    .folderpick-opt:hover { background: var(--surface-2); color: #fff; }
     /* The show-in-All box, drawn rather than a form control so it doesn't look like a
        stray input in a menu — and a blank of the same width keeps the rows without one
        (All, the partner's folders) lined up with the rows that have one. */
     .folderpick-opt .fvis {
-      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid #555; border-radius: 3px;
+      flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid var(--line); border-radius: 3px;
       cursor: pointer; position: relative; box-sizing: border-box;
     }
     .folderpick-opt .fvis.on { background: var(--accent); border-color: var(--accent); }
@@ -950,12 +950,12 @@ function folder_nav_styles(): string
        the menu isn't highlighted — the checkboxes are what the menu is about now. */
     /* "Manage folders", the last row of the picker menu. */
     .folderpick-manage {
-      width: 100%; background: none; border: none; border-top: 1px solid #333;
+      width: 100%; background: none; border: none; border-top: 1px solid var(--line);
       margin-top: 0.25rem; padding-top: 0.55rem; cursor: pointer; font-family: inherit;
-      text-align: left; color: #bbb;
+      text-align: left; color: var(--text-dim);
     }
-    .folderpick-manage .fpick-gear { display: inline-flex; width: 9px; justify-content: center; color: #888; }
-    .folderpick-manage:hover { color: #fff; }
+    .folderpick-manage .fpick-gear { display: inline-flex; width: 9px; justify-content: center; color: var(--muted); }
+    .folderpick-manage:hover { color: var(--text); }
 
 
     /* Folder manager window */
@@ -965,36 +965,36 @@ function folder_nav_styles(): string
     }
     .modal-backdrop.open { display: flex; }
     .foldermodal {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
       width: 100%; max-width: 380px; padding: 1.25rem; max-height: 85vh; overflow-y: auto;
     }
     .foldermodal h2 { font-size: 1.05rem; margin-bottom: 0.8rem; }
     .foldermodal .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
     .foldermodal .addrow input[type=text] {
-      flex: 1; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px;   /* 16px stops iOS from zooming on focus */
+      flex: 1; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid #3a3a3a;
+      border-radius: 6px; color: var(--text); font-size: 16px;   /* 16px stops iOS from zooming on focus */
     }
-    .foldermodal .addrow input:focus { outline: none; border-color: #888; }
+    .foldermodal .addrow input:focus { outline: none; border-color: var(--muted); }
     .foldermodal .addrow .plus {
       flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .foldermodal .addrow .plus:hover { background: #52e0ac; }
+    .foldermodal .addrow .plus:hover { filter: brightness(1.1); }
     .foldermodal .fshared-h {
       font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-      color: #777; margin: 1rem 0 0.5rem;
+      color: var(--muted); margin: 1rem 0 0.5rem;
     }
     .foldermodal .flist { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
     .foldermodal .flist li {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
-      background: #222; border: 1px solid #333; border-radius: 8px;
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
     }
     .foldermodal .flist .fname { flex: 1; font-size: 0.95rem; word-break: break-word; }
     /* Drag handle for reordering a custom folder; the pinned permanent ones show a
        blank slot of the same width so every name still lines up. */
     .foldermodal .fhandle {
-      flex: 0 0 auto; width: 18px; text-align: center; color: #666; cursor: grab;
+      flex: 0 0 auto; width: 18px; text-align: center; color: var(--muted); cursor: grab;
       font-size: 0.95rem; line-height: 1; touch-action: none; user-select: none;
     }
     .foldermodal .fhandle.blank { cursor: default; }
@@ -1002,7 +1002,7 @@ function folder_nav_styles(): string
     .foldermodal .flist li.fdrop-before { box-shadow: 0 -2px 0 0 var(--accent, #34d399); }
     .foldermodal .flist li.fdrop-after { box-shadow: 0 2px 0 0 var(--accent, #34d399); }
     .foldermodal .flist .fdel {
-      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
@@ -1015,36 +1015,36 @@ function folder_nav_styles(): string
     /* The folder's colour: a swatch that opens the palette under it. */
     .foldermodal .fcolor { flex: 0 0 auto; position: relative; }
     .foldermodal .fcolor summary {
-      width: 22px; height: 22px; border-radius: 6px; border: 1px solid #444;   /* square, like the calendar's */
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line);   /* square, like the calendar's */
       cursor: pointer; list-style: none;
     }
     .foldermodal .fcolor summary::-webkit-details-marker { display: none; }
     .foldermodal .fswatches {
       position: absolute; z-index: 5; top: calc(100% + 6px); left: 0;
-      background: #1c1c1c; border: 1px solid #444; border-radius: 10px; padding: 0.5rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem;
       display: grid; grid-template-columns: repeat(6, 22px); gap: 0.4rem;   /* all six on one row */
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .foldermodal .fswatches button {
-      width: 22px; height: 22px; border-radius: 6px; border: 1px solid #444; cursor: pointer; padding: 0;   /* square */
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; padding: 0;   /* square */
     }
     /* Which folder new items land in — same shape as the Calendar's default picker. */
     .foldermodal .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }
-    .foldermodal .defrow label { font-size: 0.85rem; color: #999; white-space: nowrap; }
+    .foldermodal .defrow label { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
     .foldermodal .defrow select {
-      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+      flex: 1; min-width: 0; padding: 0.4rem 0.6rem; background: var(--surface-2); border: 1px solid #3a3a3a;
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit; cursor: pointer;
     }
-    .foldermodal .defrow select:focus { outline: none; border-color: #888; }
+    .foldermodal .defrow select:focus { outline: none; border-color: var(--muted); }
     /* Default Folder/Section picker: a full-width labelled select under the folder list. */
     .foldermodal .fdefrow { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
-    .foldermodal .fdefrow label { font-size: 0.8rem; color: #999; }
+    .foldermodal .fdefrow label { font-size: 0.8rem; color: var(--muted); }
     .foldermodal .fdefrow select {
-      width: 100%; padding: 0.55rem 0.7rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; font-family: inherit; cursor: pointer;
+      width: 100%; padding: 0.55rem 0.7rem; background: var(--surface-2); border: 1px solid #3a3a3a;
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit; cursor: pointer;
     }
-    .foldermodal .fdefrow select:focus { outline: none; border-color: #888; }
-    .foldermodal .fhint { color: #777; font-size: 0.78rem; margin: 0.8rem 0 0; }
+    .foldermodal .fdefrow select:focus { outline: none; border-color: var(--muted); }
+    .foldermodal .fhint { color: var(--muted); font-size: 0.78rem; margin: 0.8rem 0 0; }
     .foldermodal .frow { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.1rem; }
     .foldermodal .fdone {
       display: block; margin: 0 0 0 auto; padding: 0.55rem 1.1rem; border: none;
