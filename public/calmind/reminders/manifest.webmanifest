@@ -1,7 +1,7 @@
 {
   "name": "Reminders",
   "short_name": "Reminders",
-  "start_url": "/reminders/",
+  "start_url": "/calmind/reminders/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

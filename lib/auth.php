@@ -49,6 +49,16 @@ function suite_base(): string
     return $b === '' ? '' : '/' . $b;
 }
 
+/**
+ * Where the CalMind suite's apps live under the instance: the instance base plus
+ * /calmind. Suite cross-app links go through this; the session cookie path and the
+ * apps that live outside the suite (chat, the bookshelf) keep suite_base() alone.
+ */
+function suite_path(): string
+{
+    return suite_base() . '/calmind';
+}
+
 // Everything in the suite runs on one clock. The server keeps UTC, so without this
 // "today" rolls over in the evening and the calendar advances a day early.
 date_default_timezone_set(app_config()['timezone'] ?? 'America/Chicago');
@@ -361,7 +371,7 @@ function require_login(string $area = 'App'): void
             session_regenerate_id(true);
             $_SESSION['auth'] = true;
             $_SESSION['user'] = $u;
-            header('Location: ' . suite_base() . LOGIN_LANDING);
+            header('Location: ' . suite_path() . LOGIN_LANDING);
             exit;
         }
         $error = 'Invalid username or password.';
@@ -522,7 +532,7 @@ function signup_handle(array $cfg): array
     session_regenerate_id(true);
     $_SESSION['auth'] = true;
     $_SESSION['user'] = $user;
-    header('Location: ' . suite_base() . LOGIN_LANDING);
+    header('Location: ' . suite_path() . LOGIN_LANDING);
     exit;
 }
 
@@ -542,9 +552,9 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Reminders">
-  <link rel="apple-touch-icon" href="<?= suite_base() ?>/reminders/icon-180.png">
-  <link rel="icon" href="<?= suite_base() ?>/reminders/icon-192.png">
-  <link rel="manifest" href="<?= suite_base() ?>/reminders/manifest.webmanifest?v=2">
+  <link rel="apple-touch-icon" href="<?= suite_path() ?>/reminders/icon-180.png">
+  <link rel="icon" href="<?= suite_path() ?>/reminders/icon-192.png">
+  <link rel="manifest" href="<?= suite_path() ?>/reminders/manifest.webmanifest?v=2">
   <style>
     <?= theme_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

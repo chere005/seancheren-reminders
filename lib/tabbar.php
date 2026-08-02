@@ -64,7 +64,7 @@ function render_tabbar(string $active): void
     // A green "+" sits in the middle, between Calendar and Notes, opening the quick-add app.
     // Links carry the instance's base prefix (suite_base()) so the /test/ mirror's tab bar
     // stays inside /test/ instead of jumping to production.
-    $b = function_exists('suite_base') ? suite_base() : '';
+    $b = function_exists('suite_path') ? suite_path() : '';
     $tabs = [
         'reminders' => ['href' => $b . '/reminders/', 'ico' => '&#9745;',   'label' => 'Reminders'],
         'calendar'  => ['href' => $b . '/calendar/',  'ico' => '&#128197;', 'label' => 'Calendar'],

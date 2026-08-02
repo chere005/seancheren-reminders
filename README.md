@@ -31,7 +31,7 @@ iOS + Apple Watch** app lives in `ios/` (SwiftUI, local-only, shares no code wit
 ## Web — run & test
 
 ```sh
-php -S 127.0.0.1:8787 -t public     # apps at /reminders/, /calendar/, /add/, /notes/, /habits/, /chat/
+php -S 127.0.0.1:8787 -t public     # apps at /calmind/reminders/, /calmind/calendar/, /calmind/add/, /calmind/notes/, /calmind/habits/, /chat/
 php tools/test.php                  # the test suite (~15s, no framework)
 find public lib tools -name '*.php' -exec php -l {} \;   # lint
 ```
