@@ -573,69 +573,107 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         exit;
     }
 
-    // Reorder / re-section reminders after a drag (AJAX). order = [{id, section}, …] top-to-bottom.
+    // Reorder / re-section / re-folder reminders after a drag (AJAX). order = [{id,
+    // section, folder}, …] top-to-bottom; sections = a map folder => [section id, …]
+    // (the catch-all as ''), the same shape Notes posts. The old flat list of bare
+    // names only worked inside a single named folder, so a section drag on "All" — the
+    // view most people live in — was silently thrown away on reload.
     if ($_POST['action'] === 'reorder') {
-        $order    = json_decode((string) ($_POST['order'] ?? '[]'), true);
-        $secOrder = json_decode((string) ($_POST['sections'] ?? '[]'), true);
-        if (!is_array($order))    { $order = []; }
-        if (!is_array($secOrder)) { $secOrder = []; }
+        $order = json_decode((string) ($_POST['order'] ?? '[]'), true);
+        if (!is_array($order)) { $order = []; }
+        $secMap = json_decode((string) ($_POST['sections'] ?? '[]'), true);
+        if (!is_array($secMap)) { $secMap = []; }
         // A payload that decoded to nothing carries no instruction. Rebuilding from it
         // still preserved every row, but it reassembled the file as "sections, then
         // everything else" — and stored order is what breaks ties between same-dated
         // reminders, so a garbage post quietly reshuffled the list.
-        if (!$order && !$secOrder) {
+        if (!$order && !$secMap) {
             header('Content-Type: application/json');
             echo json_encode(['ok' => true, 'skipped' => 'empty order']);
             exit;
         }
         $list = load_reminders($dataFile);
 
-        // Sections are per-folder, so a drag only reorders the viewed folder's sections
-        // and only re-sections items against sections that exist in their own folder.
-        $secExists      = [];   // "folder\x1Fname" => true, for every section row
-        $thisFolderSecs = [];   // name => row, for the folder being viewed
-        $otherSecs      = [];   // rows in other folders, left untouched
-        $byId           = [];
+        // A section listed under a folder is re-filed to it — by id, since names collide
+        // across folders — and its rows follow via the order below. A stale page from
+        // before this shape posted a flat list of names: its entries fail both the
+        // is_array and the id lookup, so it reorders nothing rather than guessing.
+        $secById = [];   // id => section row
+        $byId    = [];   // reminder id => row
         foreach ($list as $it) {
-            if (is_section($it)) {
-                $f = $it['folder'] ?? folder_fallback('reminders');
-                $secExists[$f . "\x1F" . $it['name']] = true;
-                if ($viewFolder !== 'All' && $f === $viewFolder) { $thisFolderSecs[$it['name']] = $it; }
-                else { $otherSecs[] = $it; }
-            } else {
-                $byId[$it['id']] = $it;
+            if (is_section($it)) { $secById[$it['id']] = $it; }
+            else { $byId[$it['id']] = $it; }
+        }
+
+        $sectionRows = [];
+        $placed      = [];   // section id => true
+        $namesIn     = [];   // folder => [name => true], so a move can't create a duplicate
+        // A move into a folder that already holds that name must be refused — items
+        // reference sections by name, and a duplicate loses items when one is deleted.
+        // Names are claimed by every section that is *staying put*: the ones the drag
+        // never listed, and the ones listed under their own stored folder (a whole-screen
+        // payload lists every folder's run, so the destination's own same-named section
+        // is in the map too — it mustn't free its name just by being mentioned).
+        $inMap = [];   // section id => the folder the map lists it under
+        foreach ($secMap as $f => $ids) {
+            if (!is_array($ids)) { continue; }
+            foreach ($ids as $sid) { $inMap[(string) $sid] ??= (string) $f; }
+        }
+        foreach ($list as $it) {
+            if (!is_section($it)) { continue; }
+            $home = (string) ($it['folder'] ?? folder_fallback('reminders'));
+            $to   = $inMap[(string) $it['id']] ?? null;
+            if ($to === null || $to === $home) { $namesIn[$home][(string) $it['name']] = true; }
+        }
+        foreach ($secMap as $f => $ids) {
+            if (!is_array($ids)) { continue; }
+            $folderOk = in_array($f, $myFolders, true);
+            foreach ($ids as $sid) {
+                $sid = (string) $sid;
+                if ($sid === '' || !isset($secById[$sid]) || isset($placed[$sid])) { continue; }
+                $srow = $secById[$sid];
+                $name = (string) $srow['name'];
+                $home = (string) ($srow['folder'] ?? folder_fallback('reminders'));
+                // Re-file to $f if it's one of mine and no *staying* section there holds
+                // the name; otherwise the section keeps its folder (but takes its slot).
+                $dest = ($folderOk && ($f === $home || !isset($namesIn[$f][$name]))) ? $f : $home;
+                $srow['folder'] = $dest;
+                $namesIn[$dest][$name] = true;
+                $sectionRows[] = $srow;
+                $placed[$sid]  = true;
+            }
+            // The catch-all rides in the same drag but has no row to carry its place, so
+            // its slot in $f — how many real sections precede its '' marker — is stored
+            // beside the folder list.
+            if ($folderOk && in_array('', $ids, true)) {
+                $idx = 0;
+                foreach ($ids as $sid) { if ((string) $sid === '') { break; } if (isset($secById[(string) $sid])) { $idx++; } }
+                folder_catchall_index_set($cfg['data_dir'], 'reminders', $f, $idx);
             }
         }
-
-        // Reorder the viewed folder's section rows by the posted order; keep the rest.
-        $sectionsList = [];
-        foreach ($secOrder as $name) {
-            if (isset($thisFolderSecs[$name])) { $sectionsList[] = $thisFolderSecs[$name]; unset($thisFolderSecs[$name]); }
-        }
-        foreach ($thisFolderSecs as $e) { $sectionsList[] = $e; }
-        $sectionsList = array_merge($sectionsList, $otherSecs);
-
-        // The catch-all rides in the same drag but has no row to carry its place, so its
-        // index among this folder's sections is stored beside the folder list. Only when
-        // one folder is in view: in "All" the posted names span every folder on screen
-        // and there is no telling which folder a bare "" belonged to.
-        if ($viewFolder !== 'All' && in_array('', $secOrder, true)) {
-            $seen = 0;
-            foreach ($secOrder as $name) {
-                if ($name === '') { break; }
-                if (isset($secExists[$viewFolder . "\x1F" . $name])) { $seen++; }
-            }
-            folder_catchall_index_set($cfg['data_dir'], 'reminders', $viewFolder, $seen);
+        // Sections the drag never touched keep their place, after the reordered ones.
+        foreach ($list as $it) {
+            if (is_section($it) && !isset($placed[$it['id']])) { $sectionRows[] = $it; }
         }
 
+        // secExists reflects the re-filed sections — each row below is validated against
+        // where its section actually ended up.
+        $secExists = [];
+        foreach ($sectionRows as $s) {
+            $secExists[($s['folder'] ?? folder_fallback('reminders')) . "\x1F" . $s['name']] = true;
+        }
         $newReminders = [];
         $used = [];
         foreach ($order as $o) {
             $id = (string) ($o['id'] ?? '');
             if ($id === '' || !isset($byId[$id]) || isset($used[$id])) { continue; }
             $item = $byId[$id];
-            $sec  = (string) ($o['section'] ?? '');
-            $f    = $item['folder'] ?? folder_fallback('reminders');
+            // The drag posts the folder of the block each row landed in; only my own
+            // folders count (a partner's shared block is skipped client-side too).
+            $folder = (string) ($o['folder'] ?? '');
+            if ($folder !== '' && in_array($folder, $myFolders, true)) { $item['folder'] = $folder; }
+            $sec = (string) ($o['section'] ?? '');
+            $f   = $item['folder'] ?? folder_fallback('reminders');
             // A section must exist in this item's own folder, or the row falls to the
             // folder's catch-all.
             if ($sec !== '' && !isset($secExists[$f . "\x1F" . $sec])) { $sec = ''; }
@@ -643,12 +681,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $newReminders[]  = $item;
             $used[$id]       = true;
         }
-        // Preserve reminders not in the posted order (e.g. other folders).
+        // Preserve reminders not in the posted order (e.g. hidden folders).
         foreach ($list as $it) {
             if (!is_section($it) && !isset($used[$it['id']])) { $newReminders[] = $it; }
         }
 
-        save_reminders($dataFile, array_merge($sectionsList, $newReminders));
+        save_reminders($dataFile, array_merge($sectionRows, $newReminders));
         header('Content-Type: application/json');
         echo json_encode(['ok' => true]);
         exit;
@@ -1659,19 +1697,43 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   const lineInto = (ul) => { clearLine(); dropLine = makeLine('li'); ul.appendChild(dropLine); };
 
   const persistOrder = () => {
+    // Row order: id + section + folder — a drag can re-file a row into another of my
+    // folders, so each posts the folder of the block it now sits in. A partner's shared
+    // block is read-only and never posted.
     const order = [];
     document.querySelectorAll('ul.rlist').forEach(ul => {
+      const block = ul.closest('.folder-block');
+      if (block && block.classList.contains('shared-block')) return;
       const section = ul.dataset.section || '';
-      ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section }));
+      const folder = block ? (block.dataset.folder || '') : '';
+      ul.querySelectorAll(':scope > li[data-id]').forEach(li => order.push({ id: li.dataset.id, section, folder }));
     });
-    const sections = [...document.querySelectorAll('.section-group')].map(g => g.dataset.section);
+    // Section order per folder, by section id — a section can move to another folder, so
+    // its id is what re-files it (names collide across folders). The catch-all has no id;
+    // it rides as '' so its slot moves too. Same shape as Notes.
+    const sections = {};
+    document.querySelectorAll('.folder-block:not(.shared-block)').forEach(blk => {
+      const ids = [];
+      blk.querySelectorAll(':scope > .section-group').forEach(g => ids.push(g.dataset.id || ''));
+      sections[blk.dataset.folder || ''] = ids;
+    });
     order.forEach((o, i) => {                          // keep the drag order stable
       const li = document.querySelector('li[data-id="' + o.id + '"]');
       if (li) li.dataset.pos = i;
     });
     const body = new URLSearchParams({ csrf: CSRF, action: 'reorder', view: VIEW,
       order: JSON.stringify(order), sections: JSON.stringify(sections) });
-    fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+    return fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body }).catch(() => location.reload());
+  };
+
+  // Folders that can't be deleted (the permanent Calendar) — moving their last section
+  // out never offers to delete them; the folder just regrows a default section.
+  const FIXED_FOLDERS = <?= json_encode(folders_fixed('reminders')) ?>;
+  // Deleting the folder a drag just emptied, after the reorder has landed — chained so
+  // the two writes can't race each other over the same file.
+  const deleteEmptiedFolder = (name) => {
+    const body = new URLSearchParams({ csrf: CSRF, action: 'delete_folder', view: 'All', name, confirm: '1' });
+    return fetch('', { method: 'POST', body });
   };
 
   let pressTimer = null, pid = null, sx = 0, sy = 0, tapTextLi = null, suppressClick = false;
@@ -1774,15 +1836,24 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     e.preventDefault();
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if (!under) return;
+    if (under.closest('.shared-block')) { clearLine(); return; }   // never drop into a partner's folder
     const y = e.clientY;
 
     if (dragSection && isTop(dragSection)) {
       // ----- Level 0 -----
       // A whole section, everything under it travelling with it. It can only land
       // between other level-0 blocks, never inside one, so its subsections and rows
-      // always stay grouped together underneath it.
+      // always stay grouped together underneath it. Another folder's blocks count too:
+      // dropping there re-files the section (and its rows) into that folder.
       const g = under.closest('.section-group');
-      if (!g) return;
+      if (!g) {
+        // The gap around a folder's own heading: land at the top of that folder's run,
+        // so an empty(ish) folder is still a target.
+        const blk = under.closest('.folder-block');
+        const head = blk && blk.querySelector(':scope > .folder-head');
+        if (head) lineBefore(head, true, 'div');
+        return;
+      }
       const top = topOf(g);
       if (!top || dragBlock.includes(top)) { return; }   // over itself: leave the line be
       const blk   = blockOf(top);
@@ -1856,14 +1927,35 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     const tapLi = tapTextLi;
     cancelPress();
     const wasDrag = !!(dragLi || dragSection);
-    applyDrop();
+    // Dragging a folder's last section into another folder leaves it empty. Ask: OK
+    // moves the section and deletes the emptied folder with it; Cancel reverts the
+    // whole drop. The permanent Calendar is never offered — it just regrows a default.
+    let emptied = null, cancelled = false;
+    if (dragSection && isTop(dragSection) && dropLine) {
+      const src = dragSection.closest('.folder-block');
+      const dst = dropLine.parentNode && dropLine.parentNode.closest('.folder-block');
+      if (src && dst && src !== dst) {
+        const moving = dragBlock || [dragSection];
+        const left = [...src.querySelectorAll(':scope > .section-group')].filter(g => !moving.includes(g));
+        if (left.length === 0) {
+          const name = src.dataset.folder || '';
+          if (!FIXED_FOLDERS.includes(name)) {
+            if (confirm('Move the last section out of “' + name + '” and delete the empty folder?')) emptied = name;
+            else cancelled = true;
+          }
+        }
+      }
+    }
+    if (cancelled) { clearLine(); } else { applyDrop(); }
     if (dragLi) dragLi.classList.remove('dragging');
     if (dragSection) { dragSection.classList.remove('dragging'); (dragBlock || []).forEach(m => m.classList.remove('dragging')); }
     dragBlock = null;
     dragLi = null; dragSection = null;
     if (wasDrag) {
       suppressClick = true; setTimeout(() => { suppressClick = false; }, 350);
-      persistOrder();
+      if (cancelled) return;
+      if (emptied) { persistOrder().then(() => deleteEmptiedFolder(emptied)).then(() => location.reload()).catch(() => location.reload()); }
+      else { persistOrder(); }
       return;
     }
     if (wasPress && tapLi) { startInlineEdit(tapLi); }   // tapped a reminder's text -> edit it

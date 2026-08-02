@@ -2174,9 +2174,11 @@ t('moving a section into a folder that already has that name is refused (no dupl
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'DupA', 'folder' => 'DupA', 'section' => 'General'], $jar);
     $nid = null;
     foreach (stored('notes', 'example') as $x) { if (($x['type'] ?? '') !== 'section' && ($x['folder'] ?? '') === 'DupA') { $nid = $x['id']; } }
+    // The payload a real whole-screen drag produces lists the destination's own General
+    // too — being mentioned must not free its name (that slip made a duplicate here).
     req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $nid, 'section' => 'General', 'folder' => 'DupB']]),
-        'sections' => json_encode(['DupB' => [$ga]])], $jar, true);
+        'sections' => json_encode(['DupB' => [$ga, $gb]])], $jar, true);
     // DupB must still hold exactly one "General"; DupA keeps its own.
     $countB = 0;
     foreach (stored('notes', 'example') as $x) {
@@ -2254,6 +2256,215 @@ t('a note folder colour comes from the notes palette', function () {
         'view' => 'All', 'name' => 'Recipes', 'color' => app_palette('reminders')[1]], $jar, true);
     eq($c, folder_colors(datadir(), 'notes', 'example')['Recipes'] ?? null,
        "another app's palette is not this app's");
+});
+
+// ---------------------------------------------------------------- 16b. drag payloads
+// What the drag JS actually posts, replayed against the server — the gesture itself is
+// by-eye (the harness runs no JS), but the payload contract is checkable, and "the drag
+// looked right then reverted on reload" bugs live entirely on this side of it.
+area('drag');
+
+/** The id of a reminder section by folder + name, or null. */
+function rem_sec_id(string $folder, string $name): ?string
+{
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $folder && ($x['name'] ?? '') === $name) {
+            return (string) $x['id'];
+        }
+    }
+    return null;
+}
+
+/** The stored order of two named sections within one reminders folder. */
+function rem_sec_order(string $folder, array $names): array
+{
+    return array_values(array_filter(array_column(array_values(array_filter(stored('reminders', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $folder)), 'name'),
+        fn($n) => in_array($n, $names, true)));
+}
+
+t('dragging a reminder section in the All view persists its order', function () {
+    // The bug this locks out: the JS posted a flat list of bare names and the server
+    // only reordered inside a single named folder, so a section drag on "All" — the
+    // view most people live in — was silently thrown away. The drag now posts a
+    // folder-keyed map of section ids, the shape Notes already used.
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DragRem'], $jar);
+    foreach (['Alpha', 'Beta'] as $nm) {
+        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+            'view' => 'All', 'folder' => 'DragRem', 'name' => $nm], $jar);
+    }
+    req('GET', '/reminders/?folder=All', [], $jar);   // normalise (seeds General)
+    $a = rem_sec_id('DragRem', 'Alpha'); $b = rem_sec_id('DragRem', 'Beta'); $g = rem_sec_id('DragRem', 'General');
+    ok($a && $b, 'both sections exist');
+
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$a, $b, $g])])], $jar, true);
+    eq(['Alpha', 'Beta'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'the map sets the section order');
+
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$b, $a, $g])])], $jar, true);
+    eq(['Beta', 'Alpha'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'and dragging the other way flips it');
+});
+
+t('dragging a reminder section inside a single-folder view persists too', function () {
+    // The same id-map shape is posted whichever view the drag happens in, so the server
+    // must answer it identically when the view names one folder.
+    $jar = login('example', 'examplepassword');
+    $a = rem_sec_id('DragRem', 'Alpha'); $b = rem_sec_id('DragRem', 'Beta'); $g = rem_sec_id('DragRem', 'General');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'DragRem',
+        'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$a, $b, $g])])], $jar, true);
+    eq(['Alpha', 'Beta'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'a single-folder drag reorders the same way');
+});
+
+t('dragging a reminder section into another folder re-files it, and its rows follow', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RFrom'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RTo'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section', 'view' => 'RFrom', 'folder' => 'RFrom', 'name' => 'Mains'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
+        'text' => 'carried along', 'folder' => 'RFrom', 'section' => 'Mains'], $jar);
+    req('GET', '/reminders/?folder=All', [], $jar);   // normalise
+    $sid = rem_sec_id('RFrom', 'Mains'); $rid = null;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'carried along') { $rid = $x['id']; }
+    }
+    ok($sid && $rid, 'a section and a reminder in RFrom');
+    $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+
+    // Drag Mains into RTo: the section is listed under RTo and its row posts folder=RTo.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $rid, 'section' => 'Mains', 'folder' => 'RTo']]),
+        'sections' => json_encode(['RFrom' => [rem_sec_id('RFrom', 'General')],
+                                   'RTo'   => [$sid, rem_sec_id('RTo', 'General')]])], $jar, true);
+    eq('RTo', $find($sid)['folder'] ?? null, 'the section moved to RTo');
+    eq('RTo', $find($rid)['folder'] ?? null, 'its reminder followed');
+    eq('Mains', $find($rid)['section'] ?? null, 'keeping its section');
+});
+
+t('moving a reminder section into a folder that already holds that name is refused', function () {
+    // Same duplicate-name guard Notes has: items reference sections by name, so a folder
+    // holding two same-named sections fights over them and loses items on a delete.
+    $jar = login('example', 'examplepassword');
+    $gFrom = rem_sec_id('RFrom', 'General'); $gTo = rem_sec_id('RTo', 'General');
+    ok($gFrom && $gTo, 'both folders hold their own General');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['RTo' => [$gFrom, $gTo]])], $jar, true);
+    $count = 0;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'RTo' && ($x['name'] ?? '') === 'General') { $count++; }
+    }
+    eq(1, $count, 'RTo never ends up with two General sections');
+    ok(rem_sec_id('RFrom', 'General') !== null, 'RFrom keeps its General (the move was refused)');
+});
+
+t('dragging a reminder into another folder re-files it', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
+        'text' => 'wanderer', 'folder' => 'RFrom', 'section' => 'General'], $jar);
+    $rid = null;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'wanderer') { $rid = $x['id']; }
+    }
+    ok($rid !== null, 'the reminder exists');
+    $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+    // Dropped into RTo's General: the row posts the folder of the block it landed in.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $rid, 'section' => 'General', 'folder' => 'RTo']]),
+        'sections' => '{}'], $jar, true);
+    eq('RTo', $find($rid)['folder'] ?? null, 'the reminder re-files to RTo');
+    eq('General', $find($rid)['section'] ?? null, 'into the named section there');
+    // A folder that is not mine (a partner's shared block, or garbage) is refused.
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $rid, 'section' => 'General', 'folder' => '@aki:Nope']]),
+        'sections' => '{}'], $jar, true);
+    eq('RTo', $find($rid)['folder'] ?? null, 'a folder that is not mine is ignored');
+});
+
+t('a stale flat-name section payload is tolerated and changes nothing', function () {
+    // The old JS posted sections as a flat list of bare names. A page left open across a
+    // deploy still posts that; it must neither error nor shuffle anything.
+    $jar = login('example', 'examplepassword');
+    $before = rem_sec_order('DragRem', ['Alpha', 'Beta']);
+    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['Beta', 'Alpha'])], $jar, true);
+    eq(200, $r['status'], 'the legacy shape still answers 200');
+    eq($before, rem_sec_order('DragRem', ['Alpha', 'Beta']), 'and reorders nothing rather than guessing');
+});
+
+t('dragging a note section in the All view (multi-folder map) persists across folders', function () {
+    // Notes already posts the folder-keyed map; this replays a whole-screen All-view drag
+    // touching two folders at once, the payload a real cross-folder gesture produces.
+    $jar = login('example', 'examplepassword');
+    foreach (['NDragA', 'NDragB'] as $f) {
+        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
+    }
+    foreach (['One', 'Two'] as $nm) {
+        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+            'view' => 'NDragA', 'folder' => 'NDragA', 'name' => $nm], $jar);
+    }
+    req('GET', '/notes/?folder=All', [], $jar);   // normalise (seeds each General)
+    $one = note_sec_id('NDragA', 'One'); $two = note_sec_id('NDragA', 'Two');
+    $ga  = note_sec_id('NDragA', 'General'); $gb = note_sec_id('NDragB', 'General');
+    ok($one && $two && $ga && $gb, 'sections in place');
+    // One whole-screen payload: Two now leads NDragA, and One has been dropped into NDragB.
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]', 'sections' => json_encode(['NDragA' => [$two, $ga], 'NDragB' => [$one, $gb]])], $jar, true);
+    $find = function ($id) { foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+    eq('NDragB', $find($one)['folder'] ?? null, 'One re-filed to NDragB');
+    $orderA = array_values(array_filter(array_column(array_values(array_filter(stored('notes', 'example'),
+        fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'NDragA')), 'name'),
+        fn($n) => in_array($n, ['Two', 'General'], true)));
+    eq(['Two', 'General'], $orderA, "NDragA's remaining order took");
+    // And on the next full read (what a reload does) nothing snaps back.
+    req('GET', '/notes/?folder=All', [], $jar);
+    eq('NDragB', $find($one)['folder'] ?? null, 'the move survives a reload');
+});
+
+t('emptying a reminder folder by drag, then the chained delete, removes it cleanly', function () {
+    // The confirm itself is by-eye JS; this replays what OK posts — the reorder that
+    // empties the folder, then delete_folder — and checks nothing is stranded.
+    $jar = login('example', 'examplepassword');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'EmptyMe'], $jar);
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'EmptyMe',
+        'text' => 'survives the folder', 'folder' => 'EmptyMe', 'section' => ''], $jar);
+    req('GET', '/reminders/?folder=All', [], $jar);   // normalise (seeds General, homes the row)
+    $sid = rem_sec_id('EmptyMe', 'General');
+    ok($sid !== null, 'the folder holds its one section');
+    // Its only section is dragged into RTo (renamed on arrival is refused — RTo has a
+    // General — so use a fresh name first to make the move land).
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'EmptyMe',
+        'folder' => 'EmptyMe', 'name' => 'General', 'newname' => 'Moved along'], $jar);
+    $rid = null;
+    foreach (stored('reminders', 'example') as $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'survives the folder') { $rid = $x['id']; }
+    }
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+        'order' => json_encode([['id' => $rid, 'section' => 'Moved along', 'folder' => 'RTo']]),
+        'sections' => json_encode(['EmptyMe' => [], 'RTo' => [$sid, rem_sec_id('RTo', 'General')]])], $jar, true);
+    eq('RTo', null !== rem_sec_id('RTo', 'Moved along') ? 'RTo' : null, 'the section moved');
+    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder', 'view' => 'All',
+        'name' => 'EmptyMe', 'confirm' => '1'], $jar);
+    ok(!in_array('EmptyMe', folders_load(datadir(), 'example')['reminders'], true), 'the emptied folder is gone');
+    $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
+    eq('RTo', $find($rid)['folder'] ?? null, 'the row went with its section, not to the fallback');
+});
+
+t('emptying a note folder by drag, then the chained delete, removes it cleanly', function () {
+    $jar = login('example', 'examplepassword');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'NEmpty'], $jar);
+    req('GET', '/notes/?folder=All', [], $jar);   // normalise (seeds General)
+    $sid = note_sec_id('NEmpty', 'General');
+    ok($sid !== null, 'the folder holds its one section');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section', 'view' => 'NEmpty',
+        'folder' => 'NEmpty', 'name' => 'General', 'newname' => 'Landed'], $jar);
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+        'order' => '[]',
+        'sections' => json_encode(['NEmpty' => [], 'NDragB' => [$sid, note_sec_id('NDragB', 'General')]])], $jar, true);
+    ok(note_sec_id('NDragB', 'Landed') !== null, 'the section moved');
+    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_folder', 'view' => 'All',
+        'name' => 'NEmpty', 'confirm' => '1'], $jar);
+    ok(!in_array('NEmpty', folders_load(datadir(), 'example')['notes'], true), 'the emptied folder is gone');
 });
 
 // ---------------------------------------------------------------- 17. calendar, in full
