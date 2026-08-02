@@ -31,3 +31,6 @@ ios/.build/
 
 # Claude Code's per-machine permission grants (the skills themselves are committed)
 .claude/settings.local.json
+
+# The in-app browser preview's local launch config — machine-specific paths, never shared
+.claude/launch.json
