@@ -78,7 +78,7 @@ write nothing outside the scratch directory.
 
 ### `auth`
 Signed-out visitors get the login page and never a leak of app markup. A wrong password
-is refused; a right one redirects to `/calendar/` from whichever app asked. The login
+is refused; a right one redirects to `/calmind/calendar/` from whichever app asked. The login
 page is sized to `100svh` and draws no scrollbar. Logout ends the session. A POST with a
 missing or wrong CSRF token is a 400 and writes nothing. One session covers every app.
 
@@ -394,7 +394,7 @@ failures only exist in standalone mode.
 
 - [ ] `./deploy.sh test` publishes to `seancheren.com/test/`; the app opens there and the
       tab bar, login and widget links all stay inside `/test/` (never jump to the root).
-- [ ] Signing in on `/test/` lands on `/test/calendar/`, and the data you add there does
+- [ ] Signing in on `/test/` lands on `/test/calmind/calendar/`, and the data you add there does
       **not** appear in production (and vice versa) — `data-test/` is separate.
 - [ ] `./deploy.sh promote` leaves prod running what test ran; production's data and both
       `config.php` files are untouched.
@@ -500,7 +500,7 @@ area('reminders');
 
 t('a thing does what it should', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add',
         'view' => 'All', 'text' => 'x', 'folder' => 'Reminders', 'section' => ''], $jar);
     ok(rowBy('example', 'x') !== null, 'it was written');
 });

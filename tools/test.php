@@ -130,8 +130,8 @@ function req(string $method, string $path, array $post = [], ?array &$jar = null
 function login(string $user, string $pass): array
 {
     $jar = [];
-    req('GET', '/reminders/', [], $jar);                       // pick up a session cookie
-    $r = req('POST', '/reminders/', ['username' => $user, 'password' => $pass], $jar);
+    req('GET', '/calmind/reminders/', [], $jar);                       // pick up a session cookie
+    $r = req('POST', '/calmind/reminders/', ['username' => $user, 'password' => $pass], $jar);
     if ($r['status'] !== 302) {
         throw new RuntimeException("login as $user did not redirect (status {$r['status']})");
     }
@@ -139,7 +139,7 @@ function login(string $user, string $pass): array
 }
 
 /** The CSRF token the app would have put in the page. */
-function csrf(array $jar, string $path = '/reminders/'): string
+function csrf(array $jar, string $path = '/calmind/reminders/'): string
 {
     $r = req('GET', $path, [], $jar);
     if (!preg_match('/name="csrf" value="([^"]+)"/', $r['body'], $m)) {
@@ -169,7 +169,7 @@ function rows(string $user): array
 function showAll(array $jar): void
 {
     $keys = folders_load(datadir(), 'example')['reminders'];
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
         'show' => '1', 'keys' => implode("\x1F", $keys)], $jar, true);
 }
 
@@ -242,8 +242,8 @@ area('test-instance');
 t('suite_base() is empty for production (no base configured)', function () {
     eq('', suite_base(), 'unprefixed by default');
     ob_start(); render_tabbar('reminders'); $bar = ob_get_clean();
-    has('href="/reminders/"', $bar, 'prod tab bar links are unprefixed');
-    hasnt('/test/reminders/', $bar, 'no stray /test prefix in prod');
+    has('href="/calmind/reminders/"', $bar, 'prod tab bar links are unprefixed');
+    hasnt('/test/calmind/reminders/', $bar, 'no stray /test prefix in prod');
 });
 
 t('a base prefixes every cross-app link (tab bar + login landing)', function () use ($root, $scratch) {
@@ -258,9 +258,9 @@ t('a base prefixes every cross-app link (tab bar + login landing)', function () 
     $s = implode("\n", $out);
     eq(0, $rc, 'subprocess ran');
     eq('/test', strtok($s, "\n"), 'suite_base() returns the configured prefix');
-    has('href="/test/reminders/"', $s, 'tab bar links carry the /test prefix');
-    has('href="/test/calendar/"', $s, 'and the calendar tab too');
-    hasnt('href="/reminders/"', $s, 'no unprefixed cross-app link leaks out of /test/');
+    has('href="/test/calmind/reminders/"', $s, 'tab bar links carry the /test prefix');
+    has('href="/test/calmind/calendar/"', $s, 'and the calendar tab too');
+    hasnt('href="/calmind/reminders/"', $s, 'no unprefixed cross-app link leaks out of /test/');
 });
 
 // Three instances share one domain, so a session cookie at path '/' reaches all three.
@@ -348,7 +348,7 @@ t('suite_base() normalises a messy prefix', function () use ($root, $scratch) {
 area('auth');
 
 t('a signed-out visitor gets the login page, not the app', function () {
-    foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p);
         eq(200, $r['status'], "$p status");
         has('Sign in', $r['body'], "$p should show the login form");
@@ -357,47 +357,64 @@ t('a signed-out visitor gets the login page, not the app', function () {
     }
 });
 
+t('the old suite paths 301 to their /calmind/ homes', function () {
+    // Installed home-screen icons, bookmarks and widget scripts still point at the old
+    // roots; each carries a stub that forwards, keeping any query string intact.
+    foreach (['/reminders/'                => '/calmind/reminders/',
+              '/calendar/'                 => '/calmind/calendar/',
+              '/notes/'                    => '/calmind/notes/',
+              '/habits/'                   => '/calmind/habits/',
+              '/add/'                      => '/calmind/add/',
+              '/calendar/feed.php?u=x'     => '/calmind/calendar/feed.php?u=x',
+              '/calendar/quick.php?tick=1' => '/calmind/calendar/quick.php?tick=1',
+              '/api/reminders.php'         => '/calmind/api/reminders.php'] as $old => $new) {
+        $r = req('GET', $old);
+        eq(301, $r['status'], "$old is a permanent redirect");
+        eq($new, $r['location'], "$old points into /calmind");
+    }
+});
+
 t('a wrong password is refused', function () {
     $jar = [];
-    req('GET', '/reminders/', [], $jar);
-    $r = req('POST', '/reminders/', ['username' => 'example', 'password' => 'nope'], $jar);
+    req('GET', '/calmind/reminders/', [], $jar);
+    $r = req('POST', '/calmind/reminders/', ['username' => 'example', 'password' => 'nope'], $jar);
     eq(200, $r['status'], 'no redirect');
     has('Invalid username or password', $r['body']);
 });
 
 t('a good password lands you on the Calendar, wherever you signed in', function () {
-    foreach (['/reminders/', '/notes/', '/habits/'] as $from) {
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/habits/'] as $from) {
         $jar = [];
         req('GET', $from, [], $jar);
         $r = req('POST', $from, ['username' => 'example', 'password' => 'examplepassword'], $jar);
         eq(302, $r['status'], "$from status");
-        eq('/calendar/', $r['location'], "signing in from $from should land on the Calendar");
+        eq('/calmind/calendar/', $r['location'], "signing in from $from should land on the Calendar");
     }
 });
 
 t('the login page draws no scrollbar', function () {
-    $r = req('GET', '/reminders/');
+    $r = req('GET', '/calmind/reminders/');
     has('100svh', $r['body'], 'sized to the small viewport');
     has('scrollbar-width: none', $r['body']);
 });
 
 t('logging out ends the session', function () {
     $jar = login('example', 'examplepassword');
-    req('GET', '/reminders/?logout=1', [], $jar);
-    $r = req('GET', '/reminders/', [], $jar);
+    req('GET', '/calmind/reminders/?logout=1', [], $jar);
+    $r = req('GET', '/calmind/reminders/', [], $jar);
     has('Sign in', $r['body'], 'should be signed out again');
 });
 
 t('a POST with no CSRF token is refused', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('POST', '/reminders/', ['action' => 'add', 'text' => 'csrfless', 'view' => 'All'], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'add', 'text' => 'csrfless', 'view' => 'All'], $jar);
     eq(400, $r['status']);
     eq(null, rowBy('example', 'csrfless'), 'nothing should have been written');
 });
 
 t('a POST with the wrong CSRF token is refused', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('POST', '/reminders/',
+    $r = req('POST', '/calmind/reminders/',
         ['csrf' => 'not-the-token', 'action' => 'add', 'text' => 'badcsrf', 'view' => 'All'], $jar);
     eq(400, $r['status']);
     eq(null, rowBy('example', 'badcsrf'));
@@ -405,7 +422,7 @@ t('a POST with the wrong CSRF token is refused', function () {
 
 t('one session covers the whole suite', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "$p status");
         hasnt('CalMind</h1>', $r['body'], "$p should be the app, not the login page");
@@ -440,7 +457,7 @@ area('reminders');
 
 t('adding a reminder', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('POST', '/reminders/',
+    $r = req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'All', 'text' => 'Test plain add',
          'folder' => 'Reminders', 'section' => ''], $jar);
     eq(302, $r['status'], 'POST redirects');
@@ -452,7 +469,7 @@ t('adding a reminder', function () {
 
 t('a date and time typed into the text are parsed out of it', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/',
+    req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'All', 'text' => 'Vet 8/3 2pm',
          'folder' => 'Reminders', 'section' => ''], $jar);
     $row = rowBy('example', 'Vet');
@@ -464,7 +481,7 @@ t('a date and time typed into the text are parsed out of it', function () {
 t('ticking a plain reminder marks it done', function () {
     $jar = login('example', 'examplepassword');
     $row = rowBy('example', 'Test plain add');
-    req('POST', '/reminders/',
+    req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'toggle', 'view' => 'All', 'id' => $row['id']], $jar);
     ok(!empty(rowBy('example', 'Test plain add')['done']), 'now done');
 });
@@ -474,7 +491,7 @@ t('ticking a repeating reminder rolls it to the next date instead', function () 
     $row = rowBy('example', 'Water the tomatoes');       // every 2 days, from the seeder
     ok($row !== null, 'the seeded repeat exists');
     $was = $row['due'];
-    req('POST', '/reminders/',
+    req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'toggle', 'view' => 'All', 'id' => $row['id']], $jar);
     $now = rowBy('example', 'Water the tomatoes');
     ok(empty($now['done']), 'a repeat is never marked done');
@@ -485,7 +502,7 @@ t('ticking a repeating reminder rolls it to the next date instead', function () 
 t('editing a reminder\'s text', function () {
     $jar = login('example', 'examplepassword');
     $row = rowBy('example', 'Test plain add');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
         'id' => $row['id'], 'text' => 'Test edited'], $jar, true);
     ok(rowBy('example', 'Test edited') !== null, 'renamed');
     eq(null, rowBy('example', 'Test plain add'), 'old text gone');
@@ -494,10 +511,10 @@ t('editing a reminder\'s text', function () {
 t('deleting needs the confirmed second press', function () {
     $jar = login('example', 'examplepassword');
     $row = rowBy('example', 'Test edited');
-    req('POST', '/reminders/',
+    req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'delete', 'view' => 'All', 'id' => $row['id']], $jar);
     ok(rowBy('example', 'Test edited') !== null, 'one press must not delete');
-    req('POST', '/reminders/',
+    req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'delete', 'view' => 'All', 'id' => $row['id'],
          'confirm' => '1'], $jar);
     eq(null, rowBy('example', 'Test edited'), 'confirmed press deletes');
@@ -505,18 +522,18 @@ t('deleting needs the confirmed second press', function () {
 
 t('sections: add, rename, delete', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
         'view' => 'All', 'name' => 'Testsec', 'folder' => 'Reminders'], $jar);
     $secs = array_filter(stored('reminders', 'example'), fn($r) => ($r['type'] ?? '') === 'section');
     ok(in_array('Testsec', array_column($secs, 'name'), true), 'section added');
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section',
         'view' => 'All', 'folder' => 'Reminders', 'name' => 'Testsec', 'newname' => 'Testsec2'], $jar);
     $names = array_column(array_filter(stored('reminders', 'example'),
         fn($r) => ($r['type'] ?? '') === 'section'), 'name');
     ok(in_array('Testsec2', $names, true), 'renamed');
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_section',
         'view' => 'All', 'folder' => 'Reminders', 'name' => 'Testsec2', 'confirm' => '1'], $jar);
     $names = array_column(array_filter(stored('reminders', 'example'),
         fn($r) => ($r['type'] ?? '') === 'section'), 'name');
@@ -529,21 +546,21 @@ t('every reminder folder keeps a real default section, and the last one is undel
     $jar   = login('example', 'examplepassword');
     $rsec  = fn($folder, $name) => (bool) array_filter(stored('reminders', 'example'),
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $folder && ($x['name'] ?? '') === $name);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshR'], $jar);
-    $b = req('GET', '/reminders/?folder=FreshR', [], $jar)['body'];
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshR'], $jar);
+    $b = req('GET', '/calmind/reminders/?folder=FreshR', [], $jar)['body'];
     ok($rsec('FreshR', 'General'), 'the folder is seeded with a General section');
     hasnt('default-group', $b, 'and no unnamed catch-all group is rendered');
     // A reminder added with a blank section lands in that real default, not a nameless catch-all.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'FreshR',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'FreshR',
         'folder' => 'FreshR', 'section' => '', 'text' => 'lands in General'], $jar);
     $r = null;
     foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'lands in General') { $r = $x; } }
     eq('General', $r['section'] ?? null, 'a blank section resolves to the folder default');
     // Rename the default, then try to delete the (now only) section — it must survive.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'FreshR',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'FreshR',
         'folder' => 'FreshR', 'name' => 'General', 'newname' => 'Chores'], $jar);
     ok($rsec('FreshR', 'Chores'), 'the default section renamed in place');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_section', 'view' => 'FreshR',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_section', 'view' => 'FreshR',
         'folder' => 'FreshR', 'name' => 'Chores', 'confirm' => '1'], $jar);
     ok($rsec('FreshR', 'Chores'), 'the folder never loses its only section');
 });
@@ -551,19 +568,19 @@ t('every reminder folder keeps a real default section, and the last one is undel
 t('the Manage-folders "Default for new items" picker sets folder and section together', function () {
     $jar = login('example', 'examplepassword');
     // Make a folder with a known section, then point the default at that folder+section.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DefF'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DefF'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
         'view' => 'All', 'folder' => 'DefF', 'name' => 'Chosen'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
         'view' => 'All', 'fs' => "DefF\x1FChosen"], $jar);
     eq('DefF', folder_default_get(datadir(), 'reminders', 'example'), 'the default folder moved');
     eq('Chosen', folder_default_section_get(datadir(), 'reminders', 'example'), 'and its section');
     // The picker renders in the manager, listing that folder's real sections.
-    $b = req('GET', '/reminders/', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
     has('name="fs"', $b, 'the manager carries the Default-for-new-items select');
     has('action" value="set_default_section"', $b, 'wired to set_default_section');
     // An unknown section for the folder is coerced to a real one, never stored blind.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_section',
         'view' => 'All', 'fs' => "DefF\x1FGhost"], $jar);
     $got = folder_default_section_get(datadir(), 'reminders', 'example');
     ok(in_array($got, ['Chosen', 'General'], true), 'a bogus section coerces to a real one in the folder');
@@ -572,7 +589,7 @@ t('the Manage-folders "Default for new items" picker sets folder and section tog
 
 t('a reminder folder renames in place, carrying its reminders and sections', function () {
     $jar = login('example', 'examplepassword');
-    $post = fn($p) => req('POST', '/reminders/', array_merge(['csrf' => csrf($jar)], $p), $jar);
+    $post = fn($p) => req('POST', '/calmind/reminders/', array_merge(['csrf' => csrf($jar)], $p), $jar);
     $post(['action' => 'add_folder', 'view' => 'All', 'name' => 'RenR']);
     $post(['action' => 'add_section', 'view' => 'RenR', 'folder' => 'RenR', 'name' => 'Sub']);
     $post(['action' => 'add', 'view' => 'RenR', 'folder' => 'RenR', 'section' => 'Sub', 'text' => 'moves too']);
@@ -590,7 +607,7 @@ t('a reminder folder renames in place, carrying its reminders and sections', fun
     // renamed; "Reminders" is an ordinary folder.
     ok(!folders_rename(datadir(), 'reminders', 'Calendar', 'Nope'), 'the Calendar folder is not renameable');
     // The list heading renders as a rename field for a custom folder, and the manager offers rename.
-    $b = req('GET', '/reminders/?folder=All', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
     has('class="folder-label foldertitle', $b, 'a custom folder heading is a rename field');
     has('name="newname"', $b, 'and the manager row too');
 });
@@ -600,7 +617,7 @@ t('the subtask + makes a child under its parent, not an indent on the row', func
     $parent = rowBy('example', 'Return the library books');   // dated, in Home/Errands
     ok($parent !== null, 'the seeded parent exists');
     $before = count(rows('example'));
-    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_subtask',
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_subtask',
         'view' => 'All', 'parent' => $parent['id']], $jar);
     eq(302, $r['status']);
     eq($before + 1, count(rows('example')), 'a new row was created');
@@ -625,7 +642,7 @@ t('a subtask can be lifted back out to a task', function () {
     $child = null;
     foreach (rows('example') as $r) { if ((int) ($r['indent'] ?? 0) === 1 && ($r['text'] ?? '') === '') { $child = $r; break; } }
     ok($child !== null, 'the blank subtask from the last test is there');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_indent',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_indent',
         'view' => 'All', 'id' => $child['id'], 'indent' => '0'], $jar, true);
     foreach (rows('example') as $r) {
         if ($r['id'] === $child['id']) { eq(0, (int) ($r['indent'] ?? 0), 'back to level 0'); }
@@ -636,7 +653,7 @@ t('a section can never be indented', function () {
     $jar = login('example', 'examplepassword');
     $sec = null;
     foreach (stored('reminders', 'example') as $r) { if (($r['type'] ?? '') === 'section') { $sec = $r; break; } }
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_indent',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_indent',
         'view' => 'All', 'id' => $sec['id'], 'indent' => '1'], $jar, true);
     foreach (stored('reminders', 'example') as $r) {
         if ($r['id'] === $sec['id']) { eq(0, (int) ($r['indent'] ?? 0), 'sections stay at level 0'); }
@@ -648,14 +665,14 @@ t('clear_done removes only the ticked rows', function () {
     $doneBefore = count(array_filter(rows('example'), fn($r) => !empty($r['done'])));
     $openBefore = count(array_filter(rows('example'), fn($r) => empty($r['done'])));
     ok($doneBefore > 0, 'there is something ticked to clear');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'clear_done', 'view' => 'All'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'clear_done', 'view' => 'All'], $jar);
     eq(0, count(array_filter(rows('example'), fn($r) => !empty($r['done']))), 'none left ticked');
     eq($openBefore, count(array_filter(rows('example'), fn($r) => empty($r['done']))), 'open rows untouched');
 });
 
 t('the list renders undated first, then oldest date', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/reminders/?folder=All', [], $jar);
+    $r = req('GET', '/calmind/reminders/?folder=All', [], $jar);
     preg_match_all('/data-due="([^"]*)"/', $r['body'], $m);
     ok(count($m[1]) > 3, 'rows rendered');
     // Within the run, an empty due never comes after a non-empty one *inside a section*;
@@ -666,13 +683,13 @@ t('the list renders undated first, then oldest date', function () {
 t('Copy as Markdown shows only for the sean account', function () {
     // A regular account never sees it…
     $jar = login('example', 'examplepassword');
-    ok(strpos(req('GET', '/reminders/', [], $jar)['body'], 'id="mdShareBtn"') === false,
+    ok(strpos(req('GET', '/calmind/reminders/', [], $jar)['body'], 'id="mdShareBtn"') === false,
        'example does not get the Copy as Markdown button');
     // …but Sean's does. (sean is a real config account, so the passwords.json override lets
     // us log in without knowing the machine's own password — same trick as aki.)
     ensure_account('sean', 'seanpass');
     $jar2 = login('sean', 'seanpass');
-    has('id="mdShareBtn"', req('GET', '/reminders/', [], $jar2)['body'],
+    has('id="mdShareBtn"', req('GET', '/calmind/reminders/', [], $jar2)['body'],
         "sean's account keeps the Copy as Markdown button");
 });
 
@@ -681,36 +698,36 @@ t('the section adders show without entering edit mode', function () {
     // heads in Reminders/Notes) and the + Habit on a Habits section header are not gated on
     // body.editing, so they show out of edit mode. The gesture itself is a by-eye check.
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/notes/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/notes/'] as $p) {
         $b = req('GET', $p, [], $jar)['body'];
         has('.fsec-add {', $b, "$p ships the folder-head +");
         ok(strpos($b, 'body.editing .fsec-add') === false, "$p folder-head + is not gated on edit mode");
     }
-    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $h = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('.hsec-add {', $h, 'habits ships the per-section + Habit');
     ok(strpos($h, 'body.editing .hsec-add') === false, 'the + Habit is not gated on edit mode');
 });
 
 t('holding to edit takes no text selection — the rule is ungated', function () {
     $jar = login('example', 'examplepassword');
-    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $h = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('.hname, .hsection { -webkit-user-select: none', $h, 'habits names/sections take no selection');
-    $r = req('GET', '/reminders/', [], $jar)['body'];
+    $r = req('GET', '/calmind/reminders/', [], $jar)['body'];
     has('li, .section-head, .folder-head { -webkit-touch-callout: none', $r, 'reminders rows/heads, ungated');
-    $n = req('GET', '/notes/', [], $jar)['body'];
+    $n = req('GET', '/calmind/notes/', [], $jar)['body'];
     has('.section-head, .folder-head { -webkit-touch-callout: none', $n, 'notes heads, ungated');
     ok(strpos($n, 'body.editing .section-head { -webkit-touch-callout') === false, 'the old edit-gated rule is gone');
-    $c = req('GET', '/calendar/', [], $jar)['body'];
+    $c = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has('Holding an item to enter edit mode must not paint', $c, 'the calendar day items take no selection');
 });
 
 t('picker dropdowns clamp horizontal overflow and wrap long names', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/reminders/', [], $jar)['body'];   // shared .folderpick-menu (also the Habits filter)
+    $r = req('GET', '/calmind/reminders/', [], $jar)['body'];   // shared .folderpick-menu (also the Habits filter)
     has('overflow-y: auto; overflow-x: hidden;', $r, 'the folder menu pins overflow-x');
     has('.fpick-name { flex: 1; min-width: 0; overflow-wrap: anywhere;', $r, 'and its names wrap');
     has('.folderpick-opt .fshared-badge {', $r, 'the shared badge is defined');
-    $c = req('GET', '/calendar/', [], $jar)['body'];
+    $c = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has('overflow-y: auto; overflow-x: hidden;', $c, 'the calendar menu pins overflow-x');
 });
 
@@ -719,16 +736,16 @@ area('folders');
 
 t('adding and deleting a folder, with its items falling back', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'Testfolder'], $jar);
     ok(in_array('Testfolder', folders_load(datadir(), 'example')['reminders'], true),
        'folder added');
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Testfolder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Testfolder',
         'text' => 'Homeless soon', 'folder' => 'Testfolder', 'section' => ''], $jar);
     eq('Testfolder', rowBy('example', 'Homeless soon')['folder']);
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
         'view' => 'All', 'name' => 'Testfolder', 'confirm' => '1'], $jar);
     ok(!in_array('Testfolder', folders_load(datadir(), 'example')['reminders'], true),
        'folder gone');
@@ -745,17 +762,17 @@ t('adding and deleting a folder, with its items falling back', function () {
 t('only "Calendar" is a permanent folder now; "Reminders" can be deleted', function () {
     $jar = login('example', 'examplepassword');
     // A Calendar-folder reminder, so we can prove a refused delete leaves its items alone.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => FOLDER_CALENDAR,
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => FOLDER_CALENDAR,
         'folder' => FOLDER_CALENDAR, 'section' => '', 'text' => 'Calendar rider stays'], $jar);
     // Calendar is permanent — a delete is refused, and its items must NOT be moved.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
         'view' => 'All', 'name' => FOLDER_CALENDAR, 'confirm' => '1'], $jar);
     ok(in_array(FOLDER_CALENDAR, folders_load(datadir(), 'example')['reminders'], true),
        'Calendar stays (it carries the ride-along)');
     eq(FOLDER_CALENDAR, rowBy('example', 'Calendar rider stays')['folder'],
        'a refused delete does not strip the folder of its items');
     // Reminders is an ordinary folder now — deletable when others exist, and it stays gone.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder',
         'view' => 'All', 'name' => FOLDER_REMINDERS, 'confirm' => '1'], $jar);
     $after = folders_load(datadir(), 'example')['reminders'];
     ok(!in_array(FOLDER_REMINDERS, $after, true), 'Reminders was deleted');
@@ -766,20 +783,20 @@ t('only "Calendar" is a permanent folder now; "Reminders" can be deleted', funct
 t('a folder colour must come from the palette', function () {
     $jar = login('example', 'examplepassword');
     $good = app_palette('reminders')[4];
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color',
         'view' => 'All', 'name' => 'Work', 'color' => $good], $jar, true);
     eq($good, folder_colors(datadir(), 'reminders', 'example')['Work'] ?? null, 'palette colour sticks');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color',
         'view' => 'All', 'name' => 'Work', 'color' => '#ff0000'], $jar, true);
     eq($good, folder_colors(datadir(), 'reminders', 'example')['Work'] ?? null, 'off-palette refused');
 });
 
 t('the picker box toggles one folder', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis',
         'name' => 'Work', 'show' => ''], $jar, true);
     ok(in_array('Work', folders_hidden(datadir(), 'reminders', 'example'), true), 'hidden');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis',
         'name' => 'Work', 'show' => '1'], $jar, true);
     ok(!in_array('Work', folders_hidden(datadir(), 'reminders', 'example'), true), 'shown again');
 });
@@ -787,7 +804,7 @@ t('the picker box toggles one folder', function () {
 t('tapping a folder row makes it the only one showing', function () {
     $jar = login('example', 'examplepassword');
     $keys = folders_load(datadir(), 'example')['reminders'];
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_only',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_only',
         'name' => 'Home', 'keys' => implode("\x1F", $keys)], $jar, true);
     $hidden = folders_hidden(datadir(), 'reminders', 'example');
     ok(!in_array('Home', $hidden, true), 'Home stays showing');
@@ -800,28 +817,28 @@ t('All shows everything, then hides everything', function () {
     $jar = login('example', 'examplepassword');
     $keys = folders_load(datadir(), 'example')['reminders'];
     $ks   = implode("\x1F", $keys);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
         'show' => '1', 'keys' => $ks], $jar, true);
     eq([], folders_hidden(datadir(), 'reminders', 'example'), 'nothing hidden');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
         'show' => '', 'keys' => $ks], $jar, true);
     eq(count($keys), count(folders_hidden(datadir(), 'reminders', 'example')), 'all hidden');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'folder_vis_all',
         'show' => '1', 'keys' => $ks], $jar, true);   // put it back for later tests
 });
 
 t('the default folder is where a new item lands from All', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_folder',
         'view' => 'All', 'name' => 'Work'], $jar);
     eq('Work', folder_default_get(datadir(), 'reminders', 'example'));
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_folder',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_default_folder',
         'view' => 'All', 'name' => FOLDER_REMINDERS], $jar);
 });
 
 t('the folder heading wears its colour as a wash, not a dot', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/reminders/?folder=All', [], $jar);
+    $r = req('GET', '/calmind/reminders/?folder=All', [], $jar);
     ok(preg_match('/<div class="folder-label" style="background:#[0-9a-f]{6}33"/', $r['body']) === 1,
        'the heading carries an 8-digit tint');
     ok(!preg_match('/folder-label[^>]*>[^<]*<\/div>\s*<span class="fdot"/', $r['body']),
@@ -835,7 +852,7 @@ area('notes');
 
 t('adding a note opens it in the editor', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add',
+    $r = req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add',
         'view' => 'All', 'folder' => 'General', 'section' => ''], $jar);
     eq(302, $r['status']);
     ok(strpos((string) $r['location'], 'id=') !== false, 'redirects into the note');
@@ -845,7 +862,7 @@ t('a note folder\'s sections nest indented under its heading', function () {
     // Every section — named or the catch-all — is a .section-group now (so it can drag as
     // one unit), and the single indent rule covers them all.
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/notes/?folder=All', [], $jar);
+    $r = req('GET', '/calmind/notes/?folder=All', [], $jar);
     eq(200, $r['status']);
     has('.folder-block > .section-group { padding-left', $r['body'], 'the indent rule ships');
     has('class="sec-handle"', $r['body'], 'and named sections carry a drag handle');
@@ -855,7 +872,7 @@ t('a note body is sanitised on the way in', function () {
     $jar = login('example', 'examplepassword');
     $notes = array_values(array_filter(stored('notes', 'example'), fn($n) => ($n['type'] ?? '') !== 'section'));
     $id = $notes[0]['id'];
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'save', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'save', 'view' => 'All',
         'id' => $id, 'title' => 'Sanitiser test',
         'body' => '<p>ok</p><script>alert(1)</script><img src=x onerror=alert(1)><b>bold</b>'], $jar);
     $body = '';
@@ -882,17 +899,17 @@ t('an old plain-text note is escaped rather than rendered', function () {
 
 t('note folders and sections behave like the reminders ones', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'Testnotes'], $jar);
     ok(in_array('Testnotes', folders_load(datadir(), 'example')['notes'], true));
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_folder',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete_folder',
         'view' => 'All', 'name' => 'Testnotes', 'confirm' => '1'], $jar);
     ok(!in_array('Testnotes', folders_load(datadir(), 'example')['notes'], true));
 });
 
 t('a note folder renames in place, carrying its notes and its prefs', function () {
     $jar = login('example', 'examplepassword');
-    $post = fn($p) => req('POST', '/notes/', array_merge(['csrf' => csrf($jar, '/notes/')], $p), $jar);
+    $post = fn($p) => req('POST', '/calmind/notes/', array_merge(['csrf' => csrf($jar, '/calmind/notes/')], $p), $jar);
     $pal  = app_palette('notes');
     $post(['action' => 'add_folder', 'view' => 'All', 'name' => 'Renyme']);
     $post(['action' => 'set_folder_color', 'view' => 'All', 'name' => 'Renyme', 'color' => $pal[2]]);
@@ -918,7 +935,7 @@ t('a note folder renames in place, carrying its notes and its prefs', function (
     ok(!folder_is_fixed('notes', 'General'), '"General" is not a fixed folder in notes');
     ok(!folders_rename(datadir(), 'notes', 'Reborn', 'General'), 'a rename onto an existing name is refused');
     // The list heading is an editable field in the list view (out of edit mode a plain label).
-    has('class="folder-label foldertitle', req('GET', '/notes/?folder=All', [], $jar)['body'],
+    has('class="folder-label foldertitle', req('GET', '/calmind/notes/?folder=All', [], $jar)['body'],
         'the folder heading renders as a rename field');
     // Tidy up so later tests see the usual default.
     $post(['action' => 'set_default_folder', 'view' => 'All', 'name' => 'General']);
@@ -932,22 +949,22 @@ t('reminder and note folder colours propagate to the calendar dots', function ()
     $jar = login('example', 'examplepassword');
     // Colour a reminder folder and drop a dated reminder in it.
     $rc = app_palette('reminders')[4];
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColR'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColR', 'color' => $rc], $jar, true);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'ColR', 'folder' => 'ColR',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColR'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColR', 'color' => $rc], $jar, true);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'ColR', 'folder' => 'ColR',
         'section' => '', 'text' => 'col prop rem', 'due' => date('Y-m-d')], $jar);
     // Colour a note folder and give it a dated note.
     $nc = app_palette('notes')[3];
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColN'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColN', 'color' => $nc], $jar, true);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'ColN', 'folder' => 'ColN', 'section' => ''], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ColN'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'set_folder_color', 'view' => 'All', 'name' => 'ColN', 'color' => $nc], $jar, true);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add', 'view' => 'ColN', 'folder' => 'ColN', 'section' => ''], $jar);
     // Date that note (find it, save with today's date).
     $nid = null;
     foreach (stored('notes', 'example') as $n) { if (($n['type'] ?? '') !== 'section' && ($n['folder'] ?? '') === 'ColN') { $nid = $n['id']; } }
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'save', 'view' => 'All', 'id' => $nid,
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'save', 'view' => 'All', 'id' => $nid,
         'title' => 'col prop note', 'date' => date('Y-m-d'), 'body' => '', 'folder' => 'ColN', 'section' => ''], $jar);
     // The calendar's byDay entries carry those folder colours.
-    $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
+    $r = req('GET', '/calmind/calendar/?ym=' . date('Y-m'), [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $byDay = json_decode($m[1] ?? '{}', true);
     $rem = $note = null;
@@ -961,14 +978,14 @@ t('reminder and note folder colours propagate to the calendar dots', function ()
 
 t('the day panel payload groups by day', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     eq(200, $r['status']);
     ok(preg_match('/\{"\d{4}-\d{2}-\d{2}":/', $r['body']) === 1, 'items are keyed by date');
 });
 
 t('the add/edit modal hides Time and Repeat behind + buttons', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/calendar/', [], $jar)['body'];
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has('id="mAddTime"', $b, 'a + Time button reveals the time field');
     has('id="mAddRepeat"', $b, 'a + Repeat button reveals the repeat field');
     // Both fields ship hidden by default.
@@ -984,7 +1001,7 @@ t('the calendar ships the data its in-view legend is built from', function () {
     // page hands that renderer: an empty container, the owners (with canonical order), the
     // calendar-name map, the three kind glyphs, and the render call wired into the view apply.
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/?ym=' . date('Y-m'), [], $jar);
+    $r = req('GET', '/calmind/calendar/?ym=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     has('<div class="cal-legend" id="calLegend"', $r['body'], 'the legend container renders');
     hasnt('cleg-dot', $r['body'], 'the separate colour dot is gone');
@@ -1011,7 +1028,7 @@ t('the calendar ships the data its in-view legend is built from', function () {
 
 t("a day's reminders sort undated first, then oldest, then by time", function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $byDay = json_decode($m[1], true);
     $today = date('Y-m-d');
@@ -1031,7 +1048,7 @@ t("a day's reminders sort undated first, then oldest, then by time", function ()
 
 t('events come before reminders within a day', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $byDay = json_decode($m[1], true);
     foreach ($byDay as $day => $items) {
@@ -1047,7 +1064,7 @@ t('events come before reminders within a day', function () {
 
 t('an undated Calendar-folder reminder rides on today and is not overdue', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $byDay = json_decode($m[1], true);
     $found = null;
@@ -1062,7 +1079,7 @@ t('adding an event from the day panel', function () {
     $jar = login('example', 'examplepassword');
     $cal = stored('calendars', 'example')[0]['id'];
     $day = date('Y-m-d', strtotime('+3 days'));
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_event',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_event',
         'kind' => 'event', 'text' => 'Panel event', 'day' => $day, 'date' => $day,
         'time' => '10:00', 'cal' => $cal, 'ym' => date('Y-m')], $jar);
     $ev = null;
@@ -1076,17 +1093,17 @@ t('editing and deleting a calendar item', function () {
     $jar = login('example', 'examplepassword');
     $ev = null;
     foreach (stored('events', 'example') as $e) { if ($e['text'] === 'Panel event') { $ev = $e; } }
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'edit_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'edit_item',
         'kind' => 'event', 'id' => $ev['id'], 'text' => 'Panel event renamed',
         'date' => $ev['date'], 'ym' => date('Y-m')], $jar);
     $names = array_column(stored('events', 'example'), 'text');
     ok(in_array('Panel event renamed', $names, true), 'renamed');
 
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'delete_item',
         'kind' => 'event', 'id' => $ev['id'], 'ym' => date('Y-m')], $jar);
     ok(in_array('Panel event renamed', array_column(stored('events', 'example'), 'text'), true),
        'one press must not delete');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'delete_item',
         'kind' => 'event', 'id' => $ev['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
     ok(!in_array('Panel event renamed', array_column(stored('events', 'example'), 'text'), true),
        'confirmed press deletes an event outright — an event is nothing without its date');
@@ -1097,9 +1114,9 @@ t('deleting a reminder or note from the calendar only unschedules it', function 
     // takes the date off and keeps the item, rather than destroying it from its own list.
     $jar = login('example', 'examplepassword');
     $today = date('Y-m-d');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_reminder',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_reminder',
         'text' => 'Cal-del rem', 'date' => $today, 'ym' => date('Y-m')], $jar);
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_note',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_note',
         'text' => 'Cal-del note', 'date' => $today, 'ym' => date('Y-m')], $jar);
     $find = function (string $base, string $field, string $val) {
         foreach (stored($base, 'example') as $x) { if (($x[$field] ?? '') === $val) { return $x; } }
@@ -1110,9 +1127,9 @@ t('deleting a reminder or note from the calendar only unschedules it', function 
     ok($rem !== null && ($rem['due'] ?? '') === $today, 'the reminder starts dated on today');
     ok($note !== null && ($note['date'] ?? '') === $today, 'the note starts dated on today');
 
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'delete_item',
         'kind' => 'reminder', 'id' => $rem['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'delete_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'delete_item',
         'kind' => 'note', 'id' => $note['id'], 'confirm' => '1', 'ym' => date('Y-m')], $jar);
 
     $rem2 = null;  foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $rem['id'])  { $rem2  = $x; } }
@@ -1125,21 +1142,21 @@ t('deleting a reminder or note from the calendar only unschedules it', function 
 
 t('calendars: add, recolour, default, delete', function () {
     $jar = login('example', 'examplepassword');
-    $c = csrf($jar, '/calendar/');
-    req('POST', '/calendar/', ['csrf' => $c, 'action' => 'cal_add', 'name' => 'Testcal',
+    $c = csrf($jar, '/calmind/calendar/');
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_add', 'name' => 'Testcal',
         'ym' => date('Y-m')], $jar, true);
     $cal = null;
     foreach (stored('calendars', 'example') as $x) { if (($x['name'] ?? '') === 'Testcal') { $cal = $x; } }
     ok($cal !== null, 'calendar added');
 
     $col = app_palette('calendar')[3];
-    req('POST', '/calendar/', ['csrf' => $c, 'action' => 'cal_color', 'id' => $cal['id'],
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_color', 'id' => $cal['id'],
         'color' => $col, 'ym' => date('Y-m')], $jar, true);
     foreach (stored('calendars', 'example') as $x) {
         if ($x['id'] === $cal['id']) { eq($col, $x['color'], 'recoloured'); }
     }
 
-    req('POST', '/calendar/', ['csrf' => $c, 'action' => 'cal_delete', 'id' => $cal['id'],
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_delete', 'id' => $cal['id'],
         'confirm' => '1', 'ym' => date('Y-m')], $jar, true);
     ok(!in_array('Testcal', array_column(stored('calendars', 'example'), 'name'), true), 'deleted');
 });
@@ -1148,12 +1165,12 @@ t('tapping a calendar row leaves only it showing', function () {
     $jar = login('example', 'examplepassword');
     $cals = stored('calendars', 'example');
     $keep = $cals[0]['id'];
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_vis_only',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'cal_vis_only',
         'name' => $keep, 'ym' => date('Y-m')], $jar, true);
     $hidden = (array) (stored('calprefs', 'example')['hidden_cals'] ?? []);
     ok(!in_array($keep, $hidden, true), 'the tapped one stays');
     foreach ($cals as $c) { if ($c['id'] !== $keep) { ok(in_array($c['id'], $hidden, true), 'the rest hide'); } }
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_vis_all',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'cal_vis_all',
         'show' => '1', 'ym' => date('Y-m')], $jar, true);
     eq([], (array) (stored('calprefs', 'example')['hidden_cals'] ?? []), 'All puts them back');
 });
@@ -1163,7 +1180,7 @@ t('ticking a reminder from the calendar rolls a repeat too', function () {
     $row = rowBy('example', 'Rent');       // monthly, from the seeder
     ok($row !== null);
     $was = $row['due'];
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'toggle_reminder',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'toggle_reminder',
         'id' => $row['id'], 'day' => $was, 'ym' => date('Y-m')], $jar);
     $now = rowBy('example', 'Rent');
     ok(empty($now['done']), 'not marked done');
@@ -1178,7 +1195,7 @@ t('ticking a day', function () {
     $h = null;
     foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') !== 'section') { $h = $x; break; } }
     $day = date('Y-m-d');
-    $r = req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'toggle',
+    $r = req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'toggle',
         'id' => $h['id'], 'date' => $day], $jar, true);
     $j = json_decode($r['body'], true);
     ok(isset($j['done']), 'answers with the new state');
@@ -1189,15 +1206,15 @@ t('ticking a day', function () {
 
 t('habits: add, rename, delete', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_habit',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'add_habit',
         'name' => 'Test habit', 'section' => ''], $jar);
     $h = null;
     foreach (stored('habits', 'example') as $x) { if (($x['name'] ?? '') === 'Test habit') { $h = $x; } }
     ok($h !== null, 'added');
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'rename_habit',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'rename_habit',
         'id' => $h['id'], 'name' => 'Test habit renamed'], $jar, true);
     ok(in_array('Test habit renamed', array_column(stored('habits', 'example'), 'name'), true));
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_habit',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'delete_habit',
         'id' => $h['id'], 'confirm' => '1'], $jar);
     ok(!in_array('Test habit renamed', array_column(stored('habits', 'example'), 'name'), true));
 });
@@ -1206,19 +1223,19 @@ t('a habit lands in the chosen section, or the first section by default', functi
     $jar  = login('example', 'examplepassword');
     $secs = fn() => array_values(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') === 'section'));
     // Make a target section of our own (add_section appends, so it isn't the first).
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_section', 'name' => 'ChosenSec', 'mgr' => '1'], $jar);
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'add_section', 'name' => 'ChosenSec', 'mgr' => '1'], $jar);
     $chosenSec = null;
     foreach ($secs() as $s) { if (($s['name'] ?? '') === 'ChosenSec') { $chosenSec = (string) $s['id']; } }
     $first = (string) $secs()[0]['id'];
     ok($chosenSec !== null && $chosenSec !== $first, 'a target section exists that is not the first');
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_habit',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'add_habit',
         'name' => 'IntoChosen', 'section' => $chosenSec], $jar);
     $chosen = null;
     foreach (stored('habits', 'example') as $x) { if (($x['name'] ?? '') === 'IntoChosen') { $chosen = $x; } }
     ok($chosen !== null, 'created');
     eq($chosenSec, (string) ($chosen['section'] ?? ''), 'in the section whose + was used');
     // An empty/invalid section falls back to the first section — never ungrouped.
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_habit',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'add_habit',
         'name' => 'IntoDefault', 'section' => ''], $jar);
     $def = null;
     foreach (stored('habits', 'example') as $x) { if (($x['name'] ?? '') === 'IntoDefault') { $def = $x; } }
@@ -1232,11 +1249,11 @@ t('a section colour must come from the palette, and the answer says what stuck',
     foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section') { $sec = $x; break; } }
     ok($sec !== null, 'there is a section to colour');
     $good = app_palette('habits')[2];   // habits uses its own tier now
-    $r = req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'set_section_color',
+    $r = req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'set_section_color',
         'id' => $sec['id'], 'color' => $good], $jar, true);
     eq($good, json_decode($r['body'], true)['color'] ?? null, 'answers with the stored colour');
 
-    $r = req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'set_section_color',
+    $r = req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'set_section_color',
         'id' => $sec['id'], 'color' => '#ff0000'], $jar, true);
     eq($good, json_decode($r['body'], true)['color'] ?? null,
        'an off-palette colour is refused and the old one comes back');
@@ -1248,12 +1265,12 @@ t('both habit views render, and draw actual cells', function () {
     // on rendered *cells*, not on a marker word — every one of these names also appears
     // in the stylesheet, so "does the page contain mgrid" passes on an empty grid. That
     // is exactly how the month view went untested until someone looked.
-    $r = req('GET', '/habits/?v=week&w=0', [], $jar);
+    $r = req('GET', '/calmind/habits/?v=week&w=0', [], $jar);
     eq(200, $r['status']);
     ok(preg_match_all('/<div class="colhead/', $r['body']) > 3, 'the week grid has day columns');
     ok(preg_match_all('/<button class="cell/', $r['body']) > 3, 'and tickable squares');
 
-    $r = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar);
+    $r = req('GET', '/calmind/habits/?v=month&m=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     ok(preg_match_all('/<div class="mcell/', $r['body']) >= 28, 'the month grid has a cell per day');
     // The colour key: a dot-and-name legend of the counted sections, matching the pies.
@@ -1267,20 +1284,20 @@ t('both habit views render, and draw actual cells', function () {
 t('the collapse-all button ships on each list, and habit sections carry a collapse chevron', function () {
     $jar = login('example', 'examplepassword');
     // Reminders: the button rides in the toolbar; Notes: above the top folder.
-    has('id="collapseAllBtn"', req('GET', '/reminders/', [], $jar)['body'], 'reminders has collapse-all');
-    has('id="collapseAllBtn"', req('GET', '/notes/', [], $jar)['body'], 'notes has collapse-all');
+    has('id="collapseAllBtn"', req('GET', '/calmind/reminders/', [], $jar)['body'], 'reminders has collapse-all');
+    has('id="collapseAllBtn"', req('GET', '/calmind/notes/', [], $jar)['body'], 'notes has collapse-all');
     // Habits: its own collapse-all above the sections, and each section header a chevron.
-    $h = req('GET', '/habits/?v=week&w=0', [], $jar)['body'];
+    $h = req('GET', '/calmind/habits/?v=week&w=0', [], $jar)['body'];
     has('id="hCollapseAll"', $h, 'habits week view has collapse-all');
     ok(preg_match_all('/<div class="hsection"[^>]*>\s*<button[^>]*class="sec-collapse"/', $h) >= 1,
        'each habit section header carries a collapse chevron');
     // The shared folder-collapse-all script is wired.
-    has('foldercollapsed:', req('GET', '/reminders/', [], $jar)['body'], 'the collapse-all script is present');
+    has('foldercollapsed:', req('GET', '/calmind/reminders/', [], $jar)['body'], 'the collapse-all script is present');
 });
 
 t('a habit section shows its colour as a name wash, not a dot', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     ok(preg_match_all('/class="hsec-wash" style="background:#[0-9a-f]{6}[0-9a-f]{2}"/', $b) >= 1,
        'the section name sits on a colour wash (8-digit hex from folder_tint)');
     // The old inline colour <details> dot is gone from the grid (colour is set in the manager).
@@ -1289,7 +1306,7 @@ t('a habit section shows its colour as a name wash, not a dot', function () {
 
 t('the section manager is on the page — a Manage sections row and its window', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/habits/', [], $jar);
+    $r = req('GET', '/calmind/habits/', [], $jar);
     has('id="habitSecMgr"', $r['body'], 'the filter dropdown carries a Manage sections row');
     has('id="hsecModal"', $r['body'], 'the manager window renders');
     has('id="hsecReorder"', $r['body'], 'with a draggable list of sections');
@@ -1305,13 +1322,13 @@ t('the manager reorders sections without disturbing the habits', function () {
         sort($n); return $n;
     };
     // Make sure there are at least two to swap, then reverse the whole order.
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'add_section',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'add_section',
         'name' => 'ZZManage', 'mgr' => '1'], $jar);
     $ids = array_column($onlySecs(), 'id');
     $before = $habitNames();
     ok(count($ids) >= 2, 'at least two sections exist');
     $rev = array_reverse($ids);
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'reorder',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'reorder',
         'order' => '[]', 'sections' => json_encode($rev)], $jar, true);
     eq($rev, array_column($onlySecs(), 'id'), 'the stored section order is reversed');
     eq($before, $habitNames(), 'every habit is still there');
@@ -1323,12 +1340,12 @@ t('a fresh habits app starts with a default section; the last one is undeletable
     $jar = login('hsecmgr', 'hsecmgrpass');
     $secs = fn() => array_values(array_filter(stored('habits', 'hsecmgr'),
         fn($x) => ($x['type'] ?? '') === 'section'));
-    $add = fn($n) => req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'),
+    $add = fn($n) => req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'),
         'action' => 'add_section', 'name' => $n, 'mgr' => '1'], $jar);
-    $del = fn($id) => req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'),
+    $del = fn($id) => req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'),
         'action' => 'delete_section', 'id' => $id, 'confirm' => '1', 'mgr' => '1'], $jar);
 
-    req('GET', '/habits/', [], $jar);   // first open creates the default section (persisted)
+    req('GET', '/calmind/habits/', [], $jar);   // first open creates the default section (persisted)
     eq(1, count($secs()), 'a fresh account opens with one default section');
     $del($secs()[0]['id']);
     eq(1, count($secs()), 'the last section refuses to be deleted');
@@ -1344,7 +1361,7 @@ area('add');
 
 t('Add makes a reminder in the chosen folder and section', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_reminder',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_reminder',
         'text' => 'From the add app', 'folder' => 'Home', 'section' => 'Errands'], $jar);
     $row = rowBy('example', 'From the add app');
     ok($row !== null, 'created');
@@ -1355,7 +1372,7 @@ t('Add makes a reminder in the chosen folder and section', function () {
 t('Add makes an event in the chosen calendar', function () {
     $jar = login('example', 'examplepassword');
     $cal = stored('calendars', 'example')[1]['id'];
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_event',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_event',
         'text' => 'Add-app event', 'cal' => $cal], $jar);
     $ev = null;
     foreach (stored('events', 'example') as $e) { if ($e['text'] === 'Add-app event') { $ev = $e; } }
@@ -1366,7 +1383,7 @@ t('Add makes an event in the chosen calendar', function () {
 
 t('Add makes a note in the chosen note folder', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_note',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_note',
         'text' => 'Add-app note', 'nfolder' => 'Recipes', 'nsection' => ''], $jar);
     $n = null;
     foreach (stored('notes', 'example') as $x) { if (($x['title'] ?? '') === 'Add-app note') { $n = $x; } }
@@ -1376,7 +1393,7 @@ t('Add makes a note in the chosen note folder', function () {
 
 t('a destination that does not exist falls back instead of being taken on trust', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_reminder',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_reminder',
         'text' => 'Bogus folder', 'folder' => 'Nope', 'section' => 'Nope'], $jar);
     $fb = folder_fallback('reminders');
     eq($fb, rowBy('example', 'Bogus folder')['folder']);
@@ -1388,7 +1405,7 @@ t('a destination that does not exist falls back instead of being taken on trust'
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $fb && ($x['name'] ?? '') === $sec);
     ok($secExists, 'and that section really exists in the fallback folder');
 
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_event',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_event',
         'text' => 'Bogus cal', 'cal' => 'nosuchcal'], $jar);
     $ids = array_column(stored('calendars', 'example'), 'id');
     $ev = null;
@@ -1398,7 +1415,7 @@ t('a destination that does not exist falls back instead of being taken on trust'
 
 t('Add reads the date and time out of the line too', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/add/', ['csrf' => csrf($jar, '/add/'), 'action' => 'add_reminder',
+    req('POST', '/calmind/add/', ['csrf' => csrf($jar, '/calmind/add/'), 'action' => 'add_reminder',
         'text' => 'Dentist 9/4 3:30pm', 'folder' => 'Home', 'section' => ''], $jar);
     $row = rowBy('example', 'Dentist');
     ok($row !== null, 'text trimmed');
@@ -1418,7 +1435,7 @@ t('the pair can see each other, and nobody else has a partner', function () {
 
 t("a partner's shared folder shows in my list, unshared ones do not", function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/reminders/?folder=All', [], $jar);
+    $r = req('GET', '/calmind/reminders/?folder=All', [], $jar);
     has('@buddy:Dinners', $r['body'], "buddy's shared folder is offered");
     hasnt('@buddy:House', $r['body'], 'a folder they did not share is not');
 });
@@ -1427,7 +1444,7 @@ t("writing into a partner's shared folder writes to their file", function () {
     $jar = login('example', 'examplepassword');
     $before = count(rows('buddy'));
     $view = '@buddy:Dinners';
-    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => $view,
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => $view,
         'text' => 'Added by example', 'folder' => 'Dinners', 'section' => ''], $jar);
     ok(in_array($r['status'], [302, 403], true), 'either it wrote or it refused, not a 500');
     if ($r['status'] === 302) {
@@ -1440,7 +1457,7 @@ t("structural edits to a partner's folder are refused", function () {
     $jar = login('example', 'examplepassword');
     $view = '@buddy:Dinners';
     $secsBefore = count(array_filter(stored('reminders', 'buddy'), fn($r) => ($r['type'] ?? '') === 'section'));
-    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
         'view' => $view, 'name' => 'Sneaky', 'folder' => 'Dinners'], $jar);
     eq(403, $r['status'], 'adding a section to their folder is a 403');
     eq($secsBefore, count(array_filter(stored('reminders', 'buddy'), fn($r) => ($r['type'] ?? '') === 'section')),
@@ -1449,10 +1466,10 @@ t("structural edits to a partner's folder are refused", function () {
 
 t('share_set adds and removes a share', function () {
     $jar = login('buddy', 'buddypassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
         'kind' => 'folder', 'key' => 'House', 'on' => '1'], $jar, true);
     ok(in_array('House', shares_load(datadir(), 'buddy')['folders'], true), 'shared');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
         'kind' => 'folder', 'key' => 'House', 'on' => ''], $jar, true);
     ok(!in_array('House', shares_load(datadir(), 'buddy')['folders'], true), 'unshared');
 });
@@ -1461,13 +1478,13 @@ t('share_set adds and removes a share', function () {
 area('widget');
 
 t('the feed refuses a bad token and answers a good one', function () use ($scratch) {
-    $r = req('GET', '/calendar/feed.php?token=nonsense');
+    $r = req('GET', '/calmind/calendar/feed.php?token=nonsense');
     ok($r['status'] >= 400 || strpos($r['body'], '"items"') === false, 'a bad token gets nothing');
 
     $tok = store_read($scratch . '/token-example.json');
     $tok = is_array($tok) ? ($tok['token'] ?? reset($tok)) : $tok;
     if (!is_string($tok) || $tok === '') { return; }        // no token issued in this fixture
-    $r = req('GET', '/calendar/feed.php?token=' . urlencode($tok));
+    $r = req('GET', '/calmind/calendar/feed.php?token=' . urlencode($tok));
     eq(200, $r['status']);
     $j = json_decode($r['body'], true);
     ok(is_array($j), 'the feed is JSON');
@@ -1478,23 +1495,23 @@ t('the feed is read-only — a POST behind the token changes nothing', function 
     $tok = is_array($tok) ? ($tok['token'] ?? reset($tok)) : $tok;
     if (!is_string($tok) || $tok === '') { return; }
     $before = count(rows('example'));
-    req('POST', '/calendar/feed.php?token=' . urlencode($tok),
+    req('POST', '/calmind/calendar/feed.php?token=' . urlencode($tok),
         ['action' => 'add', 'text' => 'via the feed']);
     eq($before, count(rows('example')), 'nothing was written');
 });
 
 t('the reminders API needs a session or a token', function () {
-    $r = req('GET', '/api/reminders.php');
+    $r = req('GET', '/calmind/api/reminders.php');
     ok($r['status'] !== 200 || strpos($r['body'], '"text"') === false,
        'no anonymous read');
 });
 
 t('quick.php adds for today', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/quick.php', [], $jar);
+    $r = req('GET', '/calmind/calendar/quick.php', [], $jar);
     eq(200, $r['status'], 'the page loads');
     if (preg_match('/name="csrf" value="([^"]+)"/', $r['body'], $m)) {
-        req('POST', '/calendar/quick.php',
+        req('POST', '/calmind/calendar/quick.php',
             ['csrf' => $m[1], 'type' => 'reminder', 'text' => 'Quick add test'], $jar);
         $row = rowBy('example', 'Quick add test');
         if ($row !== null) { eq(date('Y-m-d'), (string) $row['due'], 'lands on today'); }
@@ -1679,9 +1696,9 @@ t('the folder migration is idempotent', function () {
 t('escaping is applied on output', function () {
     $jar = login('example', 'examplepassword');
     showAll($jar);                                   // don't read a list something else hid
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
         'text' => '<script>alert(1)</script>', 'folder' => 'Reminders', 'section' => ''], $jar);
-    $r = req('GET', '/reminders/?folder=Reminders', [], $jar);
+    $r = req('GET', '/calmind/reminders/?folder=Reminders', [], $jar);
     hasnt('<script>alert(1)</script>', $r['body'], 'the raw tag never reaches the page');
     has('&lt;script&gt;', $r['body'], 'it is escaped instead');
 });
@@ -1692,9 +1709,9 @@ area('pages');
 t('every page of the suite renders for a seeded user', function () {
     foreach (['example', 'buddy'] as $user) {
         $jar = login($user, $user . 'password');
-        foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/',
-                  '/reminders/?folder=All', '/calendar/?ym=' . date('Y-m'),
-                  '/habits/?m=' . date('Y-m'), '/calendar/quick.php'] as $p) {
+        foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/',
+                  '/calmind/reminders/?folder=All', '/calmind/calendar/?ym=' . date('Y-m'),
+                  '/calmind/habits/?m=' . date('Y-m'), '/calmind/calendar/quick.php'] as $p) {
             $r = req('GET', $p, [], $jar);
             eq(200, $r['status'], "$user $p");
             hasnt('Fatal error', $r['body'], "$user $p");
@@ -1717,7 +1734,7 @@ t('an empty account is a working empty suite, not a crash', function () use ($sc
     $acc['freshy'] = ['email' => 'f@example.com', 'password' => 'freshpassword', 'created' => time()];
     store_write($scratch . '/accounts.json', $acc);
     $jar = login('freshy', 'freshpassword');
-    foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "empty account $p");
         hasnt('Fatal error', $r['body'], "empty account $p");
@@ -1736,7 +1753,7 @@ area('regress');
 
 t('wiring: a picker row tap stops the click reaching the PWA link interceptor', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/' => 'folderpick-opt', '/calendar/' => 'calpick-opt'] as $page => $cls) {
+    foreach (['/calmind/reminders/' => 'folderpick-opt', '/calmind/calendar/' => 'calpick-opt'] as $page => $cls) {
         $b = req('GET', $page, [], $jar)['body'];
         has($cls, $b, "$page draws picker rows");
         // The row handler is the one that both cancels the link and stops it bubbling.
@@ -1744,13 +1761,13 @@ t('wiring: a picker row tap stops the click reaching the PWA link interceptor', 
            "$page: a row tap must cancel the link *and* stop it reaching tabbar.php");
     }
     // tabbar.php is the thing it has to beat: it follows same-origin links from document.
-    has('window.navigator.standalone', req('GET', '/reminders/', [], $jar)['body'],
+    has('window.navigator.standalone', req('GET', '/calmind/reminders/', [], $jar)['body'],
         'the interceptor this guards against is still there');
 });
 
 t("a partner's folder view still shows the visibility checkmarks", function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/reminders/?folder=' . rawurlencode('@buddy:Dinners'), [], $jar);
+    $r = req('GET', '/calmind/reminders/?folder=' . rawurlencode('@buddy:Dinners'), [], $jar);
     eq(200, $r['status']);
     ok(substr_count($r['body'], 'class="fvis') > 0,
        'opening one of theirs must not blank every checkmark');
@@ -1758,7 +1775,7 @@ t("a partner's folder view still shows the visibility checkmarks", function () {
 
 t('wiring: the edit gesture opens a section name for typing', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/notes/'] as $page) {
+    foreach (['/calmind/reminders/', '/calmind/notes/'] as $page) {
         $b = req('GET', $page, [], $jar)['body'];
         ok(preg_match('/querySelector\(.\.sectitle.\)/', $b) === 1,
            "$page: the gesture has to reach for the name field");
@@ -1767,7 +1784,7 @@ t('wiring: the edit gesture opens a section name for typing', function () {
 });
 
 t('renaming a section from the list works in Notes as well as Reminders', function () {
-    foreach ([['/notes/', 'notes'], ['/reminders/', 'reminders']] as [$page, $base]) {
+    foreach ([['/calmind/notes/', 'notes'], ['/calmind/reminders/', 'reminders']] as [$page, $base]) {
         $jar = login('example', 'examplepassword');
         $sec = null;
         foreach (stored($base, 'example') as $it) { if (($it['type'] ?? '') === 'section') { $sec = $it; break; } }
@@ -1792,10 +1809,10 @@ t('renaming a section from the list works in Notes as well as Reminders', functi
 t('editing a reminder inline reads the date out of what was typed', function () {
     $jar = login('example', 'examplepassword');
     showAll($jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
         'text' => 'Regress edit target', 'folder' => 'Reminders', 'section' => ''], $jar);
     $row = rowBy('example', 'Regress edit target');
-    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
         'id' => $row['id'], 'text' => 'Regress edit target 9/6 4pm'], $jar, true);
     $j = json_decode($r['body'], true);
     eq('Regress edit target', $j['text'] ?? null, 'the date words are taken out of the text');
@@ -1810,7 +1827,7 @@ t('renaming a dated reminder with no date in the line leaves its date alone', fu
     $row = rowBy('example', 'Regress edit target');
     $was = $row['due'];
     ok(!empty($was), 'it has a date to lose');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_text', 'view' => 'All',
         'id' => $row['id'], 'text' => 'Regress edit target renamed'], $jar, true);
     eq($was, rowBy('example', 'Regress edit target renamed')['due'], 'the date must survive a rename');
 });
@@ -1820,7 +1837,7 @@ t('a date picked by hand wins, and leaves the typed text exactly as typed', func
     $ev = null;
     foreach (stored('events', 'example') as $e) { if (($e['text'] ?? '') === 'Design review') { $ev = $e; } }
     ok($ev !== null, 'the seeded event is there');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'edit_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'edit_item',
         'kind' => 'event', 'id' => $ev['id'], 'text' => 'Design review 8/3 with Sam',
         'date' => '2026-08-10', 'ym' => date('Y-m')], $jar);
     foreach (stored('events', 'example') as $e) {
@@ -1834,7 +1851,7 @@ t('with no date picked, the calendar still reads one out of the text', function 
     $jar = login('example', 'examplepassword');
     $ev = null;
     foreach (stored('events', 'example') as $e) { if (strpos((string) ($e['text'] ?? ''), 'Design review') === 0) { $ev = $e; } }
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'edit_item',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'edit_item',
         'kind' => 'event', 'id' => $ev['id'], 'text' => 'Design review 9/9 3pm', 'ym' => date('Y-m')], $jar);
     foreach (stored('events', 'example') as $e) {
         if (($e['id'] ?? '') !== $ev['id']) { continue; }
@@ -1854,7 +1871,7 @@ t('habits and sections can be reordered, and nothing falls out', function () {
     $order = [];
     foreach (array_reverse($habits) as $h) { $order[] = ['id' => $h['id'], 'section' => $h['section'] ?? '']; }
     $want = array_reverse($secIds);
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'reorder',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'reorder',
         'order' => json_encode($order), 'sections' => json_encode($want)], $jar, true);
 
     $after   = stored('habits', 'example');
@@ -1870,7 +1887,7 @@ t('a reorder that never mentions a habit keeps it rather than dropping it', func
     // A stale page posting one row only must not be read as "delete the rest".
     $one = null;
     foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') !== 'section') { $one = $x; break; } }
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'reorder',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'reorder',
         'order' => json_encode([['id' => $one['id'], 'section' => '']]), 'sections' => json_encode([])], $jar, true);
     eq($before, count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section')),
        'everything the drag never mentioned is still there');
@@ -1878,7 +1895,7 @@ t('a reorder that never mentions a habit keeps it rather than dropping it', func
 
 t('wiring: the habits drag drops against a line, between rows', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('drop-line', $b, 'the same line the other apps drop against');
     has('grid-column: 1 / -1', $b, 'spanning every column, so it sits between rows');
     has('blockOf', $b, 'a section travels with the habits under it');
@@ -1888,7 +1905,7 @@ t("a habit's row carries its section's colour", function () {
     $jar = login('example', 'examplepassword');
     // Ask for the week grid by name: the view is a stored preference, so whichever test
     // last looked at the month would otherwise decide what this one is looking at.
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     // The style now carries the colour plus its wash and its line, so match the prefix.
     $names = preg_match_all('/class="hname" style="--hc:#[0-9a-f]{6};/', $b);
     $cells = preg_match_all('/class="cell[^"]*" style="--hc:#[0-9a-f]{6};/', $b);
@@ -1904,7 +1921,7 @@ t("a habit's row carries its section's colour", function () {
 
 t('each section header carries its own + Habit, shown out of edit mode', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     $adds = preg_match_all('/class="hsec-add addhabit"/', $b);
     $secs = preg_match_all('/<div class="hsection"/', $b);
     ok($secs >= 1, 'there is at least one section');
@@ -1922,7 +1939,7 @@ t('each section header carries its own + Habit, shown out of edit mode', functio
 
 t('a fresh habits app starts with a default section, ready to add to', function () {
     $jar = login('freshy', 'freshpassword');
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     ok(preg_match_all('/<div class="hsection"/', $b) >= 1, 'a default section is there from the start');
     has('class="hsec-add addhabit"', $b, 'with a + to add a habit to it, shown out of edit mode');
     // And it really persisted, so the section keeps a stable id across visits.
@@ -1933,14 +1950,14 @@ t('a fresh habits app starts with a default section, ready to add to', function 
 
 t('wiring: tapping away leaves edit mode in habits', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('setEdit(false)', $b, 'there is a way out that is not a button');
     hasnt('id="editBtn"', $b, 'and the Edit pencil is gone');
 });
 
 t('wiring: the Calendar remembers the day, and the tab bar is what forgets it', function () {
     $jar = login('example', 'examplepassword');
-    $cal = req('GET', '/calendar/', [], $jar)['body'];
+    $cal = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has("'calDay'", $cal, 'the calendar stores the selected day');
     has('sessionStorage', $cal, 'for the life of the app session, not for ever');
     // The tab bar is on every page and is the one thing that clears it.
@@ -1950,14 +1967,14 @@ t('wiring: the Calendar remembers the day, and the tab bar is what forgets it', 
 
 t('wiring: an explicit ?day= still wins over the remembered one', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/calendar/', [], $jar)['body'];
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
     ok(preg_match("/URLSearchParams\(location\.search\)\.get\('day'\)/", $b) === 1,
        'the URL is consulted before the remembered day');
 });
 
 t('wiring: the tab bar clusters its tabs and centres the + inside the bar', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/reminders/', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
     // The + is centred by the flex row, not raised out of it with a negative margin — the
     // old trick left it reading as off-centre. So: the row centres its items, and the add
     // tab carries no vertical raise (a two-value margin whose first value is 0).
@@ -1982,26 +1999,26 @@ area('security');
 function ALL_ACTIONS(): array
 {
     return [
-        '/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
+        '/calmind/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
                           'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
                           'folder_vis_only', 'reorder_folders', 'share_set', 'change_password', 'set_theme'],
-        '/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
+        '/calmind/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
                           'reorder', 'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
                           'folder_vis_only', 'reorder_folders', 'share_set'],
-        '/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
+        '/calmind/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
                           'toggle_reminder', 'cal_add', 'cal_color', 'cal_shared_color', 'cal_default',
                           'cal_delete', 'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
                           'folder_vis', 'share_set'],
-        '/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
+        '/calmind/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
                           'add_section', 'rename_section', 'delete_habit', 'delete_section',
                           'msec_vis', 'msec_only', 'msec_all'],
-        '/add/'       => ['add_reminder', 'add_event', 'add_note'],
+        '/calmind/add/'       => ['add_reminder', 'add_event', 'add_note'],
         // quick.php is the one page the widget can reach that writes, so it is in here
         // too: a tick or an add with no token has to be as dead as anywhere else.
-        '/calendar/quick.php' => ['tick', 'add_reminder', 'add_event'],
+        '/calmind/calendar/quick.php' => ['tick', 'add_reminder', 'add_event'],
     ];
 }
 
@@ -2061,7 +2078,7 @@ t('a signed-out POST mutates nothing, whatever it claims to be', function () {
 t('a folder name cannot carry a path or the separator the pickers use', function () {
     $jar = login('example', 'examplepassword');
     foreach (['../escape', 'a/b', "with\x1Fsep", '..', './x'] as $bad) {
-        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder',
+        req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder',
             'view' => 'All', 'name' => $bad], $jar);
     }
     foreach (folders_load(datadir(), 'example')['reminders'] as $f) {
@@ -2081,7 +2098,7 @@ t("one user cannot reach another user's file by asking for it", function () {
     $jar = login('example', 'examplepassword');
     // A "shared" view key naming a folder buddy has not shared.
     $before = snapshot('buddy');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => '@buddy:House',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => '@buddy:House',
         'text' => 'should not land', 'folder' => 'House', 'section' => ''], $jar);
     eq($before, snapshot('buddy'), "buddy's file is untouched by a folder they never shared");
     eq(null, rowBy('buddy', 'should not land'));
@@ -2091,10 +2108,10 @@ t('the destructive actions all need the confirmed second press', function () {
     $jar = login('example', 'examplepassword');
     $before = snapshot();
     $tries = [
-        ['/reminders/', ['action' => 'delete', 'view' => 'All', 'id' => (rows('example')[0]['id'] ?? 'x')]],
-        ['/reminders/', ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Work']],
-        ['/notes/',     ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Recipes']],
-        ['/habits/',    ['action' => 'delete_habit', 'id' => 'x']],
+        ['/calmind/reminders/', ['action' => 'delete', 'view' => 'All', 'id' => (rows('example')[0]['id'] ?? 'x')]],
+        ['/calmind/reminders/', ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Work']],
+        ['/calmind/notes/',     ['action' => 'delete_folder', 'view' => 'All', 'name' => 'Recipes']],
+        ['/calmind/habits/',    ['action' => 'delete_habit', 'id' => 'x']],
     ];
     foreach ($tries as [$page, $post]) {
         $post['csrf'] = csrf($jar, $page);
@@ -2109,9 +2126,9 @@ area('notes2');
 t('a note carries its folder, section and date, and can be deleted', function () {
     $jar = login('example', 'examplepassword');
     // Its own folder, so nothing another area did can decide where this note lands.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'Notes2folder'], $jar);
-    $r = req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add',
+    $r = req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add',
         'view' => 'All', 'folder' => 'Notes2folder', 'section' => ''], $jar);
     preg_match('/id=([a-f0-9]+)/', (string) $r['location'], $m);
     $id = $m[1] ?? '';
@@ -2119,36 +2136,36 @@ t('a note carries its folder, section and date, and can be deleted', function ()
     // The editor posts the whole form on save, folder included. Omitting it is not a
     // thing the app does — and the handler reads the field rather than leaving the
     // folder alone, so a save without it would quietly move the note to General.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'save', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'save', 'view' => 'All',
         'id' => $id, 'title' => 'Full note', 'body' => '<p>body</p>', 'date' => '2026-09-01',
         'folder' => 'Notes2folder', 'section' => ''], $jar);
     $n = null;
     foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { $n = $x; } }
     eq('Full note', $n['title']);
     eq('Notes2folder', $n['folder']);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete',
         'view' => 'All', 'id' => $id], $jar);
     $still = false;
     foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { $still = true; } }
     ok($still, 'one press must not delete a note');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete',
         'view' => 'All', 'id' => $id, 'confirm' => '1'], $jar);
     foreach (stored('notes', 'example') as $x) { ok(($x['id'] ?? '') !== $id, 'confirmed press deletes'); }
 });
 
 t('note sections add, rename and delete per folder', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'Notes2folder'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section',
         'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Puddings'], $jar);
     $names = fn() => array_column(array_values(array_filter(stored('notes', 'example'),
         fn($x) => ($x['type'] ?? '') === 'section')), 'name');
     ok(in_array('Puddings', $names(), true), 'added');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'rename_section',
         'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Puddings', 'newname' => 'Afters'], $jar);
     ok(in_array('Afters', $names(), true), 'renamed');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete_section',
         'view' => 'Notes2folder', 'folder' => 'Notes2folder', 'name' => 'Afters', 'confirm' => '1'], $jar);
     ok(!in_array('Afters', $names(), true), 'deleted');
 });
@@ -2159,11 +2176,11 @@ t('a section added from a folder head lands in that folder, not the default', fu
     // must follow the posted folder rather than falling to the default folder.
     $jar = login('example', 'examplepassword');
     // Reminders: the folder head "+" ships in the page, and its section files by folder.
-    $rb = req('GET', '/reminders/', [], $jar)['body'];
+    $rb = req('GET', '/calmind/reminders/', [], $jar)['body'];
     eq(0, substr_count($rb, 'id="newSecBtn"'), 'reminders has no top + Section');
     has('class="fsec-add"', $rb, 'reminders folder heads carry a +');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadR'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadR'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
         'view' => 'All', 'folder' => 'HeadR', 'name' => 'FromHeadR'], $jar);
     $rsec = null;
     foreach (stored('reminders', 'example') as $x) {
@@ -2173,11 +2190,11 @@ t('a section added from a folder head lands in that folder, not the default', fu
     eq('HeadR', $rsec['folder'] ?? null, 'and it landed in the folder whose + was used');
 
     // Notes: same — the top + Section is gone, folder heads carry the +, add follows folder.
-    $nb = req('GET', '/notes/', [], $jar)['body'];
+    $nb = req('GET', '/calmind/notes/', [], $jar)['body'];
     eq(0, substr_count($nb, 'id="newSecBtn"'), 'notes has no top + Section');
     has('class="fsec-add"', $nb, 'notes folder heads carry a +');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadN'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'HeadN'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section',
         'view' => 'All', 'folder' => 'HeadN', 'name' => 'FromHeadN'], $jar);
     $nsec = null;
     foreach (stored('notes', 'example') as $x) {
@@ -2202,10 +2219,10 @@ t('dragging a note section reorders it within its folder', function () {
     // The gesture is by-eye (no JS in the harness), but the drag posts a per-folder map of
     // section *ids* to the reorder action — that server side is what this locks down.
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder',
         'view' => 'All', 'name' => 'DragNotes'], $jar);
     foreach (['Alpha', 'Beta'] as $nm) {
-        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section',
             'view' => 'DragNotes', 'folder' => 'DragNotes', 'name' => $nm], $jar);
     }
     $a = note_sec_id('DragNotes', 'Alpha'); $b = note_sec_id('DragNotes', 'Beta');
@@ -2216,21 +2233,21 @@ t('dragging a note section reorders it within its folder', function () {
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'DragNotes')), 'name'),
         fn($n) => $n === 'Alpha' || $n === 'Beta'));
 
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
         'order' => '[]', 'sections' => json_encode(['DragNotes' => [$a, $b, $g]])], $jar, true);
     eq(['Alpha', 'Beta'], $order(), 'the map sets the section order');
 
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'DragNotes',
         'order' => '[]', 'sections' => json_encode(['DragNotes' => [$b, $a, $g]])], $jar, true);
     eq(['Beta', 'Alpha'], $order(), 'and dragging the other way flips it');
 });
 
 t('dragging a note section into another folder re-files it, and its notes follow', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'SFrom'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'STo'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section', 'view' => 'SFrom', 'folder' => 'SFrom', 'name' => 'Mains'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'SFrom', 'folder' => 'SFrom', 'section' => 'Mains'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'SFrom'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'STo'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section', 'view' => 'SFrom', 'folder' => 'SFrom', 'name' => 'Mains'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add', 'view' => 'SFrom', 'folder' => 'SFrom', 'section' => 'Mains'], $jar);
     $sid = note_sec_id('SFrom', 'Mains'); $nid = null;
     foreach (stored('notes', 'example') as $x) {
         if (($x['type'] ?? '') !== 'section' && ($x['folder'] ?? '') === 'SFrom') { $nid = $x['id']; }
@@ -2239,7 +2256,7 @@ t('dragging a note section into another folder re-files it, and its notes follow
     $find = function ($id) { foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
 
     // Drag the Mains section into STo: it's now listed under STo, and its note posts folder=STo.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $nid, 'section' => 'Mains', 'folder' => 'STo']]),
         'sections' => json_encode(['SFrom' => [''], 'STo' => [$sid, '']])], $jar, true);
     eq('STo', $find($sid)['folder'] ?? null, 'the section moved to STo');
@@ -2253,19 +2270,19 @@ t('moving a section into a folder that already has that name is refused (no dupl
     // must be refused so the folder never holds a duplicate.
     $jar = login('example', 'examplepassword');
     foreach (['DupA', 'DupB'] as $f) {
-        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
+        req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
     }
     // Both folders auto-get a "General" section on first render; make sure they exist.
-    req('GET', '/notes/?folder=All', [], $jar);
+    req('GET', '/calmind/notes/?folder=All', [], $jar);
     $ga = note_sec_id('DupA', 'General'); $gb = note_sec_id('DupB', 'General');
     ok($ga && $gb, 'both folders have their own General');
     // A note in DupA/General, then try to drag DupA's General into DupB (which already has one).
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add', 'view' => 'DupA', 'folder' => 'DupA', 'section' => 'General'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add', 'view' => 'DupA', 'folder' => 'DupA', 'section' => 'General'], $jar);
     $nid = null;
     foreach (stored('notes', 'example') as $x) { if (($x['type'] ?? '') !== 'section' && ($x['folder'] ?? '') === 'DupA') { $nid = $x['id']; } }
     // The payload a real whole-screen drag produces lists the destination's own General
     // too — being mentioned must not free its name (that slip made a duplicate here).
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $nid, 'section' => 'General', 'folder' => 'DupB']]),
         'sections' => json_encode(['DupB' => [$ga, $gb]])], $jar, true);
     // DupB must still hold exactly one "General"; DupA keeps its own.
@@ -2283,9 +2300,9 @@ t('moving a section into a folder that already has that name is refused (no dupl
 
 t('dragging a note into another folder re-files it', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FromF'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ToF'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FromF'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'ToF'], $jar);
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add',
         'view' => 'All', 'folder' => 'FromF', 'section' => ''], $jar);
     $id = null;
     foreach (stored('notes', 'example') as $n) {
@@ -2297,11 +2314,11 @@ t('dragging a note into another folder re-files it', function () {
         return null;
     };
     // The drag posts each note with the folder of the block it landed in.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $id, 'section' => '', 'folder' => 'ToF']]), 'sections' => '{}'], $jar, true);
     eq('ToF', $folderOf(), 'the note re-files to ToF');
     // A folder that isn't mine (e.g. a partner's shared block) is refused.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $id, 'section' => '', 'folder' => '@someone:Nope']]), 'sections' => '{}'], $jar, true);
     eq('ToF', $folderOf(), 'a folder that is not mine is ignored');
 });
@@ -2310,23 +2327,23 @@ t('a fresh note folder gets a real, renameable default "General" section, no cat
     // The unnamed "Notes" catch-all is gone: every folder now opens with a real default
     // section named General (renameable, and undeletable while it's the only one).
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshN'], $jar);
-    $b = req('GET', '/notes/?folder=FreshN', [], $jar)['body'];
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'FreshN'], $jar);
+    $b = req('GET', '/calmind/notes/?folder=FreshN', [], $jar)['body'];
     ok(note_sec_id('FreshN', 'General') !== null, 'the folder is seeded with a General section');
     hasnt('section-group default-group', $b, 'and no unnamed catch-all group is rendered');
     // It renames like any other section (in place, re-pointing its notes).
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section', 'view' => 'FreshN',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'rename_section', 'view' => 'FreshN',
         'folder' => 'FreshN', 'name' => 'General', 'newname' => 'Ideas'], $jar);
     ok(note_sec_id('FreshN', 'Ideas') !== null, 'the default section renamed');
     // The last section in a folder can't be deleted (it always keeps at least one).
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_section', 'view' => 'FreshN',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete_section', 'view' => 'FreshN',
         'folder' => 'FreshN', 'name' => 'Ideas', 'confirm' => '1'], $jar);
     ok(note_sec_id('FreshN', 'Ideas') !== null, 'the folder never loses its only section');
 });
 
 t('"Notes" is an ordinary section name now, not a reserved catch-all', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section',
         'view' => 'All', 'folder' => 'General', 'name' => 'Notes'], $jar);
     $n = 0;
     foreach (stored('notes', 'example') as $x) {
@@ -2338,10 +2355,10 @@ t('"Notes" is an ordinary section name now, not a reserved catch-all', function 
 t('a note folder colour comes from the notes palette', function () {
     $jar = login('example', 'examplepassword');
     $c = app_palette('notes')[1];
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'set_folder_color',
         'view' => 'All', 'name' => 'Recipes', 'color' => $c], $jar, true);
     eq($c, folder_colors(datadir(), 'notes', 'example')['Recipes'] ?? null);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'set_folder_color',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'set_folder_color',
         'view' => 'All', 'name' => 'Recipes', 'color' => app_palette('reminders')[1]], $jar, true);
     eq($c, folder_colors(datadir(), 'notes', 'example')['Recipes'] ?? null,
        "another app's palette is not this app's");
@@ -2378,25 +2395,25 @@ t('dragging a reminder section in the All view persists its order', function () 
     // view most people live in — was silently thrown away. The drag now posts a
     // folder-keyed map of section ids, the shape Notes already used.
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DragRem'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'DragRem'], $jar);
     foreach (['Alpha', 'Beta'] as $nm) {
-        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+        req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
             'view' => 'All', 'folder' => 'DragRem', 'name' => $nm], $jar);
     }
-    req('GET', '/reminders/?folder=All', [], $jar);   // normalise (seeds General)
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);   // normalise (seeds General)
     $a = rem_sec_id('DragRem', 'Alpha'); $b = rem_sec_id('DragRem', 'Beta'); $g = rem_sec_id('DragRem', 'General');
     ok($a && $b, 'both sections exist');
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$a, $b, $g])])], $jar, true);
     eq(['Alpha', 'Beta'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'the map sets the section order');
 
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$b, $a, $g])])], $jar, true);
     eq(['Beta', 'Alpha'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'and dragging the other way flips it');
     // A reload re-reads, re-normalises and may write the file back — none of which may
     // shuffle what the drag just set. This is the half users actually see.
-    req('GET', '/reminders/?folder=All', [], $jar);
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);
     eq(['Beta', 'Alpha'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'the order survives a refresh');
 });
 
@@ -2405,19 +2422,19 @@ t('dragging a reminder section inside a single-folder view persists too', functi
     // must answer it identically when the view names one folder.
     $jar = login('example', 'examplepassword');
     $a = rem_sec_id('DragRem', 'Alpha'); $b = rem_sec_id('DragRem', 'Beta'); $g = rem_sec_id('DragRem', 'General');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'DragRem',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'DragRem',
         'order' => '[]', 'sections' => json_encode(['DragRem' => array_filter([$a, $b, $g])])], $jar, true);
     eq(['Alpha', 'Beta'], rem_sec_order('DragRem', ['Alpha', 'Beta']), 'a single-folder drag reorders the same way');
 });
 
 t('dragging a reminder section into another folder re-files it, and its rows follow', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RFrom'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RTo'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section', 'view' => 'RFrom', 'folder' => 'RFrom', 'name' => 'Mains'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RFrom'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'RTo'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section', 'view' => 'RFrom', 'folder' => 'RFrom', 'name' => 'Mains'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
         'text' => 'carried along', 'folder' => 'RFrom', 'section' => 'Mains'], $jar);
-    req('GET', '/reminders/?folder=All', [], $jar);   // normalise
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);   // normalise
     $sid = rem_sec_id('RFrom', 'Mains'); $rid = null;
     foreach (stored('reminders', 'example') as $x) {
         if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'carried along') { $rid = $x['id']; }
@@ -2426,7 +2443,7 @@ t('dragging a reminder section into another folder re-files it, and its rows fol
     $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
 
     // Drag Mains into RTo: the section is listed under RTo and its row posts folder=RTo.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $rid, 'section' => 'Mains', 'folder' => 'RTo']]),
         'sections' => json_encode(['RFrom' => [rem_sec_id('RFrom', 'General')],
                                    'RTo'   => [$sid, rem_sec_id('RTo', 'General')]])], $jar, true);
@@ -2441,7 +2458,7 @@ t('moving a reminder section into a folder that already holds that name is refus
     $jar = login('example', 'examplepassword');
     $gFrom = rem_sec_id('RFrom', 'General'); $gTo = rem_sec_id('RTo', 'General');
     ok($gFrom && $gTo, 'both folders hold their own General');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['RTo' => [$gFrom, $gTo]])], $jar, true);
     $count = 0;
     foreach (stored('reminders', 'example') as $x) {
@@ -2453,7 +2470,7 @@ t('moving a reminder section into a folder that already holds that name is refus
 
 t('dragging a reminder into another folder re-files it', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'RFrom',
         'text' => 'wanderer', 'folder' => 'RFrom', 'section' => 'General'], $jar);
     $rid = null;
     foreach (stored('reminders', 'example') as $x) {
@@ -2462,13 +2479,13 @@ t('dragging a reminder into another folder re-files it', function () {
     ok($rid !== null, 'the reminder exists');
     $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
     // Dropped into RTo's General: the row posts the folder of the block it landed in.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $rid, 'section' => 'General', 'folder' => 'RTo']]),
         'sections' => '{}'], $jar, true);
     eq('RTo', $find($rid)['folder'] ?? null, 'the reminder re-files to RTo');
     eq('General', $find($rid)['section'] ?? null, 'into the named section there');
     // A folder that is not mine (a partner's shared block, or garbage) is refused.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $rid, 'section' => 'General', 'folder' => '@aki:Nope']]),
         'sections' => '{}'], $jar, true);
     eq('RTo', $find($rid)['folder'] ?? null, 'a folder that is not mine is ignored');
@@ -2479,7 +2496,7 @@ t('a stale flat-name section payload is tolerated and changes nothing', function
     // deploy still posts that; it must neither error nor shuffle anything.
     $jar = login('example', 'examplepassword');
     $before = rem_sec_order('DragRem', ['Alpha', 'Beta']);
-    $r = req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['Beta', 'Alpha'])], $jar, true);
     eq(200, $r['status'], 'the legacy shape still answers 200');
     eq($before, rem_sec_order('DragRem', ['Alpha', 'Beta']), 'and reorders nothing rather than guessing');
@@ -2490,18 +2507,18 @@ t('dragging a note section in the All view (multi-folder map) persists across fo
     // touching two folders at once, the payload a real cross-folder gesture produces.
     $jar = login('example', 'examplepassword');
     foreach (['NDragA', 'NDragB'] as $f) {
-        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
+        req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => $f], $jar);
     }
     foreach (['One', 'Two'] as $nm) {
-        req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_section',
+        req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_section',
             'view' => 'NDragA', 'folder' => 'NDragA', 'name' => $nm], $jar);
     }
-    req('GET', '/notes/?folder=All', [], $jar);   // normalise (seeds each General)
+    req('GET', '/calmind/notes/?folder=All', [], $jar);   // normalise (seeds each General)
     $one = note_sec_id('NDragA', 'One'); $two = note_sec_id('NDragA', 'Two');
     $ga  = note_sec_id('NDragA', 'General'); $gb = note_sec_id('NDragB', 'General');
     ok($one && $two && $ga && $gb, 'sections in place');
     // One whole-screen payload: Two now leads NDragA, and One has been dropped into NDragB.
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['NDragA' => [$two, $ga], 'NDragB' => [$one, $gb]])], $jar, true);
     $find = function ($id) { foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
     eq('NDragB', $find($one)['folder'] ?? null, 'One re-filed to NDragB');
@@ -2510,7 +2527,7 @@ t('dragging a note section in the All view (multi-folder map) persists across fo
         fn($n) => in_array($n, ['Two', 'General'], true)));
     eq(['Two', 'General'], $orderA, "NDragA's remaining order took");
     // And on the next full read (what a reload does) nothing snaps back.
-    req('GET', '/notes/?folder=All', [], $jar);
+    req('GET', '/calmind/notes/?folder=All', [], $jar);
     eq('NDragB', $find($one)['folder'] ?? null, 'the move survives a reload');
 });
 
@@ -2519,28 +2536,28 @@ t('row order inside a section sticks, and a refresh does not shuffle it', functi
     // order is exactly what the file holds — and what every later read must keep holding.
     $jar = login('example', 'examplepassword');
     foreach (['first', 'second', 'third'] as $txt) {
-        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'DragRem',
+        req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'DragRem',
             'text' => 'roworder ' . $txt, 'folder' => 'DragRem', 'section' => 'Alpha'], $jar);
     }
-    req('GET', '/reminders/?folder=All', [], $jar);   // normalise + write back
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);   // normalise + write back
     $mine = fn() => array_values(array_filter(stored('reminders', 'example'),
         fn($x) => ($x['type'] ?? '') !== 'section' && strncmp($x['text'] ?? '', 'roworder ', 9) === 0));
     $ids = array_column($mine(), 'id');
     eq(3, count($ids), 'three rows to drag');
     $want = [$ids[2], $ids[0], $ids[1]];
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode(array_map(fn($id) => ['id' => $id, 'section' => 'Alpha', 'folder' => 'DragRem'], $want)),
         'sections' => '{}'], $jar, true);
     eq($want, array_column($mine(), 'id'), 'the drag order is stored');
-    req('GET', '/reminders/?folder=All', [], $jar);
-    req('GET', '/reminders/?folder=DragRem', [], $jar);
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);
+    req('GET', '/calmind/reminders/?folder=DragRem', [], $jar);
     eq($want, array_column($mine(), 'id'), 'and two refreshes later it still holds');
 });
 
 t('dragging folders in the manager sticks after a refresh (reminders and notes)', function () {
     // The Manage-folders window's drag posts reorder_folders with an \x1F-joined key list.
     $jar = login('example', 'examplepassword');
-    foreach ([['reminders', '/reminders/'], ['notes', '/notes/']] as [$type, $path]) {
+    foreach ([['reminders', '/calmind/reminders/'], ['notes', '/calmind/notes/']] as [$type, $path]) {
         $own = folders_load(datadir(), 'example')[$type];
         ok(count($own) > 2, "$type has folders to reorder");
         $flipped = array_reverse($own);
@@ -2557,7 +2574,7 @@ t('a drag payload cannot re-file a section into a shared or unknown folder key',
     // but a forged key must not move a section either — it keeps its slot and its home.
     $jar = login('example', 'examplepassword');
     $a = rem_sec_id('DragRem', 'Alpha');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['@aki:Stolen' => [$a]])], $jar, true);
     $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
     eq('DragRem', $find($a)['folder'] ?? null, 'a shared/unknown folder key never captures a section');
@@ -2567,13 +2584,13 @@ t('rows and sections a drag never mentions keep their place and folder', functio
     // A drag posts only what was on screen; hidden folders (and everything in them) ride
     // through untouched — the guard against a filtered view quietly rearranging the rest.
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'Offscreen'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Offscreen',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'Offscreen'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Offscreen',
         'text' => 'untouched by the drag', 'folder' => 'Offscreen', 'section' => ''], $jar);
-    req('GET', '/reminders/?folder=All', [], $jar);   // normalise
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);   // normalise
     $b = rem_sec_id('DragRem', 'Beta');
     // A drag entirely inside DragRem — Offscreen isn't in the payload at all.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['DragRem' => [$b]])], $jar, true);
     $row = null;
     foreach (stored('reminders', 'example') as $x) {
@@ -2590,14 +2607,14 @@ t('a note reorder tolerates the legacy flat payload and duplicate ids', function
     $jar = login('example', 'examplepassword');
     $before = array_column(array_values(array_filter(stored('notes', 'example'),
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'NDragA')), 'name');
-    $r = req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    $r = req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['Two', 'General'])], $jar, true);
     eq(200, $r['status'], 'the legacy flat shape answers 200');
     eq($before, array_column(array_values(array_filter(stored('notes', 'example'),
         fn($x) => ($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === 'NDragA')), 'name'),
         'and reorders nothing rather than guessing');
     $two = note_sec_id('NDragA', 'Two');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]', 'sections' => json_encode(['NDragA' => [$two, $two]])], $jar, true);
     $count = 0;
     foreach (stored('notes', 'example') as $x) {
@@ -2610,25 +2627,25 @@ t('emptying a reminder folder by drag, then the chained delete, removes it clean
     // The confirm itself is by-eye JS; this replays what OK posts — the reorder that
     // empties the folder, then delete_folder — and checks nothing is stranded.
     $jar = login('example', 'examplepassword');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'EmptyMe'], $jar);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'EmptyMe',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_folder', 'view' => 'All', 'name' => 'EmptyMe'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'EmptyMe',
         'text' => 'survives the folder', 'folder' => 'EmptyMe', 'section' => ''], $jar);
-    req('GET', '/reminders/?folder=All', [], $jar);   // normalise (seeds General, homes the row)
+    req('GET', '/calmind/reminders/?folder=All', [], $jar);   // normalise (seeds General, homes the row)
     $sid = rem_sec_id('EmptyMe', 'General');
     ok($sid !== null, 'the folder holds its one section');
     // Its only section is dragged into RTo (renamed on arrival is refused — RTo has a
     // General — so use a fresh name first to make the move land).
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'EmptyMe',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section', 'view' => 'EmptyMe',
         'folder' => 'EmptyMe', 'name' => 'General', 'newname' => 'Moved along'], $jar);
     $rid = null;
     foreach (stored('reminders', 'example') as $x) {
         if (($x['type'] ?? '') !== 'section' && ($x['text'] ?? '') === 'survives the folder') { $rid = $x['id']; }
     }
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'reorder', 'view' => 'All',
         'order' => json_encode([['id' => $rid, 'section' => 'Moved along', 'folder' => 'RTo']]),
         'sections' => json_encode(['EmptyMe' => [], 'RTo' => [$sid, rem_sec_id('RTo', 'General')]])], $jar, true);
     eq('RTo', null !== rem_sec_id('RTo', 'Moved along') ? 'RTo' : null, 'the section moved');
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder', 'view' => 'All',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'delete_folder', 'view' => 'All',
         'name' => 'EmptyMe', 'confirm' => '1'], $jar);
     ok(!in_array('EmptyMe', folders_load(datadir(), 'example')['reminders'], true), 'the emptied folder is gone');
     $find = function ($id) { foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $id) { return $x; } } return null; };
@@ -2637,17 +2654,17 @@ t('emptying a reminder folder by drag, then the chained delete, removes it clean
 
 t('emptying a note folder by drag, then the chained delete, removes it cleanly', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'NEmpty'], $jar);
-    req('GET', '/notes/?folder=All', [], $jar);   // normalise (seeds General)
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add_folder', 'view' => 'All', 'name' => 'NEmpty'], $jar);
+    req('GET', '/calmind/notes/?folder=All', [], $jar);   // normalise (seeds General)
     $sid = note_sec_id('NEmpty', 'General');
     ok($sid !== null, 'the folder holds its one section');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'rename_section', 'view' => 'NEmpty',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'rename_section', 'view' => 'NEmpty',
         'folder' => 'NEmpty', 'name' => 'General', 'newname' => 'Landed'], $jar);
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'reorder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'reorder', 'view' => 'All',
         'order' => '[]',
         'sections' => json_encode(['NEmpty' => [], 'NDragB' => [$sid, note_sec_id('NDragB', 'General')]])], $jar, true);
     ok(note_sec_id('NDragB', 'Landed') !== null, 'the section moved');
-    req('POST', '/notes/', ['csrf' => csrf($jar, '/notes/'), 'action' => 'delete_folder', 'view' => 'All',
+    req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'delete_folder', 'view' => 'All',
         'name' => 'NEmpty', 'confirm' => '1'], $jar);
     ok(!in_array('NEmpty', folders_load(datadir(), 'example')['notes'], true), 'the emptied folder is gone');
 });
@@ -2657,7 +2674,7 @@ area('calendar2');
 
 t('a repeat is expanded across the month being drawn', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $byDay = json_decode($m[1], true);
     $days = [];
@@ -2670,30 +2687,30 @@ t('a repeat is expanded across the month being drawn', function () {
 t('paging to another month works and lands on its first', function () {
     $jar = login('example', 'examplepassword');
     $next = date('Y-m', strtotime('first day of next month'));
-    $r = req('GET', '/calendar/?ym=' . $next, [], $jar);
+    $r = req('GET', '/calmind/calendar/?ym=' . $next, [], $jar);
     eq(200, $r['status']);
     has($next . '-01', $r['body'], 'the month it was asked for is the month it drew');
 });
 
 t('a reminder folder can be switched to Dated-only or Off for the calendar', function () {
     $jar = login('example', 'examplepassword');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'rf_mode',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'rf_mode',
         'name' => 'Home', 'mode' => 'none', 'ym' => date('Y-m')], $jar, true);
-    $r = req('GET', '/calendar/', [], $jar);
+    $r = req('GET', '/calmind/calendar/', [], $jar);
     preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
     $found = false;
     foreach (json_decode($m[1], true) as $items) {
         foreach ($items as $i) { if (($i['text'] ?? '') === 'Call the dentist back') { $found = true; } }
     }
     ok(!$found, "a folder switched off does not reach the calendar");
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'rf_mode',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'rf_mode',
         'name' => 'Home', 'mode' => 'all', 'ym' => date('Y-m')], $jar, true);
 });
 
 t('adding a reminder from the day panel puts it in the chosen folder and group', function () {
     $jar = login('example', 'examplepassword');
     $day = date('Y-m-d', strtotime('+2 days'));
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_reminder',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_reminder',
         'kind' => 'reminder', 'text' => 'From the day panel', 'day' => $day, 'date' => $day,
         'section' => "Home\x1FErrands", 'ym' => date('Y-m')], $jar);
     $row = rowBy('example', 'From the day panel');
@@ -2704,7 +2721,7 @@ t('adding a reminder from the day panel puts it in the chosen folder and group',
 t('a calendar with a stale id on an event falls back to a real one', function () {
     $jar = login('example', 'examplepassword');
     $day = date('Y-m-d');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'add_event',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_event',
         'kind' => 'event', 'text' => 'Stale cal event', 'day' => $day, 'date' => $day,
         'cal' => 'nope', 'ym' => date('Y-m')], $jar);
     $ids = array_column(stored('calendars', 'example'), 'id');
@@ -2721,7 +2738,7 @@ area('habits2');
 
 t('the month view counts a day against the habits ticked on it', function () {
     $jar = login('example', 'examplepassword');
-    $r = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar);
+    $r = req('GET', '/calmind/habits/?v=month&m=' . date('Y-m'), [], $jar);
     eq(200, $r['status']);
     $n = preg_match_all('/title="(\d+) of (\d+) on \d{4}-\d{2}-\d{2}"/', $r['body'], $m);
     ok($n >= 28, 'every day says how many of how many');
@@ -2733,8 +2750,8 @@ t('the month view counts a day against the habits ticked on it', function () {
 t('a day\'s pie is drawn in its sections\' colours, not the flat accent', function () {
     $jar = login('example', 'examplepassword');
     // Count every section, so a day's slices are its habits' section colours.
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'msec_all', 'show' => '1'], $jar, true);
-    $body = req('GET', '/habits/?v=month&m=' . date('Y-m'), [], $jar)['body'];
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'msec_all', 'show' => '1'], $jar, true);
+    $body = req('GET', '/calmind/habits/?v=month&m=' . date('Y-m'), [], $jar)['body'];
     preg_match_all('/class="pie" style="background:([^"]+)"/', $body, $m);
     ok(count($m[1]) >= 28, 'every day has a pie');
     $coloured = 0; $accent = 0;
@@ -2752,7 +2769,7 @@ t('the week grid pages whole weeks', function () {
     $jar = login('example', 'examplepassword');
     $seen = [];
     foreach ([-1, 0] as $w) {
-        $r = req('GET', '/habits/?v=week&w=' . $w, [], $jar);
+        $r = req('GET', '/calmind/habits/?v=week&w=' . $w, [], $jar);
         eq(200, $r['status'], "?w=$w");
         preg_match_all('/data-date="(\d{4}-\d{2}-\d{2})"/', $r['body'], $m);
         ok(count($m[1]) > 0, "?w=$w draws days");
@@ -2776,7 +2793,7 @@ t('deleting a section keeps its habits, moved into a remaining section', functio
     }
     ok($target !== null, 'found a section with habits');
     $before = count(array_filter(stored('habits', 'example'), fn($x) => ($x['type'] ?? '') !== 'section'));
-    req('POST', '/habits/', ['csrf' => csrf($jar, '/habits/'), 'action' => 'delete_section',
+    req('POST', '/calmind/habits/', ['csrf' => csrf($jar, '/calmind/habits/'), 'action' => 'delete_section',
         'id' => $target['id'], 'confirm' => '1'], $jar);
     $after   = stored('habits', 'example');
     $secIds  = array_map(fn($s) => (string) $s['id'], array_filter($after, fn($x) => ($x['type'] ?? '') === 'section'));
@@ -2798,7 +2815,7 @@ t('the month view\'s section filter has the suite\'s three gestures', function (
     $one = (string) $secs[0]['id'];
     $all = array_map(fn($s) => (string) $s['id'], $secs);   // every key is a real section now
     $post = function (array $p) use ($jar) {
-        return json_decode(req('POST', '/habits/', $p + ['csrf' => csrf($jar, '/habits/')], $jar, true)['body'], true);
+        return json_decode(req('POST', '/calmind/habits/', $p + ['csrf' => csrf($jar, '/calmind/habits/')], $jar, true)['body'], true);
     };
 
     // The box toggles one.
@@ -2824,41 +2841,41 @@ t('the month view\'s section filter has the suite\'s three gestures', function (
 
 t('the filter changes the pies and nothing else', function () {
     $jar  = login('example', 'examplepassword');
-    $csrf = csrf($jar, '/habits/');
+    $csrf = csrf($jar, '/calmind/habits/');
     // Guarantee two sections that each hold a habit, so filtering to one is strictly fewer
     // than counting them all (prior tests may have consolidated the seed's distribution).
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'add_section', 'name' => 'FilterSecB', 'mgr' => '1'], $jar);
+    req('POST', '/calmind/habits/', ['csrf' => $csrf, 'action' => 'add_section', 'name' => 'FilterSecB', 'mgr' => '1'], $jar);
     $secB = null;
     foreach (stored('habits', 'example') as $x) { if (($x['type'] ?? '') === 'section' && ($x['name'] ?? '') === 'FilterSecB') { $secB = $x; } }
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'add_habit', 'name' => 'FilterHabitB', 'section' => $secB['id']], $jar);
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
+    req('POST', '/calmind/habits/', ['csrf' => $csrf, 'action' => 'add_habit', 'name' => 'FilterHabitB', 'section' => $secB['id']], $jar);
+    req('POST', '/calmind/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
 
-    $before = req('GET', '/habits/?v=month', [], $jar)['body'];
+    $before = req('GET', '/calmind/habits/?v=month', [], $jar)['body'];
     preg_match('/of (\d+) on \d{4}/', $before, $m);
     $wholeTotal = (int) ($m[1] ?? 0);
     ok($wholeTotal > 1, 'the month counts every habit to begin with');
     has('id="msecBtn"', $before, 'and the picker sits by the Week/Month switch');
 
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => (string) $secB['id']], $jar, true);
-    $after = req('GET', '/habits/?v=month', [], $jar)['body'];
+    req('POST', '/calmind/habits/', ['csrf' => $csrf, 'action' => 'msec_only', 'name' => (string) $secB['id']], $jar, true);
+    $after = req('GET', '/calmind/habits/?v=month', [], $jar)['body'];
     preg_match('/of (\d+) on \d{4}/', $after, $m2);
     ok((int) ($m2[1] ?? 0) < $wholeTotal, 'filtering to one section counts fewer habits');
     has("you're counting", $after, 'and the legend says so');
 
     // The picker now sits by the switch in the week view too — but it only feeds the month
     // pies, so the week grid itself still shows every habit, filtered or not.
-    $week = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $week = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('id="msecBtn"', $week, 'the picker is by the switch in week view too');
     foreach (stored('habits', 'example') as $h) {
         if (($h['type'] ?? '') === 'section') { continue; }
         has(e_test((string) $h['name']), $week, 'every habit is still in the week grid');
     }
-    req('POST', '/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
+    req('POST', '/calmind/habits/', ['csrf' => $csrf, 'action' => 'msec_all', 'show' => '1'], $jar, true);
 });
 
 t('the chosen view is remembered per user', function () {
     $jar = login('example', 'examplepassword');
-    req('GET', '/habits/?m=' . date('Y-m'), [], $jar);
+    req('GET', '/calmind/habits/?m=' . date('Y-m'), [], $jar);
     $prefs = store_read(datadir() . '/prefs-example.json');
     ok(in_array($prefs['habits_view'] ?? '', ['week', 'month'], true), 'the view is stored');
 });
@@ -2875,7 +2892,7 @@ function FEED_TOKEN(): string
 
 t('the feed groups by day and never carries a note', function () {
     if (FEED_TOKEN() === '') { return; }
-    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
+    $r = req('GET', '/calmind/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
     eq(200, $r['status']);
     $j = json_decode($r['body'], true);
     ok(is_array($j), 'JSON');
@@ -2887,7 +2904,7 @@ t('the feed groups by day and never carries a note', function () {
 
 t('a reminder in the feed carries the id its tick link needs', function () {
     if (FEED_TOKEN() === '') { return; }
-    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
+    $r = req('GET', '/calmind/calendar/feed.php?token=' . urlencode(FEED_TOKEN()));
     $flat = $r['body'];
     if (strpos($flat, '"reminder"') === false) { return; }
     ok(preg_match('/"id"\s*:\s*"[a-f0-9]{6,}"/', $flat) === 1, 'ids are there to tick against');
@@ -2895,7 +2912,7 @@ t('a reminder in the feed carries the id its tick link needs', function () {
 
 t('the feed is scoped, and a stale pin cannot widen it', function () {
     if (FEED_TOKEN() === '') { return; }
-    $r = req('GET', '/calendar/feed.php?token=' . urlencode(FEED_TOKEN()) . '&cals=nosuchcalendar');
+    $r = req('GET', '/calmind/calendar/feed.php?token=' . urlencode(FEED_TOKEN()) . '&cals=nosuchcalendar');
     eq(200, $r['status'], 'a stale pin is not an error');
     ok(json_decode($r['body'], true) !== null, 'it still answers JSON');
 });
@@ -2906,12 +2923,12 @@ area('edges');
 t('an unknown id is a no-op, not a crash', function () {
     $jar = login('example', 'examplepassword');
     $before = snapshot();
-    foreach ([['/reminders/', ['action' => 'toggle', 'view' => 'All', 'id' => 'nosuchid']],
-              ['/reminders/', ['action' => 'edit_text', 'view' => 'All', 'id' => 'nosuchid', 'text' => 'x']],
-              ['/reminders/', ['action' => 'set_indent', 'view' => 'All', 'id' => 'nosuchid', 'indent' => '1']],
-              ['/reminders/', ['action' => 'add_subtask', 'view' => 'All', 'parent' => 'nosuchid']],
-              ['/habits/',    ['action' => 'rename_habit', 'id' => 'nosuchid', 'name' => 'x']],
-              ['/habits/',    ['action' => 'set_section_color', 'id' => 'nosuchid', 'color' => app_palette('habits', true)[0]]],
+    foreach ([['/calmind/reminders/', ['action' => 'toggle', 'view' => 'All', 'id' => 'nosuchid']],
+              ['/calmind/reminders/', ['action' => 'edit_text', 'view' => 'All', 'id' => 'nosuchid', 'text' => 'x']],
+              ['/calmind/reminders/', ['action' => 'set_indent', 'view' => 'All', 'id' => 'nosuchid', 'indent' => '1']],
+              ['/calmind/reminders/', ['action' => 'add_subtask', 'view' => 'All', 'parent' => 'nosuchid']],
+              ['/calmind/habits/',    ['action' => 'rename_habit', 'id' => 'nosuchid', 'name' => 'x']],
+              ['/calmind/habits/',    ['action' => 'set_section_color', 'id' => 'nosuchid', 'color' => app_palette('habits', true)[0]]],
              ] as [$page, $post]) {
         $post['csrf'] = csrf($jar, $page);
         $r = req('POST', $page, $post, $jar, true);
@@ -2924,8 +2941,8 @@ t('an unknown id is a no-op, not a crash', function () {
 t('a malformed JSON payload is ignored rather than believed', function () {
     $jar = login('example', 'examplepassword');
     $before = snapshot();
-    foreach ([['/reminders/', 'reorder', ['order' => '{not json', 'sections' => 'nope']],
-              ['/habits/',    'reorder', ['order' => 'null', 'sections' => '"a string"']],
+    foreach ([['/calmind/reminders/', 'reorder', ['order' => '{not json', 'sections' => 'nope']],
+              ['/calmind/habits/',    'reorder', ['order' => 'null', 'sections' => '"a string"']],
              ] as [$page, $action, $extra]) {
         $r = req('POST', $page, array_merge(['csrf' => csrf($jar, $page), 'action' => $action,
             'view' => 'All'], $extra), $jar, true);
@@ -2937,11 +2954,11 @@ t('a malformed JSON payload is ignored rather than believed', function () {
 t('unicode and long text survive a round trip intact', function () {
     $jar = login('example', 'examplepassword');
     $text = 'Café — naïve “quotes” 🎉 日本語';
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
         'text' => $text, 'folder' => 'Reminders', 'section' => ''], $jar);
     ok(rowBy('example', $text) !== null, 'stored exactly as sent');
     $long = str_repeat('a', 900);
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
         'text' => $long, 'folder' => 'Reminders', 'section' => ''], $jar);
     $found = null;
     foreach (rows('example') as $r) { if (strncmp($r['text'] ?? '', 'aaaa', 4) === 0) { $found = $r; } }
@@ -2953,7 +2970,7 @@ t('an empty or whitespace-only add is refused', function () {
     $jar = login('example', 'examplepassword');
     $before = count(rows('example'));
     foreach (['', '   ', "\t\n"] as $t) {
-        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+        req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
             'text' => $t, 'folder' => 'Reminders', 'section' => ''], $jar);
     }
     eq($before, count(rows('example')), 'nothing empty was added');
@@ -2962,14 +2979,14 @@ t('an empty or whitespace-only add is refused', function () {
 t('the same section name can exist in two folders without colliding', function () {
     $jar = login('example', 'examplepassword');
     foreach (['Work', 'Home'] as $f) {
-        req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
+        req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add_section',
             'view' => $f, 'folder' => $f, 'name' => 'Shared name'], $jar);
     }
     $secs = array_values(array_filter(stored('reminders', 'example'),
         fn($r) => ($r['type'] ?? '') === 'section' && ($r['name'] ?? '') === 'Shared name'));
     eq(2, count($secs), 'one per folder');
     // Renaming one must not touch the other.
-    req('POST', '/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section',
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'rename_section',
         'view' => 'Work', 'folder' => 'Work', 'name' => 'Shared name', 'newname' => 'Work only'], $jar);
     $left = array_values(array_filter(stored('reminders', 'example'),
         fn($r) => ($r['type'] ?? '') === 'section' && ($r['name'] ?? '') === 'Shared name'));
@@ -3078,12 +3095,12 @@ t('notes has no permanent folder; the last one is undeletable but renameable', f
 
 t('manage menus show the name as text with a pencil to rename (last row: pencil, no ×)', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/notes/'] as $page) {
+    foreach (['/calmind/reminders/', '/calmind/notes/'] as $page) {
         $b = req('GET', $page, [], $jar)['body'];
         has('class="frename-edit"', $b, "$page folder manager carries a rename pencil");
         has('frename-label', $b, "$page name reads as a plain label");
     }
-    $h = req('GET', '/habits/?v=week', [], $jar)['body'];
+    $h = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     has('class="frename-edit"', $h, 'habits section manager carries a rename pencil');
     has('frename-label', $h, 'and the section name reads as a label');
 });
@@ -3199,8 +3216,8 @@ function instance_boot(): array
 function instance_login(int $port, string $pfx, string $user = 'example', string $pass = 'examplepassword'): array
 {
     $jar = [];
-    hreq($port, 'GET', $pfx . '/reminders/', [], $jar);
-    $r = hreq($port, 'POST', $pfx . '/reminders/', ['username' => $user, 'password' => $pass], $jar);
+    hreq($port, 'GET', $pfx . '/calmind/reminders/', [], $jar);
+    $r = hreq($port, 'POST', $pfx . '/calmind/reminders/', ['username' => $user, 'password' => $pass], $jar);
     if ($r['status'] !== 302) { throw new RuntimeException("$pfx login did not redirect ({$r['status']})"); }
     return [$jar, $r];
 }
@@ -3215,7 +3232,7 @@ function instance_rows(string $box, string $which, string $user = 'example'): ar
 t('both instances come up from their own config, with no environment help', function () {
     ['port' => $p] = instance_boot();
     foreach (['' => 'production', '/test' => 'the sandbox'] as $pfx => $what) {
-        $r = hreq($p, 'GET', ($pfx ?: '') . '/reminders/');
+        $r = hreq($p, 'GET', ($pfx ?: '') . '/calmind/reminders/');
         eq(200, $r['status'], "$what should answer");
         has('Sign in', $r['body'], "$what should show the login form");
         foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$what is quiet"); }
@@ -3225,8 +3242,8 @@ t('both instances come up from their own config, with no environment help', func
 t('the sandbox prefixes every cross-app link and production has none', function () {
     ['port' => $p] = instance_boot();
     [$jar] = instance_login($p, '/test');
-    $b = hreq($p, 'GET', '/test/reminders/', [], $jar)['body'];
-    foreach (['/test/reminders/', '/test/calendar/', '/test/notes/', '/test/habits/', '/test/add/'] as $l) {
+    $b = hreq($p, 'GET', '/test/calmind/reminders/', [], $jar)['body'];
+    foreach (['/test/calmind/reminders/', '/test/calmind/calendar/', '/test/calmind/notes/', '/test/calmind/habits/', '/test/calmind/add/'] as $l) {
         has('href="' . $l . '"', $b, 'the sandbox tab bar stays inside /test');
     }
     // The killer: an unprefixed absolute app link in a /test/ page is a door back into
@@ -3235,26 +3252,26 @@ t('the sandbox prefixes every cross-app link and production has none', function 
        'no unprefixed cross-app link may leak out of /test/');
 
     [$pjar] = instance_login($p, '');
-    $pb = hreq($p, 'GET', '/reminders/', [], $pjar)['body'];
-    has('href="/reminders/"', $pb, 'production links are unprefixed');
+    $pb = hreq($p, 'GET', '/calmind/reminders/', [], $pjar)['body'];
+    has('href="/calmind/reminders/"', $pb, 'production links are unprefixed');
     hasnt('/test/', $pb, 'and production carries no trace of the sandbox');
 });
 
 t('signing in lands you inside the instance you signed in to', function () {
     ['port' => $p] = instance_boot();
     [, $t] = instance_login($p, '/test');
-    eq('/test/calendar/', $t['location'], 'the sandbox login lands in the sandbox');
+    eq('/test/calmind/calendar/', $t['location'], 'the sandbox login lands in the sandbox');
     [, $r] = instance_login($p, '');
-    eq('/calendar/', $r['location'], 'production stays in production');
+    eq('/calmind/calendar/', $r['location'], 'production stays in production');
 });
 
 t('a row added in the sandbox never reaches production', function () {
     ['port' => $p, 'box' => $box] = instance_boot();
     [$jar] = instance_login($p, '/test');
-    $g = hreq($p, 'GET', '/test/reminders/', [], $jar);
+    $g = hreq($p, 'GET', '/test/calmind/reminders/', [], $jar);
     preg_match('/name="csrf" value="([^"]+)"/', $g['body'], $m);
     ok(!empty($m[1]), 'the sandbox page carries a token');
-    hreq($p, 'POST', '/test/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
+    hreq($p, 'POST', '/test/calmind/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
         'text' => 'sandbox-only row', 'folder' => 'Reminders', 'section' => ''], $jar);
 
     $inTest = array_column(instance_rows($box, 'data-test'), 'text');
@@ -3266,9 +3283,9 @@ t('a row added in the sandbox never reaches production', function () {
 t('a row added in production never reaches the sandbox', function () {
     ['port' => $p, 'box' => $box] = instance_boot();
     [$jar] = instance_login($p, '');
-    $g = hreq($p, 'GET', '/reminders/', [], $jar);
+    $g = hreq($p, 'GET', '/calmind/reminders/', [], $jar);
     preg_match('/name="csrf" value="([^"]+)"/', $g['body'], $m);
-    hreq($p, 'POST', '/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
+    hreq($p, 'POST', '/calmind/reminders/', ['csrf' => $m[1], 'action' => 'add', 'view' => 'All',
         'text' => 'production-only row', 'folder' => 'Reminders', 'section' => ''], $jar);
 
     ok(in_array('production-only row', array_column(instance_rows($box, 'data'), 'text'), true),
@@ -3282,10 +3299,10 @@ t('every page under /test/ loads lib-test, not lib', function () {
     [$jar] = instance_login($p, '/test');
     // If a page's preamble were missed out, it would load lib/ — whose config has no
     // base — and its links would come out unprefixed while everything else looked fine.
-    foreach (['/test/reminders/', '/test/notes/', '/test/calendar/', '/test/habits/', '/test/add/'] as $path) {
+    foreach (['/test/calmind/reminders/', '/test/calmind/notes/', '/test/calmind/calendar/', '/test/calmind/habits/', '/test/calmind/add/'] as $path) {
         $r = hreq($p, 'GET', $path, [], $jar);
         eq(200, $r['status'], "$path renders");
-        has('href="/test/calendar/"', $r['body'], "$path was served by the sandbox instance");
+        has('href="/test/calmind/calendar/"', $r['body'], "$path was served by the sandbox instance");
         foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$path is quiet"); }
     }
 });
@@ -3314,8 +3331,8 @@ t('a sign-up is refused unless the username, email and password are all right', 
     ];
     foreach ($bad as [$u, $em, $pw, $why]) {
         $jar = [];
-        req('GET', '/reminders/', [], $jar);
-        $r = req('POST', '/reminders/', ['action' => 'signup', 'newuser' => $u,
+        req('GET', '/calmind/reminders/', [], $jar);
+        $r = req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => $u,
             'email' => $em, 'newpass' => $pw], $jar);
         eq(200, $r['status'], "$why: no redirect");
         $acc = store_read($scratch . '/accounts.json');
@@ -3325,8 +3342,8 @@ t('a sign-up is refused unless the username, email and password are all right', 
 
 t('a good sign-up parks the account rather than creating it', function () use ($scratch) {
     $jar = [];
-    req('GET', '/reminders/', [], $jar);
-    $r = req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
+    req('GET', '/calmind/reminders/', [], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
         'email' => 'newbie@example.com', 'newpass' => 'newbiepass'], $jar);
     eq(200, $r['status'], 'the code window opens in place');
     $pending = store_read($scratch . '/signups.json');
@@ -3335,20 +3352,20 @@ t('a good sign-up parks the account rather than creating it', function () use ($
     ok(!isset(store_read($scratch . '/accounts.json')['newbie']), 'and is NOT an account yet');
     // Nor can it sign in while it's only pending.
     $j2 = [];
-    req('GET', '/reminders/', [], $j2);
-    $s = req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j2);
+    req('GET', '/calmind/reminders/', [], $j2);
+    $s = req('POST', '/calmind/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j2);
     eq(200, $s['status'], 'a pending account cannot sign in');
 });
 
 t('a wrong code is counted and the fifth one ends the sign-up', function () use ($scratch) {
     $jar = [];
-    req('GET', '/reminders/', [], $jar);
-    req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'doomed',
+    req('GET', '/calmind/reminders/', [], $jar);
+    req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => 'doomed',
         'email' => 'doomed@example.com', 'newpass' => 'doomedpass'], $jar);
     for ($i = 0; $i < 5; $i++) {
-        req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '9999'], $jar);
+        req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '9999'], $jar);
     }
-    $r = req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '1234'], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '1234'], $jar);
     eq(200, $r['status'], 'even the right code is too late now');
     ok(!isset(store_read($scratch . '/accounts.json')['doomed']), 'no account was made');
     ok(!isset(store_read($scratch . '/signups.json')['doomed']), 'and the pending row is gone');
@@ -3356,12 +3373,12 @@ t('a wrong code is counted and the fifth one ends the sign-up', function () use 
 
 t('the right code makes the account and signs you in', function () use ($scratch) {
     $jar = [];
-    req('GET', '/reminders/', [], $jar);
-    req('POST', '/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
+    req('GET', '/calmind/reminders/', [], $jar);
+    req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
         'email' => 'newbie@example.com', 'newpass' => 'newbiepass'], $jar);
-    $r = req('POST', '/reminders/', ['action' => 'verify', 'newuser' => 'newbie', 'code' => '1234'], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'newbie', 'code' => '1234'], $jar);
     eq(302, $r['status'], 'verifying redirects');
-    eq('/calendar/', $r['location'], 'straight into the app');
+    eq('/calmind/calendar/', $r['location'], 'straight into the app');
     $acc = store_read($scratch . '/accounts.json');
     ok(isset($acc['newbie']), 'the account is real now');
     eq('newbiepass', $acc['newbie']['password'] ?? null);
@@ -3371,7 +3388,7 @@ t('the right code makes the account and signs you in', function () use ($scratch
 t('a brand-new account is an empty working suite, and sees nobody else\'s data', function () {
     ensure_account('fresh', 'freshpassword');
     $jar = login('fresh', 'freshpassword');
-    foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "$p renders for a new account");
         foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$p is quiet"); }
@@ -3391,10 +3408,10 @@ function ensure_account(string $user, string $pass): void
     global $scratch;
     if (!isset(store_read($scratch . '/accounts.json')[$user])) {
         $jar = [];
-        req('GET', '/reminders/', [], $jar);
-        req('POST', '/reminders/', ['action' => 'signup', 'newuser' => $user,
+        req('GET', '/calmind/reminders/', [], $jar);
+        req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => $user,
             'email' => $user . '@example.com', 'newpass' => $pass], $jar);
-        req('POST', '/reminders/', ['action' => 'verify', 'newuser' => $user, 'code' => SIGNUP_CODE], $jar);
+        req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => $user, 'code' => SIGNUP_CODE], $jar);
     }
     if (!isset(store_read($scratch . '/accounts.json')[$user])) {
         // Signup wouldn't take the name: it's already an account in the developer's own
@@ -3414,16 +3431,16 @@ t('changing a password needs a token and the current password', function () use 
     ensure_account('newbie', 'newbiepass');
     $jar = login('newbie', 'newbiepass');
     $was = store_read($scratch . '/passwords.json');
-    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => 'wrong',
+    $r = req('POST', '/calmind/reminders/', ['action' => 'change_password', 'csrf' => 'wrong',
         'current' => 'newbiepass', 'new' => 'brandnewpass'], $jar, true);
     eq(400, $r['status'], 'a bad token is a 400');
     eq($was, store_read($scratch . '/passwords.json'), 'and nothing was written');
 
-    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+    $r = req('POST', '/calmind/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
         'current' => 'nope', 'new' => 'brandnewpass'], $jar, true);
     eq(false, json_decode($r['body'], true)['ok'] ?? null, 'the wrong current password is refused');
 
-    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+    $r = req('POST', '/calmind/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
         'current' => 'newbiepass', 'new' => 'short'], $jar, true);
     eq(false, json_decode($r['body'], true)['ok'] ?? null, 'a six-character floor');
 });
@@ -3431,17 +3448,17 @@ t('changing a password needs a token and the current password', function () use 
 t('a changed password takes effect and the old one stops working', function () {
     ensure_account('newbie', 'newbiepass');
     $jar = login('newbie', 'newbiepass');
-    $r = req('POST', '/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
+    $r = req('POST', '/calmind/reminders/', ['action' => 'change_password', 'csrf' => csrf($jar),
         'current' => 'newbiepass', 'new' => 'brandnewpass'], $jar, true);
     eq(true, json_decode($r['body'], true)['ok'] ?? null, 'accepted');
 
     $j = [];
-    req('GET', '/reminders/', [], $j);
-    eq(200, req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j)['status'],
+    req('GET', '/calmind/reminders/', [], $j);
+    eq(200, req('POST', '/calmind/reminders/', ['username' => 'newbie', 'password' => 'newbiepass'], $j)['status'],
        'the old password is dead');
     $j2 = [];
-    req('GET', '/reminders/', [], $j2);
-    eq(302, req('POST', '/reminders/', ['username' => 'newbie', 'password' => 'brandnewpass'], $j2)['status'],
+    req('GET', '/calmind/reminders/', [], $j2);
+    eq(302, req('POST', '/calmind/reminders/', ['username' => 'newbie', 'password' => 'brandnewpass'], $j2)['status'],
        'the new one works');
 });
 
@@ -3456,18 +3473,18 @@ t('a stored password wins over the account record it overrides', function () use
 
 t('the theme is set over AJAX, refuses a name it does not know, and sticks', function () use ($scratch) {
     $jar = login('example', 'examplepassword');
-    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
+    $r = req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
         'theme' => 'not-a-theme'], $jar, true);
     eq(false, json_decode($r['body'], true)['ok'] ?? null, 'an unknown theme is refused');
 
     $names = array_keys(THEMES);
     $pick  = $names[count($names) - 1];
-    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
+    $r = req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar),
         'theme' => $pick], $jar, true);
     eq(true, json_decode($r['body'], true)['ok'] ?? null, "theme $pick is accepted");
     eq($pick, store_read($scratch . '/prefs-example.json')['theme'] ?? null, 'and it is stored');
 
-    $r = req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => 'wrong', 'theme' => $names[0]], $jar, true);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => 'wrong', 'theme' => $names[0]], $jar, true);
     eq(false, json_decode($r['body'], true)['ok'] ?? null, 'no token, no change');
     eq($pick, store_read($scratch . '/prefs-example.json')['theme'] ?? null, 'still the one we set');
 });
@@ -3478,27 +3495,27 @@ t('a suite theme paints the whole page, and midnight is the unchanged default', 
     // change; a light theme must flip color-scheme so native controls follow.
     ensure_account('fresh', 'freshpassword');
     $jar = login('fresh', 'freshpassword');
-    $b = req('GET', '/reminders/', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
     foreach (['--bg: #111111', '--text: #eeeeee', '--accent: #34d399', '--gold: #f0b429',
               'color-scheme: dark'] as $v) {
         has($v, $b, "a fresh account's page carries midnight's $v");
     }
     has('name="theme-color" content="#111111"', $b, 'the status-bar colour follows the theme');
 
-    $csrf = csrf($jar, '/reminders/');
-    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'sage'], $jar, true);
-    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+    $csrf = csrf($jar, '/calmind/reminders/');
+    req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'sage'], $jar, true);
+    foreach (['/calmind/reminders/', '/calmind/calendar/', '/calmind/notes/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $b = req('GET', $p, [], $jar)['body'];
         has('--bg: #fefae0', $b, "$p wears the sage page colour");
         has('color-scheme: light', $b, "$p flips to a light scheme");
     }
-    has('name="theme-color" content="#fefae0"', req('GET', '/reminders/', [], $jar)['body'],
+    has('name="theme-color" content="#fefae0"', req('GET', '/calmind/reminders/', [], $jar)['body'],
         'and the status-bar colour moved with it');
     // The widget quick page and the feed setup page carry the vars too — they have their
     // own style blocks, and a converted rule with no var behind it silently loses colour.
-    has('--bg: #fefae0', req('GET', '/calendar/quick.php', [], $jar)['body'], 'quick.php is themed');
-    has('--bg: #fefae0', req('GET', '/calendar/feed.php', [], $jar)['body'], 'the feed setup page is themed');
-    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar), 'theme' => 'midnight'], $jar, true);
+    has('--bg: #fefae0', req('GET', '/calmind/calendar/quick.php', [], $jar)['body'], 'quick.php is themed');
+    has('--bg: #fefae0', req('GET', '/calmind/calendar/feed.php', [], $jar)['body'], 'the feed setup page is themed');
+    req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => csrf($jar), 'theme' => 'midnight'], $jar, true);
 });
 
 t('no app page carries the old hardcoded dark-room colours', function () {
@@ -3507,7 +3524,7 @@ t('no app page carries the old hardcoded dark-room colours', function () {
     // themselves are banned from the rendered page. (The kind palette, the error red and
     // Habits' violet are semantic and allowed; this only checks the neutral roles.)
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/calendar/', '/calmind/notes/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $b = req('GET', $p, [], $jar)['body'];
         foreach (['background: #111;', 'background: #1a1a1a', 'background: #222;',
                   'color: #eee', 'color: #888', 'border: 1px solid #333',
@@ -3519,7 +3536,7 @@ t('no app page carries the old hardcoded dark-room colours', function () {
 
 t('every app offers the same theme picker', function () {
     $jar = login('example', 'examplepassword');
-    foreach (['/reminders/', '/calendar/', '/notes/', '/habits/', '/add/'] as $p) {
+    foreach (['/calmind/reminders/', '/calmind/calendar/', '/calmind/notes/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $b = req('GET', $p, [], $jar)['body'];
         eq(count(THEMES), substr_count($b, 'class="themebtn'), "$p shows one swatch per theme");
     }
@@ -3527,7 +3544,7 @@ t('every app offers the same theme picker', function () {
 
 t('the theme picker shows every theme as its own swatch', function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/reminders/', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
     eq(count(THEMES), substr_count($b, 'class="themebtn'), 'one swatch per theme');
     eq(count(THEMES), substr_count($b, 'class="themedot"'), 'each carrying its accent dot');
     foreach (THEMES as $key => $row) {
@@ -3537,7 +3554,7 @@ t('the theme picker shows every theme as its own swatch', function () {
     // than erroring or half-applying.
     store_write(datadir() . '/prefs-example.json',
         array_merge(store_read(datadir() . '/prefs-example.json'), ['theme' => 'rose']));
-    $b = req('GET', '/reminders/', [], $jar)['body'];
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
     has('--bg: #111111', $b, 'an old stored theme name renders as midnight');
 });
 
@@ -3565,8 +3582,8 @@ t('one person\'s token cannot read another person\'s feed', function () {
     store_write($dir . '/token-example.json', ['token' => $mine]);
     store_write($dir . '/token-buddy.json',   ['token' => $them]);
 
-    $a = json_decode(req('GET', '/calendar/feed.php?token=' . $mine)['body'], true);
-    $b = json_decode(req('GET', '/calendar/feed.php?token=' . $them)['body'], true);
+    $a = json_decode(req('GET', '/calmind/calendar/feed.php?token=' . $mine)['body'], true);
+    $b = json_decode(req('GET', '/calmind/calendar/feed.php?token=' . $them)['body'], true);
     ok(is_array($a) && is_array($b), 'both answer JSON');
     $txt = fn($f) => array_column($f['items'] ?? [], 'text');
     ok($txt($a) !== $txt($b) || (!$txt($a) && !$txt($b)), 'the two feeds are not the same list');
@@ -3581,18 +3598,18 @@ t('the feed refuses to write, whatever it is asked', function () {
     $before = count(rows('example'));
     foreach ([['action' => 'add', 'text' => 'via the token'],
               ['action' => 'tick', 'id' => (rows('example')[0]['id'] ?? 'x')]] as $post) {
-        req('POST', '/calendar/feed.php?token=' . $tok, $post);
+        req('POST', '/calmind/calendar/feed.php?token=' . $tok, $post);
     }
     eq($before, count(rows('example')), 'the feed wrote nothing');
     ok(rowBy('example', 'via the token') === null, 'and added nothing');
 });
 
 t('the reminders API has no anonymous read and no write', function () {
-    $r = req('GET', '/api/reminders.php');
+    $r = req('GET', '/calmind/api/reminders.php');
     ok($r['status'] !== 200 || strpos($r['body'], '"text"') === false,
        'an unauthenticated read must not return rows');
     $before = count(rows('example'));
-    req('POST', '/api/reminders.php', ['action' => 'add', 'text' => 'api row']);
+    req('POST', '/calmind/api/reminders.php', ['action' => 'add', 'text' => 'api row']);
     eq($before, count(rows('example')), 'and an unauthenticated POST changes nothing');
 });
 
@@ -3871,11 +3888,11 @@ t('the bookshelf theme and the suite theme are separate settings', function () {
     $csrf = csrf($jar, '/akisbookshelf/');
     req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'neon'], $jar);
     // …then set the *suite* theme from another app, and check neither moved the other.
-    $csrf = csrf($jar, '/reminders/');
-    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'forest'], $jar);
+    $csrf = csrf($jar, '/calmind/reminders/');
+    req('POST', '/calmind/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'forest'], $jar);
     $r = req('GET', '/akisbookshelf/', [], $jar);
     has('--accent: #00f5d4', $r['body'], 'the bookshelf still wears its own accent');
-    $r = req('GET', '/reminders/', [], $jar);
+    $r = req('GET', '/calmind/reminders/', [], $jar);
     has('--accent: #8b9d83', $r['body'], 'and the suite kept the one set for it');
 });
 
@@ -3886,7 +3903,7 @@ area('shared2');
 
 t("recolouring a partner's shared calendar is my own view override, square swatch", function () {
     $jar = login('example', 'examplepassword');
-    $b = req('GET', '/calendar/', [], $jar)['body'];
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has('openSwatches(sw, c.id, true)', $b, 'shared calendars get the square swatch picker (not a dot)');
     preg_match('/const SHARED_CALS = (\[.*?\]);/s', $b, $m);
     $shared = json_decode($m[1] ?? '[]', true);
@@ -3897,7 +3914,7 @@ t("recolouring a partner's shared calendar is my own view override, square swatc
     foreach (stored('calendars', 'buddy') as $c) { if (($c['id'] ?? '') === $cid) { $buddyCol = (string) ($c['color'] ?? ''); } }
     $col = app_palette('calendar')[3];
     if ($col === $buddyCol) { $col = app_palette('calendar')[4]; }
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'cal_shared_color',
         'id' => $cid, 'color' => $col], $jar, true);
     eq($col, stored('calprefs', 'example')['shared_cal_colors'][$cid] ?? null,
        'the override is stored on my side, keyed by calendar id');
@@ -3906,10 +3923,10 @@ t("recolouring a partner's shared calendar is my own view override, square swatc
         if (($c['id'] ?? '') === $cid) { eq($buddyCol, (string) ($c['color'] ?? ''), "buddy's own colour is not changed"); }
     }
     // Off-palette colour and non-shared id are both refused.
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'cal_shared_color',
         'id' => $cid, 'color' => '#abcdef'], $jar, true);
     eq($col, stored('calprefs', 'example')['shared_cal_colors'][$cid] ?? null, 'an off-palette colour is refused');
-    req('POST', '/calendar/', ['csrf' => csrf($jar, '/calendar/'), 'action' => 'cal_shared_color',
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'cal_shared_color',
         'id' => 'nosuchcal', 'color' => app_palette('calendar')[1]], $jar, true);
     ok(!isset(stored('calprefs', 'example')['shared_cal_colors']['nosuchcal']), 'a non-shared id is refused');
 });
@@ -3923,7 +3940,7 @@ t("the calendar resolves a partner's folder colour exactly like the picker", fun
     $_SESSION['user'] = 'example';                       // the helper writes as "me"
     $ov = app_palette('reminders', true)[3];
     folder_shared_color_set($scratch, 'reminders', '@buddy:Dinners', $ov, ['Dinners']);
-    $b = req('GET', '/calendar/', [], $jar)['body'];
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
     has($ov, $b, "the shared folder's rows wear the picker's resolved colour");
 });
 
@@ -4010,8 +4027,8 @@ area('quick');
 
 t('a quick add lands on today, in the fallback folder', function () {
     $jar = login('example', 'examplepassword');
-    $tok = csrf($jar, '/calendar/quick.php');
-    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+    $tok = csrf($jar, '/calmind/calendar/quick.php');
+    req('POST', '/calmind/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
         'text' => 'quick added reminder'], $jar);
     $r = rowBy('example', 'quick added reminder');
     ok($r !== null, 'it was written');
@@ -4028,8 +4045,8 @@ t('a quick add lands on today, in the fallback folder', function () {
 
 t('a quick add reads the date and time out of the line', function () {
     $jar = login('example', 'examplepassword');
-    $tok = csrf($jar, '/calendar/quick.php');
-    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_event',
+    $tok = csrf($jar, '/calmind/calendar/quick.php');
+    req('POST', '/calmind/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_event',
         'text' => 'Vet 8/3 2pm'], $jar);
     $ev = null;
     foreach (stored('events', 'example') as $e) { if (($e['text'] ?? '') === 'Vet') { $ev = $e; } }
@@ -4040,17 +4057,17 @@ t('a quick add reads the date and time out of the line', function () {
 
 t('?tick= shows one reminder and its Done button marks it', function () {
     $jar = login('example', 'examplepassword');
-    $tok = csrf($jar, '/calendar/quick.php');
-    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+    $tok = csrf($jar, '/calmind/calendar/quick.php');
+    req('POST', '/calmind/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
         'text' => 'tick me from the widget'], $jar);
     $id = rowBy('example', 'tick me from the widget')['id'];
 
-    $g = req('GET', '/calendar/quick.php?tick=' . $id, [], $jar);
+    $g = req('GET', '/calmind/calendar/quick.php?tick=' . $id, [], $jar);
     eq(200, $g['status']);
     has('tick me from the widget', $g['body'], 'the page names the reminder');
     has('value="tick"', $g['body'], 'and carries the Done button');
 
-    req('POST', '/calendar/quick.php?tick=' . $id, ['csrf' => csrf($jar, '/calendar/quick.php'),
+    req('POST', '/calmind/calendar/quick.php?tick=' . $id, ['csrf' => csrf($jar, '/calmind/calendar/quick.php'),
         'action' => 'tick', 'id' => $id], $jar);
     ok(!empty(rowBy('example', 'tick me from the widget')['done']), 'it is done');
 });
@@ -4060,7 +4077,7 @@ t('ticking a repeat from the widget rolls it instead of finishing it', function 
     $row = rowBy('example', 'Water the tomatoes');          // every 2 days, from the seeder
     ok($row !== null && repeat_get($row) !== null, 'the seeded repeat exists');
     $was = $row['due'];
-    req('POST', '/calendar/quick.php?tick=' . $row['id'], ['csrf' => csrf($jar, '/calendar/quick.php'),
+    req('POST', '/calmind/calendar/quick.php?tick=' . $row['id'], ['csrf' => csrf($jar, '/calmind/calendar/quick.php'),
         'action' => 'tick', 'id' => $row['id']], $jar);
     $after = rowBy('example', 'Water the tomatoes');
     ok(empty($after['done']), 'a repeat is never marked done from the widget either');
@@ -4069,13 +4086,13 @@ t('ticking a repeat from the widget rolls it instead of finishing it', function 
 
 t('a tick with no token changes nothing', function () {
     $jar = login('example', 'examplepassword');
-    $tok = csrf($jar, '/calendar/quick.php');
-    req('POST', '/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
+    $tok = csrf($jar, '/calmind/calendar/quick.php');
+    req('POST', '/calmind/calendar/quick.php', ['csrf' => $tok, 'action' => 'add_reminder',
         'text' => 'untouchable'], $jar);
     $id = rowBy('example', 'untouchable')['id'];
-    req('POST', '/calendar/quick.php?tick=' . $id, ['action' => 'tick', 'id' => $id], $jar);
+    req('POST', '/calmind/calendar/quick.php?tick=' . $id, ['action' => 'tick', 'id' => $id], $jar);
     ok(empty(rowBy('example', 'untouchable')['done']), 'still open');
-    req('POST', '/calendar/quick.php?tick=' . $id, ['csrf' => 'nope', 'action' => 'tick', 'id' => $id], $jar);
+    req('POST', '/calmind/calendar/quick.php?tick=' . $id, ['csrf' => 'nope', 'action' => 'tick', 'id' => $id], $jar);
     ok(empty(rowBy('example', 'untouchable')['done']), 'still open with a wrong token');
 });
 
