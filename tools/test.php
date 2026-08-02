@@ -352,6 +352,7 @@ t('a signed-out visitor gets the login page, not the app', function () {
         $r = req('GET', $p);
         eq(200, $r['status'], "$p status");
         has('Sign in', $r['body'], "$p should show the login form");
+        has('CalMind</h1>', $r['body'], "$p wears the suite's name on the card");
         hasnt('rlist-root', $r['body'], "$p must not leak the app");
     }
 });
@@ -407,7 +408,7 @@ t('one session covers the whole suite', function () {
     foreach (['/reminders/', '/notes/', '/calendar/', '/habits/', '/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "$p status");
-        hasnt('Sign in</h1>', $r['body'], "$p should be the app, not the login page");
+        hasnt('CalMind</h1>', $r['body'], "$p should be the app, not the login page");
     }
 });
 
@@ -3843,11 +3844,11 @@ t('the bookshelf theme and the suite theme are separate settings', function () {
     req('POST', '/akisbookshelf/', ['action' => 'set_book_theme', 'csrf' => $csrf, 'theme' => 'neon'], $jar);
     // …then set the *suite* theme from another app, and check neither moved the other.
     $csrf = csrf($jar, '/reminders/');
-    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'plum'], $jar);
+    req('POST', '/reminders/', ['action' => 'set_theme', 'csrf' => $csrf, 'theme' => 'forest'], $jar);
     $r = req('GET', '/akisbookshelf/', [], $jar);
     has('--accent: #00f5d4', $r['body'], 'the bookshelf still wears its own accent');
     $r = req('GET', '/reminders/', [], $jar);
-    has('--accent: #72e1d1', $r['body'], 'and the suite kept the one set for it');
+    has('--accent: #8b9d83', $r['body'], 'and the suite kept the one set for it');
 });
 
 // ---------------------------------------------------------------- recolouring a share
