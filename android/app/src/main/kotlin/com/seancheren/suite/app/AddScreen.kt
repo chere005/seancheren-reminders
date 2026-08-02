@@ -124,7 +124,7 @@ fun AddScreen(vm: SuiteViewModel) {
                 AddType.Reminder -> {
                     Selector("Folder", store.folderName(folder), folderMenu, { folderMenu = true }, { folderMenu = false }) {
                         for (f in store.data.folderList(ItemKind.reminder)) {
-                            DropdownMenuItem(text = { Text(f.name) }, leadingIcon = { Swatch(paletteColor(f.color)) },
+                            DropdownMenuItem(text = { Text(f.name) }, leadingIcon = { Swatch(paletteColor(f.color, Tier.Reminder)) },
                                 onClick = { folder = f.id; folderMenu = false })
                         }
                     }
@@ -133,7 +133,7 @@ fun AddScreen(vm: SuiteViewModel) {
                         DropdownMenuItem(text = { Text("Calendar") }, onClick = { section = GroupRef.Calendar; sectionMenu = false })
                         DropdownMenuItem(text = { Text("Reminders") }, onClick = { section = GroupRef.Inbox; sectionMenu = false })
                         for (g in store.data.groupList(ItemKind.reminder)) {
-                            DropdownMenuItem(text = { Text(g.name) }, leadingIcon = { Swatch(paletteColor(g.color)) },
+                            DropdownMenuItem(text = { Text(g.name) }, leadingIcon = { Swatch(paletteColor(g.color, Tier.Reminder)) },
                                 onClick = { section = GroupRef.Group(g.id); sectionMenu = false })
                         }
                     }
@@ -141,7 +141,7 @@ fun AddScreen(vm: SuiteViewModel) {
                 AddType.Note -> {
                     Selector("Folder", store.folderName(noteFolder), folderMenu, { folderMenu = true }, { folderMenu = false }) {
                         for (f in store.data.folderList(ItemKind.note)) {
-                            DropdownMenuItem(text = { Text(f.name) }, leadingIcon = { Swatch(paletteColor(f.color)) },
+                            DropdownMenuItem(text = { Text(f.name) }, leadingIcon = { Swatch(paletteColor(f.color, Tier.Note)) },
                                 onClick = { noteFolder = f.id; folderMenu = false })
                         }
                     }
@@ -149,7 +149,7 @@ fun AddScreen(vm: SuiteViewModel) {
                 AddType.Event -> {
                     Selector("Calendar", store.data.cal(cal ?: store.data.defaultCal)?.name ?: "—", calMenu, { calMenu = true }, { calMenu = false }) {
                         for (c in store.calendarsOnly) {
-                            DropdownMenuItem(text = { Text(c.name) }, leadingIcon = { Swatch(paletteColor(c.color)) },
+                            DropdownMenuItem(text = { Text(c.name) }, leadingIcon = { Swatch(paletteColor(c.color, Tier.Calendar)) },
                                 onClick = { cal = c.id; calMenu = false })
                         }
                     }

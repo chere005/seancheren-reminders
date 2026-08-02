@@ -198,4 +198,34 @@ class FeatureTest {
         assertEquals("Old", g.name)
         assertEquals(0, g.color)   // a section from before colours loads at colour 0
     }
+
+    // MARK: - Clear completed
+
+    @Test fun testClearDoneRemovesOnlyTheTickedRows() {
+        val store = freshStore()
+        store.add(Reminder(text = "open"))
+        store.add(Reminder(text = "done a", done = true))
+        store.add(Reminder(text = "done b", done = true))
+        store.clearDone(folder = null)
+        assertEquals(listOf("open"), store.data.reminders.map { it.text })   // ticked go, open stays
+    }
+
+    @Test fun testClearDoneIsScopedToTheFolderInView() {
+        val store = freshStore()
+        store.addFolder("Work", ItemKind.reminder)
+        val work = store.data.folderList(ItemKind.reminder).first { it.name == "Work" }.id
+        val home = store.data.folderList(ItemKind.reminder).first { it.id != work }.id
+        store.add(Reminder(text = "work done", done = true, folder = work))
+        store.add(Reminder(text = "home done", done = true, folder = home))
+        store.clearDone(folder = work)
+        assertTrue(store.data.reminders.none { it.text == "work done" })     // the viewed folder's done rows go
+        assertTrue(store.data.reminders.any { it.text == "home done" })      // another folder's are left alone
+    }
+
+    @Test fun testUngroupedHabitColour() {
+        val store = freshStore()
+        assertEquals(3, store.data.habitUngroupedColor)   // a fresh suite has a default ungrouped colour
+        store.setUngroupedHabitColor(6)
+        assertEquals(6, store.data.habitUngroupedColor)   // and it can be recoloured
+    }
 }

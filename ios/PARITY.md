@@ -135,3 +135,14 @@ Off/On (a folder is either on or off for the calendar) — the only intentional 
 Deep, deliberate model differences (not gaps to "fix"): permanent Calendar/Reminders as
 **groups** not folders; **global** sections rather than per-folder; **plain-text** notes;
 **index** colours rather than validated hex.
+
+## Visual parity (the shells mirror the web's look on purpose)
+- **Per-kind leaned palettes** — both mobile shells carry the web's four tiers
+  (`app_palette()`'s live output, frozen): reminders the vivid anchor, calendars electric
+  deep, notes sky, habits jewel. Six per tier; a stored index just re-hues
+  (`ios/App/Theme.swift` `Tier`, `android …/Theme.kt` `Tier` — same names).
+- **Calendar cells wear the legend's kind icons**, at most one of each (event, reminder,
+  note), coloured by their item — the first event's calendar, the worst reminder's folder
+  (overdue beats open), the first note's folder — on all three platforms.
+- ⚠️ **Calendar Sets survive natively** — the web deleted them as paying for themselves
+  nowhere; the native pickers still carry them. Worth deciding whether they follow.
