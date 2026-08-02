@@ -32,7 +32,7 @@ struct FolderMenu: View {
         } label: {
             // One folder on show wears its colour; several (or none) show the all-colours dot.
             PickerDot(color: store.shownFolders(kind).count == 1
-                      ? Theme.color(store.shownFolders(kind)[0].color) : nil)
+                      ? Theme.color(store.shownFolders(kind)[0].color, Theme.tier(kind)) : nil)
         }
         .sheet(isPresented: $managing) { FolderManager(kind: kind) }
     }
@@ -62,7 +62,7 @@ struct FolderManager: View {
                 Section {
                     ForEach(store.data.folderList(kind)) { folder in
                         HStack {
-                            ColorDot(selected: folder.color, size: 18) { recolour(folder, to: $0) }
+                            ColorDot(selected: folder.color, tier: Theme.tier(folder.kind), size: 18) { recolour(folder, to: $0) }
                             Text(folder.name)
                             Spacer()
                             if store.data.defaultFolder[kind.rawValue] == folder.id {
@@ -122,15 +122,16 @@ struct FolderManager: View {
 /// colour, so the picker was unusable. Real `Circle` fills in a grid show the true colours.
 struct ColorSwatchGrid: View {
     let selected: Int
+    let tier: Theme.Tier
     let choose: (Int) -> Void
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 12), count: 5),
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 12), count: 3),
                   spacing: 12) {
-            ForEach(Theme.palette.indices, id: \.self) { i in
+            ForEach(Theme.palette(tier).indices, id: \.self) { i in
                 Button { choose(i) } label: {
                     Circle()
-                        .fill(Theme.color(i))
+                        .fill(Theme.color(i, tier))
                         .frame(width: 30, height: 30)
                         .overlay {
                             if i == selected {
@@ -153,17 +154,18 @@ struct ColorSwatchGrid: View {
 /// section heading, 18 in the manager rows).
 struct ColorDot: View {
     let selected: Int
+    let tier: Theme.Tier
     var size: CGFloat = 11
     let choose: (Int) -> Void
     @State private var picking = false
 
     var body: some View {
         Button { picking = true } label: {
-            Circle().fill(Theme.color(selected)).frame(width: size, height: size)
+            Circle().fill(Theme.color(selected, tier)).frame(width: size, height: size)
         }
         .buttonStyle(.borderless)
         .popover(isPresented: $picking) {
-            ColorSwatchGrid(selected: selected) { choose($0); picking = false }
+            ColorSwatchGrid(selected: selected, tier: tier) { choose($0); picking = false }
                 .presentationCompactAdaptation(.popover)
         }
     }
@@ -175,7 +177,7 @@ struct SectionColorDot: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        ColorDot(selected: group.color) { store.setGroupColor(group.id, to: $0) }
+        ColorDot(selected: group.color, tier: Theme.tier(group.kind)) { store.setGroupColor(group.id, to: $0) }
     }
 }
 

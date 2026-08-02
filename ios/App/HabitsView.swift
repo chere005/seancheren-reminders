@@ -181,9 +181,9 @@ struct HabitsView: View {
     /// and its pie wedge match.
     private var countedSections: [(id: UUID?, color: Color)] {
         var out: [(UUID?, Color)] = []
-        if store.habitSectionShown(nil) { out.append((nil, Theme.color(store.data.habitUngroupedColor))) }
+        if store.habitSectionShown(nil) { out.append((nil, Theme.color(store.data.habitUngroupedColor, .habit))) }
         for g in store.data.groupList(.habit) where store.habitSectionShown(g.id) {
-            out.append((g.id, Theme.color(g.color)))
+            out.append((g.id, Theme.color(g.color, .habit)))
         }
         return out
     }
@@ -215,7 +215,7 @@ struct HabitsView: View {
                     SectionColorDot(group: model)
                 } else {
                     // The ungrouped bucket has no section row, so its colour lives on AppData.
-                    ColorDot(selected: store.data.habitUngroupedColor) { store.setUngroupedHabitColor($0) }
+                    ColorDot(selected: store.data.habitUngroupedColor, tier: .habit) { store.setUngroupedHabitColor($0) }
                 }
                 Text(title)
                 Spacer()
