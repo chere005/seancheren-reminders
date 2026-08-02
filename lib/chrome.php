@@ -45,7 +45,11 @@ function chrome_styles(): string
     .titlebtn:hover { border-color: var(--accent); color: var(--accent); }
     body.editing .titlebtn.edit-toggle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .usermenu { position: relative; flex: 0 0 auto; }
-    .usermenu .who { margin: 0; padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: #2a4a3d; }
+    /* The name and the caret are separate flex items, so the dingbat's own font metrics
+       can't drag the username off centre — each centres independently. */
+    .usermenu .who { margin: 0; padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem;
+                     border-color: #2a4a3d; gap: 0.35rem; }
+    .usermenu .who .caret { font-size: 0.7em; line-height: 1; }
     .usermenu .who:hover { border-color: var(--accent); color: var(--accent); }
     .usermenu .menu {
       position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: var(--surface);
@@ -156,7 +160,8 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
     // One flex child, because the header is space-between: loose buttons would be
     // spread across the row rather than gathered on the right.
     $menu = '<div class="usercol">'
-          . '<div class="usermenu"><button type="button" class="who" id="userBtn">' . $u . ' &#9662;</button>'
+          . '<div class="usermenu"><button type="button" class="who" id="userBtn"><span>' . $u
+          . '</span><span class="caret" aria-hidden="true">&#9662;</span></button>'
           . '<div class="menu" id="userMenu" hidden>'
           . '<button type="button" id="setBtn">Settings</button>'
           . '<a href="?logout">Log out</a></div></div></div>';
