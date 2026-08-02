@@ -394,6 +394,18 @@ failures only exist in standalone mode.
       section back and nothing posts. The permanent Calendar folder (Reminders) and the
       last remaining Notes folder are never offered for deletion.
 - [ ] A drop line never appears over a partner's shared block, for rows or for sections.
+
+**Themes** — one pass per theme worth checking (the harness sees the vars, not the paint)
+
+- [ ] Midnight is pixel-for-pixel the old dark look on every app page.
+- [ ] Sage and Blossom (the light two): text, muted text, section gold and the accent all
+      read on the cream page; native dropdowns and date fields open light, not black.
+- [ ] The tab bar, day panel, pickers/dropdown menus and every modal (settings, folder
+      manager, calendar manager, share) follow the theme — no black slab on a cream page.
+- [ ] The theme swatches in Settings each show their page colour with their accent dot,
+      and picking one repaints after the reload, including the iOS status-bar colour.
+- [ ] Habits keeps its violet identity on every theme; kind colours and the error red
+      never change with the theme.
 - [ ] Habits: the section filter sits by the Week/Month switch in **both** views, and its
       menu opens and stays open (over the grid below) while you tick through it.
 - [ ] Habits, month view: each day's pie is drawn in its sections' own colours, and a full

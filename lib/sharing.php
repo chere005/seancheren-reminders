@@ -157,27 +157,27 @@ function share_modal_styles(): string
 {
     return <<<'CSS'
     .sh-modal {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 1.25rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem;
       width: 100%; max-width: 380px; max-height: 85vh; overflow-y: auto;
     }
     .sh-modal h2 { font-size: 1.05rem; margin: 0 0 0.4rem; }
-    .sh-modal h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; color: #ddd; }
-    .sh-hint { font-size: 0.78rem; color: #888; margin: 0 0 0.4rem; line-height: 1.4; }
+    .sh-modal h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; color: var(--text-dim); }
+    .sh-hint { font-size: 0.78rem; color: var(--muted); margin: 0 0 0.4rem; line-height: 1.4; }
     .sh-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; margin: 0; padding: 0; }
     .sh-list li {
       display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
-      background: #222; border: 1px solid #333; border-radius: 8px; cursor: pointer;
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
     }
     .sh-list .sh-name { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .sh-list input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }
-    .sh-list .sh-empty { color: #777; font-size: 0.85rem; background: none; border: none; cursor: default; }
+    .sh-list .sh-empty { color: var(--muted); font-size: 0.85rem; background: none; border: none; cursor: default; }
     .sh-actions { display: flex; justify-content: flex-end; margin-top: 1.1rem; }
     .sh-done, .sh-open {
       padding: 0.35rem 0.9rem; font-size: 0.9rem; border-radius: 999px; cursor: pointer; font-family: inherit;
     }
     .sh-done { background: var(--accent); border: none; color: var(--accent-ink); font-weight: 700; }
-    .sh-open { margin-right: auto; background: #2a2a2a; border: 1px solid #3a3a3a; color: #ccc; }
-    .sh-open:hover { background: #333; color: #fff; }
+    .sh-open { margin-right: auto; background: var(--surface-2); border: 1px solid #3a3a3a; color: var(--text-dim); }
+    .sh-open:hover { background: var(--surface-2); color: var(--text); }
     CSS;
 }
 

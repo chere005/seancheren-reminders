@@ -994,7 +994,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Reminders</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -1005,7 +1005,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, sans-serif; background: #111; color: #eee;
+      font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
       min-height: 100vh; padding: 1.5rem 1rem;   /* same top offset as the other apps */
       overscroll-behavior-y: none;               /* no rubber-band scroll when it all fits */
     }
@@ -1016,12 +1016,12 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
-    header .meta { font-size: 0.8rem; color: #888; }
+    header .meta { font-size: 0.8rem; color: var(--muted); }
     header .htitle { min-width: 0; }
-    header a { color: #888; text-decoration: none; margin-left: 1rem; }
-    header a:hover { color: #fff; }
+    header a { color: var(--muted); text-decoration: none; margin-left: 1rem; }
+    header a:hover { color: var(--text); }
     header .who {
-      color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d;
+      color: var(--accent); font-size: 0.8rem; border: 1px solid var(--accent); opacity: 0.75;
       border-radius: 999px; padding: 0.15rem 0.6rem;
     }
 
@@ -1030,7 +1030,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .foldernav { padding-left: 0; }   /* line Completed up with the sections' + */
     .foldernav .showall, .foldernav .newsection input, .foldernav .newsection .plus { height: 32px; }
     .foldernav .showall {
-      background: none; color: #ccc; border: 1px solid #333; border-radius: 999px;
+      background: none; color: var(--text-dim); border: 1px solid var(--line); border-radius: 999px;
       padding: 0.3rem 0.75rem; font-size: 16px; cursor: pointer; font-family: inherit;
       white-space: nowrap;
     }
@@ -1040,7 +1040,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       width: 32px; padding: 0; flex: 0 0 auto;
       display: inline-flex; align-items: center; justify-content: center;
     }
-    .foldernav .showall:hover { border-color: #888; color: #ccc; }
+    .foldernav .showall:hover { border-color: var(--muted); color: var(--text-dim); }
     .foldernav #mdShareBtn.copied { border-color: var(--accent); color: var(--accent); }
     body.show-done .foldernav #doneBtn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
@@ -1050,17 +1050,17 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        just adding a row to one section rather than a section to a folder. */
     /* The + that adds a reminder wears the theme (accent) colour. */
     .sec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid var(--accent); opacity: 0.75;
       color: var(--accent); border-radius: 999px; width: 20px; height: 20px;
       font-size: 0.85rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .sec-add:hover { border-color: var(--accent); color: var(--accent); }
+    .sec-add:hover { opacity: 1; }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
     .secadd-row[hidden] { display: none; }   /* make [hidden] win over flex */
     .secadd-row input[type=text] {
-      flex: 1; min-width: 0; padding: 0.45rem 0.75rem; background: #1a1a1a;
-      border: 1px solid #3a5a4d; border-radius: 999px; color: #eee;
+      flex: 1; min-width: 0; padding: 0.45rem 0.75rem; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 999px; color: var(--text);
       font-size: 16px;   /* 16px stops iOS from zooming on focus */
     }
     .secadd-row input:focus { outline: none; border-color: var(--accent); }
@@ -1069,7 +1069,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       border-radius: 999px; font-size: 1.1rem; font-weight: 700; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0;
     }
-    .secadd-row .plus:hover { background: #52e0ac; }
+    .secadd-row .plus:hover { filter: brightness(1.1); }
     /* A time picked out of the typed text, e.g. "2pm". */
     .attime {
       font-size: 0.75rem; color: #7dd3fc; background: #0c2a3a; padding: 0.15rem 0.5rem;
@@ -1086,43 +1086,43 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     }
     .modal-backdrop.open { display: flex; }
     .modal {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
       width: 100%; max-width: 380px; padding: 1.25rem;
     }
     .modal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
     .modal input[type=text] {
-      width: 100%; padding: 0.6rem 0.75rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; margin-bottom: 0.85rem;
+      width: 100%; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; margin-bottom: 0.85rem;
     }
-    .modal input:focus, .modal select:focus { outline: none; border-color: #888; }
+    .modal input:focus, .modal select:focus { outline: none; border-color: var(--muted); }
     .modal .kind { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .modal .kind label {
-      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid #3a3a3a;
-      border-radius: 6px; font-size: 0.9rem; color: #aaa; cursor: pointer; user-select: none;
+      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid var(--line);
+      border-radius: 6px; font-size: 0.9rem; color: var(--text-dim); cursor: pointer; user-select: none;
     }
     .modal .kind input { display: none; }
     .modal .kind input:checked + span { color: var(--accent); font-weight: 700; }
     .modal .kind label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .modal .daterow, .modal .secrow { margin-bottom: 1rem; }
     .modal .adddate {
-      background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
+      background: none; border: 1px dashed var(--line); color: var(--accent); border-radius: 6px;
       padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
     .modal .adddate:hover { background: var(--accent-soft); }
     .modal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
     .modal .datewrap[hidden] { display: none; }   /* make [hidden] win over flex */
     .modal .datewrap input[type=date] {
-      flex: 1; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #3a3a3a;
-      border-radius: 6px; color: #eee; font-size: 16px; color-scheme: dark;
+      flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; color-scheme: dark;
     }
     .modal .datewrap .cleardate {
-      background: none; border: 1px solid #3a3a3a; color: #999; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1; font-family: inherit;
     }
     .modal .datewrap .cleardate:hover { border-color: #f66; color: #f66; }
     .modal .secsel {
-      width: 100%; padding: 0.5rem 0.6rem; background: #222; border: 1px solid #4a3f2a;
-      border-radius: 6px; color: #f0b429; font-size: 16px; color-scheme: dark; cursor: pointer;
+      width: 100%; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--gold); opacity: 0.8;
+      border-radius: 6px; color: var(--gold); font-size: 16px; color-scheme: dark; cursor: pointer;
       font-family: inherit;
     }
     .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; }
@@ -1130,7 +1130,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
       font-weight: 600; cursor: pointer; font-family: inherit;
     }
-    .modal .buttons .cancel { background: #2a2a2a; color: #ccc; }
+    .modal .buttons .cancel { background: var(--surface-2); color: var(--text-dim); }
     .modal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
 
     /* Folder labels, shown above a run of that folder's sections when "All" mixes more
@@ -1140,7 +1140,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        before it. Full-width because the block is; the folder-head keeps its own short
        trailing rule as the heading's flourish. The block's top margin+padding sit the
        heading just under the divider, so the heading's own top margin comes off. */
-    .folder-block { border-top: 2px solid #363636; margin-top: 1.5rem; padding-top: 0.55rem; }
+    .folder-block { border-top: 2px solid var(--line); margin-top: 1.5rem; padding-top: 0.55rem; }
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0 0.25rem; }
     /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
        of the folder's own colour — 8-digit hex, inline, from folder_tint(). That wash is
@@ -1150,7 +1150,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        the wash: the colour identity is the chip, so the name only has to be legible, and
        near-white is the one value that reads on all six folder colours at once. */
     .folder-label {
-      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: #f2f2f2;
+      font-weight: 700; font-size: 1.35rem; line-height: 1.2; color: var(--text);
       border-radius: 999px; padding: 0.1rem 0.65rem;
     }
     /* A short rule on the heading's own line, trailing off to the right edge. It rides
@@ -1161,12 +1161,12 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        section can be added without first entering edit mode. */
     /* The + that adds a section wears the section-title colour (gold). */
     .fsec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #4a3f2a;
-      color: #f0b429; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid var(--gold); opacity: 0.8;
+      color: var(--gold); border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .fsec-add:hover { border-color: #f0b429; color: #f0b429; }
+    .fsec-add:hover { opacity: 1; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Reminders' two permanent
@@ -1178,14 +1178,14 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
     /* The permanent groups' plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
-    .section-title { font-weight: 600; font-size: 1.15rem; color: #f0b429; line-height: 1.2; align-self: center; }
+    .section-title { font-weight: 600; font-size: 1.15rem; color: var(--gold); line-height: 1.2; align-self: center; }
     /* The folder's colour, right of the folder's name — the same dot the picker wears. */
     .fdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; }
     /* The section's X lines up with the rows' — pushed to the right edge, same shape. */
     .section-head form { margin-left: auto; }
     .section-del {
       flex: 0 0 auto; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
-      background: none; border: 1px solid #444; color: #ccc; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
@@ -1201,15 +1201,15 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        way, so a row never changes width when it gains or loses its indent. */
     .subtask-btn {
       display: none; flex: 0 0 auto; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid #444;
-      color: #999; border-radius: 6px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
+      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 6px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .subtask-btn svg { display: block; }
     /* The form is only a wrapper for the POST — it must not take a slot of its own. */
     .subtask-btn-form { display: none; flex: 0 0 auto; }
     body.editing .subtask-btn-form { display: inline-flex; }
     body.editing .subtask-btn { display: inline-flex; }
-    .subtask-btn:hover { border-color: #888; color: #ccc; }
+    .subtask-btn:hover { border-color: var(--muted); color: var(--text-dim); }
     /* The lift-out "‹" reads as the mirror of the section indent controls, so it stays
        the quieter of the two — adding is the common act, undoing is not. */
     .subtask-btn.out { font-size: 1.15rem; }
@@ -1221,25 +1221,25 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.15rem;
     }
     ul.rlist.ro > li { padding-left: 0.25rem; }
-    .ro-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem; border-bottom: 1px solid #222; }
-    .ro-row.done .text { color: #666; text-decoration: line-through; }
+    .ro-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--line-soft); }
+    .ro-row.done .text { color: var(--muted); text-decoration: line-through; }
     .ro-mark {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; border: 1px solid #333; border-radius: 6px;
+      width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 6px;
       color: var(--accent); font-size: 0.95rem; line-height: 1;
     }
 
     ul { list-style: none; }
     li {
       display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem;
-      border-bottom: 1px solid #222;
+      border-bottom: 1px solid var(--line-soft);
     }
     /* No divider under the last row of a section. When completed rows are hidden, the last
        *open* row is the real last one, so drop its divider too — an open row with no open
        row after it. (:has() degrades to just the last-child rule on older browsers.) */
     ul.rlist > li:last-child { border-bottom: none; }
     body:not(.show-done) ul.rlist > li:not(.done):not(:has(~ li:not(.done))) { border-bottom: none; }
-    li.done .text { color: #666; text-decoration: line-through; }
+    li.done .text { color: var(--muted); text-decoration: line-through; }
     ul.rlist { display: flex; flex-direction: column; }
     li.done { order: 1; }   /* when shown, completed items sink below the open ones */
     .text { flex: 1; font-size: 1rem; word-break: break-word; }
@@ -1250,13 +1250,13 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .section-head input, .folder-head input { -webkit-user-select: text; user-select: text; }
     body.editing .text { cursor: text; }
     .textedit {
-      flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: #222; border: 1px solid #4a4a4a;
-      border-radius: 4px; color: #eee; -webkit-user-select: text; user-select: text;
+      flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 4px; color: var(--text); -webkit-user-select: text; user-select: text;
     }
-    .textedit:focus { outline: none; border-color: #888; }
+    .textedit:focus { outline: none; border-color: var(--muted); }
     .due {
       font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap;
-      color: #888; background: #222;
+      color: var(--muted); background: var(--surface-2);
     }
     .due.past   { color: var(--k-overdue); background: var(--k-overdue-bg); }   /* gone by */
     .due.today  { color: var(--k-reminder); background: var(--k-reminder-bg); }   /* due today */
@@ -1266,10 +1266,10 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .check, .del {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
       width: 30px; height: 30px; padding: 0;
-      background: none; border: 1px solid #444; color: #ccc; cursor: pointer;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer;
       border-radius: 6px; font-size: 0.95rem; line-height: 1;
     }
-    .check:hover { border-color: #7a7; color: #7a7; }
+    .check:hover { border-color: var(--accent); color: var(--accent); }
     .del:hover { border-color: #f66; color: #f66; }
 
     /* Edit mode: the X buttons + drag handles stay hidden until the pencil is tapped.
@@ -1281,7 +1281,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     body.editing .drag-handle, body.editing .sec-handle { visibility: visible; }
     .drag-handle, .sec-handle {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 1rem;
-      color: #666; font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none;
+      color: var(--muted); font-size: 0.9rem; cursor: grab; touch-action: none; user-select: none;
     }
     /* The permanent groups can't be dragged, but they keep the slot so their titles
        line up with every other section's. */
@@ -1295,7 +1295,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     body.editing .section-head .sec-handle { display: inline-flex; }
     body.editing .sec-add { display: none; }
     .drag-handle:active, .sec-handle:active { cursor: grabbing; color: var(--accent); }
-    li.dragging { background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); opacity: 0.45; }
+    li.dragging { background: var(--surface-2); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); opacity: 0.45; }
     /* The single line that says where the drop will land. Nothing else moves until the
        drop, so this is the only feedback — it has to be unmissable but not shove the
        list around, hence zero height and a border rather than a block. */
@@ -1307,16 +1307,16 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     ul.rlist > li.drop-line { display: block; }
     .section-group.dragging { opacity: 0.45; }
     .section-group.dragging .section-head {
-      background: #1b1f1d; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+      background: var(--surface-2); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
     }
     .section-group.dragging .section-title { color: var(--accent); }
     body.editing ul.rlist { min-height: 1.4rem; }
-    body.editing ul.rlist:empty { border: 1px dashed #333; border-radius: 6px; margin: 0.25rem 0; }
+    body.editing ul.rlist:empty { border: 1px dashed var(--line); border-radius: 6px; margin: 0.25rem 0; }
 
-    .empty { color: #666; text-align: center; padding: 2rem 0; }
+    .empty { color: var(--muted); text-align: center; padding: 2rem 0; }
     footer { margin-top: 1.5rem; display: flex; justify-content: flex-end; }
     footer button {
-      background: none; border: none; color: #666; font-size: 0.8rem; cursor: pointer;
+      background: none; border: none; color: var(--muted); font-size: 0.8rem; cursor: pointer;
     }
     footer button:hover { color: #f66; }
 <?= folder_nav_styles() ?>
@@ -1325,17 +1325,17 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     /* The + matches the input's height: align-self: stretch fills the flex row, whose
        height the (taller, padding-sized) input sets, so the two line up whatever the input. */
     .newsection .plus {
-      flex: 0 0 auto; width: 34px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: #f0b429; color: #241a00;
+      flex: 0 0 auto; width: 34px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: var(--gold); color: #241a00;
       border: none; border-radius: 999px; font-size: 1.05rem; line-height: 1; font-weight: 700;
       cursor: pointer; font-family: inherit;
     }
-    .newsection .plus:hover { background: #f7c95a; }
+    .newsection .plus:hover { filter: brightness(1.1); }
     .newsection input {
-      width: 190px; max-width: 100%; padding: 0.3rem 0.75rem; background: #1a1a1a; border: 1px dashed #5a4a2a;
-      border-radius: 999px; color: #f0b429; font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
+      width: 190px; max-width: 100%; padding: 0.3rem 0.75rem; background: var(--surface); border: 1px dashed var(--line);
+      border-radius: 999px; color: var(--gold); font-size: 16px; line-height: 1.2;   /* 16px stops iOS zoom on focus */
     }
-    .newsection input::placeholder { color: #f0b429; opacity: 0.85; }
-    .newsection input:focus { outline: none; border-style: solid; border-color: #f0b429; }
+    .newsection input::placeholder { color: var(--gold); opacity: 0.85; }
+    .newsection input:focus { outline: none; border-style: solid; border-color: var(--gold); }
 <?= kind_color_css() ?>
 <?= share_modal_styles() ?>
 <?= tabbar_styles() ?>

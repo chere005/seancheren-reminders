@@ -135,18 +135,34 @@ function auth_password_set(array $cfg, string $user, string $password): void
 
 /**
  * Colour themes, chosen per user in the settings window and kept in
- * data/prefs-<user>.json. A theme is just the accent and the ink that goes on it:
- * every green in the suite reads --accent / --accent-ink rather than a literal, so
- * one variable repaints all of it. The reminder/event/note palette stays put — it
- * says what kind of thing something is, not which theme you like.
+ * data/prefs-<user>.json. A theme is a whole palette, not just an accent: it repaints
+ * the page and its surfaces, rules and text together. Every neutral in the suite reads
+ * one of these variables (--bg / --surface / --text / --line / --muted / --gold …)
+ * rather than a literal, so one theme repaints all of it, light or dark. "Midnight" is
+ * the original #111 look and the default, so an untouched suite looks exactly as it did.
+ *
+ * These are the bookshelf's themes brought suite-wide (the bookshelf keeps its own picker
+ * and its own pref key, but reads this same table so the two can't drift). The columns
+ * are, in order: label, bg, surface, surface-2, line, line-soft, text, text-dim, muted,
+ * accent, accent-ink, accent-soft, gold. The reminder/event/note palette and the error
+ * red stay literal — like --gold they say what a thing *is*, not which theme you like,
+ * except --gold has to be themed because #f0b429 is invisible on a cream page.
  */
 const THEMES = [
-    'green'  => ['Green',  '#34d399', '#06251b', '#14251f'],
-    'blue'   => ['Blue',   '#60a5fa', '#0b2038', '#10203a'],
-    'purple' => ['Purple', '#c084fc', '#25123a', '#221430'],
-    'amber'  => ['Amber',  '#fbbf24', '#2a1c00', '#241c05'],
-    'rose'   => ['Rose',   '#fb7185', '#3a0f1a', '#2e1218'],
+    //             label            bg         surface    surface-2  line       line-soft  text       text-dim   muted      accent     accent-ink accent-soft gold
+    'midnight' => ['Midnight',      '#111111', '#1a1a1a', '#2a2a2a', '#333333', '#262626', '#eeeeee', '#cccccc', '#888888', '#34d399', '#06251b', '#14332a', '#f0b429'],
+    'sage'     => ['Sage & Cream',  '#fefae0', '#faedcd', '#e9edc9', '#ccd5ae', '#e4e7c9', '#3f3a2e', '#5c5545', '#776e56', '#96632f', '#fefae0', '#efe2c2', '#8a5a12'],
+    'blossom'  => ['Blossom',       '#fdf4f9', '#ffe9f2', '#ffc8dd', '#cdb4db', '#bde0fe', '#3f2e47', '#6a5273', '#7d6486', '#7b4e96', '#fff5fa', '#f0e2f6', '#8a5a12'],
+    'dusk'     => ['Dusk',          '#22223b', '#2e2e4d', '#4a4e69', '#4a4e69', '#34345a', '#f2e9e4', '#c9ada7', '#9a8c98', '#c9ada7', '#22223b', '#33324f', '#e0b877'],
+    'neon'     => ['Neon',          '#12101a', '#1c1830', '#2a2444', '#3a3160', '#241f3c', '#f5f0ff', '#c9bee6', '#9086b0', '#00f5d4', '#072b25', '#10302b', '#fee440'],
+    'plum'     => ['Plum & Mint',   '#2a1327', '#3a1b35', '#4e2a47', '#6b3f60', '#43203d', '#efe4ec', '#b5d8cc', '#a086a6', '#72e1d1', '#10302b', '#1d3b36', '#f0b429'],
+    'forest'   => ['Forest',        '#040303', '#16201d', '#3a4e48', '#3a4e48', '#263230', '#e4ddd6', '#beb0a7', '#6a7b76', '#8b9d83', '#0a0f0d', '#1c2a25', '#c9a227'],
+    'olive'    => ['Olive & Slate', '#241e2d', '#332a3e', '#443850', '#564a62', '#3b3247', '#eaf0ce', '#c0c5c1', '#848b98', '#bbbe64', '#241e2d', '#3a3448', '#d8c46a'],
 ];
+
+/** The themes whose page is lighter than their ink; they need color-scheme: light so
+ *  native controls (selects, scrollbars, date pickers) draw the right way round. */
+const THEMES_LIGHT = ['sage', 'blossom'];
 
 function theme_file(): string
 {
@@ -157,7 +173,7 @@ function theme_file(): string
 function theme_get(): string
 {
     $t = (string) (store_read(theme_file())['theme'] ?? '');
-    return isset(THEMES[$t]) ? $t : 'green';
+    return isset(THEMES[$t]) ? $t : 'midnight';
 }
 
 function theme_set(string $name): bool
@@ -169,11 +185,36 @@ function theme_set(string $name): bool
     return true;
 }
 
+/**
+ * One theme as the custom properties it sets, plus which way round the page is. The
+ * single place THEMES' columns are named: theme_css() and the picker's swatches both
+ * read this, so they can't drift into disagreeing about a colour.
+ */
+function theme_vars(string $key): array
+{
+    $key = isset(THEMES[$key]) ? $key : 'midnight';
+    [, $bg, $sf, $sf2, $ln, $lns, $tx, $dim, $mut, $ac, $ink, $soft, $gold] = THEMES[$key];
+    $scheme = in_array($key, THEMES_LIGHT, true) ? 'light' : 'dark';
+    return ['scheme' => $scheme, 'vars' => [
+        '--bg' => $bg, '--surface' => $sf, '--surface-2' => $sf2, '--line' => $ln,
+        '--line-soft' => $lns, '--text' => $tx, '--text-dim' => $dim, '--muted' => $mut,
+        '--accent' => $ac, '--accent-ink' => $ink, '--accent-soft' => $soft, '--gold' => $gold,
+    ]];
+}
+
 /** The chosen theme as variables. Emit it before anything that reads them. */
 function theme_css(): string
 {
-    [, $accent, $ink, $soft] = THEMES[theme_get()];
-    return "    :root { --accent: $accent; --accent-ink: $ink; --accent-soft: $soft; }\n";
+    $t   = theme_vars(theme_get());
+    $out = '';
+    foreach ($t['vars'] as $k => $v) { $out .= " $k: $v;"; }
+    return "    :root {{$out} color-scheme: {$t['scheme']}; }\n";
+}
+
+/** The page background of the chosen theme — for the iOS status bar / PWA <meta>. */
+function theme_bg(): string
+{
+    return THEMES[theme_get()][1];
 }
 
 /** Username of the signed-in user (null if not logged in). */
@@ -500,7 +541,7 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Sign in</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -509,10 +550,11 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <link rel="icon" href="<?= suite_base() ?>/reminders/icon-192.png">
   <link rel="manifest" href="<?= suite_base() ?>/reminders/manifest.webmanifest?v=2">
   <style>
+    <?= theme_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
-      font-family: system-ui, sans-serif; background: #111; color: #eee;
+      font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
       /* svh is the viewport with the browser chrome *showing*, so the card is sized to
          the smallest the window ever gets and collapsing chrome can't make the page
          taller than the screen. 100vh stays as the fallback for older browsers. */
@@ -525,26 +567,26 @@ function render_login(string $area, string $error = '', string $stage = 'login',
     }
     body::-webkit-scrollbar { width: 0; height: 0; }
     .login-box {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
       padding: 2rem; width: 100%; max-width: 320px;
     }
     .login-box h1 { font-size: 1.25rem; margin-bottom: 0.25rem; text-align: center; }
-    .login-box .area { font-size: 0.8rem; color: #888; margin-bottom: 1.5rem; text-align: center; }
-    .login-box label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.25rem; }
+    .login-box .area { font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; text-align: center; }
+    .login-box label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.25rem; }
     .login-box input {
-      width: 100%; padding: 0.5rem 0.75rem; background: #222; border: 1px solid #444;
-      border-radius: 4px; color: #eee; font-size: 1rem; margin-bottom: 1rem;
+      width: 100%; padding: 0.5rem 0.75rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 4px; color: var(--text); font-size: 1rem; margin-bottom: 1rem;
     }
-    .login-box input:focus { outline: none; border-color: #888; }
+    .login-box input:focus { outline: none; border-color: var(--muted); }
     .login-box button {
-      width: 100%; padding: 0.6rem; background: #eee; color: #111; border: none;
+      width: 100%; padding: 0.6rem; background: var(--text); color: var(--bg); border: none;
       border-radius: 4px; font-size: 1rem; cursor: pointer;
     }
-    .login-box button:hover { background: #fff; }
+    .login-box button:hover { filter: brightness(1.1); }
     .error { color: #f66; font-size: 0.85rem; margin-top: 0.75rem; text-align: center; }
     /* Create account: a quieter button under Log in, and the form it reveals. */
-    .login-box .makebtn { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
-    .login-box .makebtn:hover { background: #222; color: #eee; }
+    .login-box .makebtn { background: none; border: 1px solid var(--line); color: var(--text-dim); margin-top: 0.6rem; }
+    .login-box .makebtn:hover { background: var(--surface-2); color: var(--text); }
     /* Creating an account is a window over the page, the same shape as the one
        that then waits for the code — the login box itself never changes size. */
     .modalback {
@@ -553,22 +595,22 @@ function render_login(string $area, string $error = '', string $stage = 'login',
     }
     .modalback[hidden] { display: none; }
     .modalbox {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.5rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem;
       width: 100%; max-width: 320px;
     }
     .modalbox h2 { font-size: 1.05rem; margin-bottom: 0.4rem; text-align: center; }
-    .modalbox p { font-size: 0.82rem; color: #888; margin-bottom: 1rem; text-align: center; }
-    .modalbox label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.25rem; }
+    .modalbox p { font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; text-align: center; }
+    .modalbox label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.25rem; }
     .modalbox input {
-      width: 100%; padding: 0.5rem 0.75rem; background: #222; border: 1px solid #444;
-      border-radius: 4px; color: #eee; font-size: 1rem; margin-bottom: 1rem;
+      width: 100%; padding: 0.5rem 0.75rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 4px; color: var(--text); font-size: 1rem; margin-bottom: 1rem;
     }
-    .modalbox input:focus { outline: none; border-color: #888; }
+    .modalbox input:focus { outline: none; border-color: var(--muted); }
     .modalbox button {
-      width: 100%; padding: 0.6rem; background: #eee; color: #111; border: none;
+      width: 100%; padding: 0.6rem; background: var(--text); color: var(--bg); border: none;
       border-radius: 4px; font-size: 1rem; cursor: pointer;
     }
-    .modalbox .cancel { background: none; border: 1px solid #444; color: #aaa; margin-top: 0.6rem; }
+    .modalbox .cancel { background: none; border: 1px solid var(--line); color: var(--text-dim); margin-top: 0.6rem; }
     /* Four characters wide and no wider — a full-width box with half an em of
        letter-spacing pushed the last digit past the edge on a phone. */
     /* Full width like the button under it; the text-indent balances the trailing

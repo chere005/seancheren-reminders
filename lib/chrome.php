@@ -18,24 +18,24 @@ function chrome_styles(): string
        the right. Everything on it is 32px tall and sits on the same line, with a
        rule under the lot, and the same small gap under that rule in every app.
        Apps only supply what goes inside. */
-    header { border-bottom: 1px solid #262626; padding-bottom: 0.7rem; margin-bottom: 0.5rem; }
+    header { border-bottom: 1px solid var(--line-soft); padding-bottom: 0.7rem; margin-bottom: 0.5rem; }
     .hleft { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
     .hright { display: flex; align-items: center; gap: 0.75rem; flex: 0 0 auto; }
     .backbtn, .titlebtn, .usermenu .who {
       height: 32px; display: inline-flex; align-items: center; justify-content: center;
-      border: 1px solid #333; border-radius: 999px; background: none; color: #ccc;
+      border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text-dim);
       font-family: inherit; line-height: 1; cursor: pointer; flex: 0 0 auto;
     }
-    .backbtn { width: 32px; background: #1a1a1a; font-size: 1.35rem; padding: 0; }
-    .backbtn:hover { border-color: #888; color: #fff; }
+    .backbtn { width: 32px; background: var(--surface); font-size: 1.35rem; padding: 0; }
+    .backbtn:hover { border-color: var(--muted); color: var(--text); }
     /* In edit mode the back button becomes a black × that leaves edit mode — going
        "back" while editing almost always meant "I'm done editing", and there was no
        other way out on a page with nothing empty to tap. The two share the slot, so
        swapping them never shifts the title beside it. */
-    .backbtn.exitedit { display: none; background: #000; border-color: #444; color: #eee; font-size: 1.2rem; }
+    .backbtn.exitedit { display: none; background: #000; border-color: var(--line); color: var(--text); font-size: 1.2rem; }
     body.editing .backbtn.exitedit { display: inline-flex; }
     body.editing .backbtn.goback { display: none; }
-    .backbtn.exitedit:hover { border-color: #888; color: #fff; }
+    .backbtn.exitedit:hover { border-color: var(--muted); color: var(--text); }
     /* The manage-folders (folder icon) or Edit (pencil) button beside the app's name. */
     .titlebtn { width: 32px; font-size: 1.05rem; }
     /* An icon button's glyph is a block: an inline <svg> sits on the text baseline and
@@ -48,35 +48,35 @@ function chrome_styles(): string
     .usermenu .who { margin: 0; padding: 0 0.8rem; color: var(--accent); font-size: 0.85rem; border-color: #2a4a3d; }
     .usermenu .who:hover { border-color: var(--accent); color: var(--accent); }
     .usermenu .menu {
-      position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: #1c1c1c;
-      border: 1px solid #333; border-radius: 8px; min-width: 120px; box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 8px; min-width: 120px; box-shadow: 0 8px 20px rgba(0,0,0,0.5); overflow: hidden;
     }
     /* Settings and Log out — the same menu in every app, so preferences are always in
        the same place. The button is styled to be indistinguishable from the link. */
     .usermenu .menu a, .usermenu .menu button {
-      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: #eee;
+      display: block; width: 100%; margin: 0; padding: 0.6rem 0.9rem; color: var(--text);
       text-decoration: none; font-size: 0.9rem; text-align: left; background: none;
       border: none; border-radius: 0; font-family: inherit; cursor: pointer;
     }
-    .usermenu .menu a:hover, .usermenu .menu button:hover { background: #2a2a2a; color: #fff; }
-    .usermenu .menu button { border-bottom: 1px solid #333; }
+    .usermenu .menu a:hover, .usermenu .menu button:hover { background: var(--surface-2); color: var(--text); }
+    .usermenu .menu button { border-bottom: 1px solid var(--line); }
     /* Edit — a pencil, as on every other Edit in the suite — sits to the left of
        the username, wearing the same pill. */
     .usercol { display: flex; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
     .hedit {
-      margin: 0; color: #ccc; font-size: 0.95rem; background: none; border: 1px solid #333;
+      margin: 0; color: var(--text-dim); font-size: 0.95rem; background: none; border: 1px solid var(--line);
       border-radius: 999px; padding: 0.2rem 0.6rem; cursor: pointer; font-family: inherit;
       line-height: 1.2;
     }
-    .hedit:hover { border-color: #888; color: #fff; }
+    .hedit:hover { border-color: var(--muted); color: var(--text); }
     body.editing .hedit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
     /* The same toggle again, small enough to sit beside a section's "+". */
     .sec-edit {
-      flex: 0 0 auto; background: none; border: 1px solid #333; color: #888; border-radius: 999px;
+      flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px;
       width: 24px; height: 24px; font-size: 0.8rem; line-height: 1; cursor: pointer;
       font-family: inherit; display: inline-flex; align-items: center; justify-content: center;
     }
-    .sec-edit:hover { border-color: #888; color: #ccc; }
+    .sec-edit:hover { border-color: var(--muted); color: var(--text-dim); }
     body.editing .sec-edit { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     /* A section's collapse chevron sits where its "+" used to — subtle, and it steps
        aside in edit mode (where the drag handle takes that slot). Collapsing hides the
@@ -87,11 +87,11 @@ function chrome_styles(): string
     .sec-collapse {
       flex: 0 0 auto; align-self: center; width: 18px; height: 20px; padding: 0;
       margin: 0 -0.4rem 0 0; background: none;
-      border: none; color: #777; cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
+      border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; font-weight: 700; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);
     }
-    .sec-collapse:hover { color: #aaa; }
+    .sec-collapse:hover { color: var(--text-dim); }
     .section-group.collapsed > .section-head .sec-collapse,
     .section-head.collapsed .sec-collapse { transform: rotate(0deg); }
     body.editing .sec-collapse { display: none; }
@@ -108,10 +108,10 @@ function chrome_styles(): string
        states never collide. */
     .folder-collapse {
       flex: 0 0 auto; width: 18px; height: 22px; padding: 0; background: none; border: none;
-      color: #b8860b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      color: var(--gold); opacity: 0.75; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease; font-family: inherit; transform: rotate(90deg);
     }
-    .folder-collapse:hover { color: #d4a017; }
+    .folder-collapse:hover { opacity: 1; }
     .folder-block.collapsed .folder-collapse { transform: rotate(0deg); }
     .folder-block.collapsed > *:not(.folder-head) { display: none; }
     CSS
@@ -182,10 +182,16 @@ function settings_modal_html(string $extra = '', bool $showShare = false): strin
     $u    = htmlspecialchars(current_user() ?? '', ENT_QUOTES);
     $now  = theme_get();
     $themes = '';
-    foreach (THEMES as $key => [$label, $accent, $ink, $soft]) {
-        $on = $key === $now ? ' on' : '';
+    // Each swatch is the theme itself in miniature — its page colour with its accent as
+    // a dot on it — drawn from theme_vars() so the picker and the CSS can't disagree.
+    foreach (array_keys(THEMES) as $key) {
+        $t     = theme_vars($key);
+        $label = THEMES[$key][0];
+        $on    = $key === $now ? ' on' : '';
         $themes .= '<button type="button" class="themebtn' . $on . '" data-theme="' . $key . '"'
-                 . ' style="background:' . $accent . '" title="' . $label . '" aria-label="' . $label . '"></button>';
+                 . ' style="background:' . $t['vars']['--bg'] . ';border-color:' . $t['vars']['--line'] . '"'
+                 . ' title="' . $label . '" aria-label="' . $label . '">'
+                 . '<span class="themedot" style="background:' . $t['vars']['--accent'] . '"></span></button>';
     }
     // The footer is one row of three same-sized icon buttons — Share, Widget, Done —
     // and it's the same row in every app, so preferences never move around. Share needs
@@ -238,13 +244,17 @@ function settings_modal_styles(): string
 {
     return <<<CSS
     .setmodal .setthemes { margin-top: 1.1rem; }
-    .setmodal .setlabel { font-size: 0.8rem; color: #aaa; margin-bottom: 0.5rem; }
-    .setmodal .themerow { display: flex; gap: 0.5rem; }
+    .setmodal .setlabel { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+    .setmodal .themerow { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    /* A theme in miniature: its page colour ringed by its own line colour (both inline),
+       its accent as the dot. The chosen one rings in the text colour instead. */
     .setmodal .themebtn {
-      width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+      width: 28px; height: 28px; border-radius: 50%; border: 1px solid transparent;
       cursor: pointer; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
     }
-    .setmodal .themebtn.on { border-color: #eee; }
+    .setmodal .themebtn.on { box-shadow: 0 0 0 2px var(--text, #eee); }
+    .setmodal .themedot { width: 10px; height: 10px; border-radius: 50%; }
     /* Same shape as the calendar and folder managers. */
     .setmodal-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 70;
@@ -252,33 +262,33 @@ function settings_modal_styles(): string
     }
     .setmodal-backdrop.open { display: flex; }
     .setmodal {
-      background: #1a1a1a; border: 1px solid #333; border-radius: 12px; text-align: left;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px; text-align: left;
       width: 100%; max-width: 340px; padding: 1.25rem; max-height: 85vh; overflow-y: auto;
     }
     .setmodal h2 { font-size: 1.05rem; margin-bottom: 0.4rem; }
-    .setmodal .setwho { font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
-    .setmodal label { display: block; font-size: 0.78rem; color: #aaa; margin-bottom: 0.7rem; }
+    .setmodal .setwho { font-size: 0.8rem; color: var(--muted); margin-bottom: 1rem; }
+    .setmodal label { display: block; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.7rem; }
     .setmodal input[type=password] {
       display: block; width: 100%; margin-top: 0.25rem; padding: 0.45rem 0.75rem;
-      background: #222; border: 1px solid #444; border-radius: 6px; color: #eee;
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
       font-size: 16px; font-family: inherit;
     }
-    .setmodal input[type=password]:focus { outline: none; border-color: #888; }
+    .setmodal input[type=password]:focus { outline: none; border-color: var(--muted); }
     .setmodal .setmsg { font-size: 0.8rem; margin-bottom: 0.7rem; color: #f66; }
     .setmodal .setmsg.ok { color: var(--accent); }
     .setmodal .setsave {
       background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px; font-weight: 700;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
     }
-    .setmodal .setsave:hover { background: #52e0ac; }
+    .setmodal .setsave:hover { filter: brightness(1.1); }
     /* The password fields stay hidden behind this button until it's pressed, so the
        settings window opens clean rather than fronting three password boxes. */
     .setmodal .setpwtoggle {
       display: block; width: 100%; margin-top: 0.25rem; padding: 0.5rem 0.9rem;
-      background: none; border: 1px solid #444; color: #ccc; border-radius: 999px;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 999px;
       font-size: 0.9rem; font-family: inherit; cursor: pointer; text-align: center;
     }
-    .setmodal .setpwtoggle:hover { border-color: #888; color: #fff; }
+    .setmodal .setpwtoggle:hover { border-color: var(--muted); color: var(--text); }
     .setmodal #pwSection[hidden] { display: none; }
     .setmodal #pwSection { margin-top: 0.6rem; }
     /* Change password (save) sits on its own row, above the Theme picker. */
@@ -292,25 +302,25 @@ function settings_modal_styles(): string
     .setmodal .setact {
       flex: 0 0 auto; width: 40px; height: 40px; margin: 0; padding: 0;
       display: inline-flex; align-items: center; justify-content: center;
-      border: 1px solid #444; background: none; color: #ccc; border-radius: 50%;
+      border: 1px solid var(--line); background: none; color: var(--text-dim); border-radius: 50%;
       cursor: pointer; font-family: inherit; text-decoration: none;
     }
     .setmodal .setact svg { display: block; }
-    .setmodal .setact:hover { border-color: #888; color: #fff; }
+    .setmodal .setact:hover { border-color: var(--muted); color: var(--text); }
     /* Done is the primary action of the three, so it wears the accent. */
     .setmodal .setdone { border-color: #2a4a3d; color: var(--accent); }
     .setmodal .setdone:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
     /* App-specific extras (Share, Widget…) sit centred above Done. */
     .setmodal .setextra {
       display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
-      margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid #333;
+      margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
     }
     .setmodal .setextra a, .setmodal .setextra button {
-      display: inline-block; padding: 0.4rem 1rem; border: 1px solid #444; background: none;
-      color: #ccc; border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
+      display: inline-block; padding: 0.4rem 1rem; border: 1px solid var(--line); background: none;
+      color: var(--text-dim); border-radius: 999px; font-size: 0.9rem; font-family: inherit; cursor: pointer;
       text-decoration: none;
     }
-    .setmodal .setextra a:hover, .setmodal .setextra button:hover { border-color: #888; color: #fff; }
+    .setmodal .setextra a:hover, .setmodal .setextra button:hover { border-color: var(--muted); color: var(--text); }
     CSS;
 }
 
@@ -425,10 +435,10 @@ function collapse_all_styles(): string
     return <<<CSS
     .collapse-all {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; padding: 0; background: none; color: #ccc;
-      border: 1px solid #333; border-radius: 999px; cursor: pointer; font-family: inherit;
+      width: 32px; height: 32px; padding: 0; background: none; color: var(--text-dim);
+      border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font-family: inherit;
     }
-    .collapse-all:hover { border-color: #888; color: #fff; }
+    .collapse-all:hover { border-color: var(--muted); color: var(--text); }
     /* Flip the double chevron once everything is folded, so it reads as "expand all". */
     .collapse-all.all-collapsed svg { transform: rotate(180deg); }
     CSS;
@@ -604,7 +614,7 @@ function folder_rename_styles(): string
     .foldermodal .frename-form { flex: 1; min-width: 0; display: flex; margin: 0; }
     .foldermodal .frename-form[hidden] { display: none; }
     .foldermodal input.fname {
-      flex: 1; min-width: 0; background: #1b1b1b; border: 1px solid #888; color: #eee;
+      flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--muted); color: var(--text);
       border-radius: 6px; padding: 0.3rem 0.5rem; font-family: inherit; font-size: 0.95rem;
     }
     .foldermodal input.fname:focus { outline: none; border-color: var(--accent); }
@@ -612,10 +622,10 @@ function folder_rename_styles(): string
     .foldermodal .frow-actions { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; }
     .foldermodal .frename-edit {
       display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.2rem 0.4rem; cursor: pointer; font-family: inherit; line-height: 1;
     }
-    .foldermodal .frename-edit:hover { border-color: #888; color: #ddd; }
+    .foldermodal .frename-edit:hover { border-color: var(--muted); color: var(--text-dim); }
     CSS;
 }
 
@@ -631,13 +641,13 @@ function section_rename_styles(): string
     .sectitle {
       background: none; border: none; border-top: 1px solid transparent;
       border-bottom: 1px solid transparent; padding: 0; line-height: 1.2;
-      color: #f0b429; font-family: inherit; font-weight: 600; font-size: 1.15rem;
+      color: var(--gold); font-family: inherit; font-weight: 600; font-size: 1.15rem;
       min-width: 0; max-width: 100%;
     }
     /* Only a field once you're editing — otherwise it's just the section's name. */
     body:not(.editing) .sectitle { pointer-events: none; }
-    body.editing .sectitle { border-bottom-color: #3a3a3a; }
-    .sectitle:focus { outline: none; border-bottom-color: #f0b429; }
+    body.editing .sectitle { border-bottom-color: var(--line); }
+    .sectitle:focus { outline: none; border-bottom-color: var(--gold); }
     CSS;
 }
 

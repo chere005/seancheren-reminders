@@ -752,7 +752,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Habits</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= e(theme_bg()) ?>">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -761,14 +761,14 @@ function render_habit_section_modal(array $sections, string $csrf): void
   <link rel="manifest" href="<?= suite_base() ?>/reminders/manifest.webmanifest?v=2">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; min-height: 100vh; padding: 1.5rem 1rem; overscroll-behavior-y: none; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 1.5rem 1rem; overscroll-behavior-y: none; }
     .wrap { max-width: 640px; margin: 0 auto; }   /* same column as Reminders + Calendar */
     header { display: flex; align-items: center; justify-content: space-between; }
     header h1 { font-size: 1.35rem; }   /* same as the Calendar's */
     header .titlebar { display: flex; align-items: center; gap: 0.85rem; }
     header nav { display: flex; align-items: center; gap: 0.5rem; }
-    header nav a { color: #888; text-decoration: none; font-size: 0.85rem; }
-    header nav a:hover { color: #fff; }
+    header nav a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    header nav a:hover { color: var(--text); }
     header nav .who { color: var(--accent); font-size: 0.8rem; border: 1px solid #2a4a3d; border-radius: 999px; padding: 0.15rem 0.6rem; }
 
     .bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; padding-left: 0; }
@@ -776,12 +776,12 @@ function render_habit_section_modal(array $sections, string $csrf): void
     .bar form.addh { flex: 1 1 220px; }
     body:not(.editing) .bar form.addh { display: none; }   /* edit mode only */
     .bar input[type=text] {
-      width: 100%; padding: 0.6rem 0.75rem; background: #1a1a1a; border: 1px dashed #4a3f6a;
+      width: 100%; padding: 0.6rem 0.75rem; background: var(--surface); border: 1px dashed #4a3f6a;
       border-radius: 8px; color: #b9a7f5; font-size: 1rem;
     }
     .bar input::placeholder { color: #b9a7f5; opacity: 0.75; }
     .bar input:focus { outline: none; border-style: solid; border-color: #8b6ef0; }
-    .bar .hsel { padding: 0.55rem 0.6rem; background: #1a1a1a; border: 1px solid #333; color: #ccc; border-radius: 999px; font-size: 16px; }
+    .bar .hsel { padding: 0.55rem 0.6rem; background: var(--surface); border: 1px solid var(--line); color: var(--text-dim); border-radius: 999px; font-size: 16px; }
 
     /* + Section — left-aligned amber pill above the day grid. */
     /* The + that adds a habit to a section: a small round pill right of the section name,
@@ -792,12 +792,12 @@ function render_habit_section_modal(array $sections, string $csrf): void
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .hsection .hsec-add:hover { border-color: #b9a7f5; color: #fff; }
+    .hsection .hsec-add:hover { border-color: #b9a7f5; color: var(--text); }
     .hsection .hsec-del { margin-left: auto; }   /* push the delete × to the far right */
     .hadd-form { margin: 0; display: inline-flex; align-items: center; gap: 0.4rem; }
     .hadd-form[hidden] { display: none; }
     .hadd-form input {
-      width: 150px; max-width: 100%; padding: 0.25rem 0.7rem; background: #1a1a1a;
+      width: 150px; max-width: 100%; padding: 0.25rem 0.7rem; background: var(--surface);
       border: 1px dashed #4a3f6a; border-radius: 999px; color: #b9a7f5; font-size: 16px;
     }
     .hadd-form input::placeholder { color: #b9a7f5; opacity: 0.8; }
@@ -815,7 +815,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
     }
     .colhead {
       text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem;
-      color: #888; padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
+      color: var(--muted); padding-bottom: 0.4rem; border-radius: 8px 8px 0 0;
     }
     /* Today's column has to be findable at a glance on a phone, where five columns of
        small squares look much alike. The grid gap means a background tint can't
@@ -826,7 +826,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
       color: var(--accent-ink); font-weight: 700; background: var(--accent);
       border-radius: 8px; padding: 0.3rem 0 0.35rem;
     }
-    .colhead.ahead { color: #666; }        /* tomorrow, ticked off early */
+    .colhead.ahead { color: var(--muted); }        /* tomorrow, ticked off early */
     .colhead .num { display: block; font-size: 0.95rem; margin-top: 0.1rem; }
     /* The corner cell holds the collapse-all button; the grid's align-items:center lines it
        up vertically with the day-of-week labels beside it, and it sits at the left edge. */
@@ -843,7 +843,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
        than a dot. The name goes near-white on the wash, since the colour identity is the
        chip now — the same reasoning folder_tint() uses for folder names. */
     .hsec-wash { display: inline-flex; align-items: center; min-width: 0; border-radius: 999px; padding: 0.05rem 0.6rem; }
-    .hsection .sectitle { color: #f2f2f2; font-weight: 700; }
+    .hsection .sectitle { color: var(--text); font-weight: 700; }
     /* Collapse-all bar above the top section, left-aligned under the back button. */
     /* The section's collapse chevron picks up the section's violet; it points down when
        open, right when the section is folded. Its rows leave the grid entirely when folded. */
@@ -899,15 +899,15 @@ function render_habit_section_modal(array $sections, string $csrf): void
     body.editing .hsection .hcolor summary::after { content: ''; position: absolute; inset: -8px; }
     .hsection .hswatches {
       position: absolute; z-index: 5; top: calc(100% + 8px); left: -6px;
-      background: #1c1c1c; border: 1px solid #444; border-radius: 10px; padding: 0.5rem;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem;
       display: grid; grid-template-columns: repeat(6, 22px); gap: 0.4rem;   /* all six on one row */
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .hsection .hswatches button {
-      width: 22px; height: 22px; border-radius: 50%; border: 1px solid #444;
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
       cursor: pointer; padding: 0;
     }
-    .hsection .del { display: none; margin-left: auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    .hsection .del { display: none; margin-left: auto; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
     body.editing .hsection .del { display: inline-block; }
     .hsection .del:hover { border-color: #f66; color: #f66; }
 
@@ -929,7 +929,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
       overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
-    .hname .del { display: none; flex: 0 0 auto; background: none; border: 1px solid #444; color: #ccc; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    .hname .del { display: none; flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
     body.editing .hname .del { display: inline-block; }
     .hname .del:hover { border-color: #f66; color: #f66; }
     /* In edit mode the name is a field; a double-tap opens it outside edit mode too. */
@@ -965,28 +965,28 @@ function render_habit_section_modal(array $sections, string $csrf): void
     .cell.done.today { border-color: #eafff6; }
     .cell:active { transform: scale(0.94); }
 
-    .empty { color: #666; text-align: center; padding: 2rem 0; }
+    .empty { color: var(--muted); text-align: center; padding: 2rem 0; }
 
     /* The view bar: Week / Month on the left, the range and its arrows on the right.
        One row, the same 32px as everything else on the top bar. */
     .viewbar { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
-    .segpick { display: inline-flex; background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 999px; padding: 3px; }
+    .segpick { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; }
     .segpick a {
-      padding: 0.3rem 0.85rem; border-radius: 999px; text-decoration: none; color: #888;
+      padding: 0.3rem 0.85rem; border-radius: 999px; text-decoration: none; color: var(--muted);
       font-size: 0.82rem; font-weight: 600;
     }
-    .segpick a.on { background: #2a2a2a; color: var(--accent); }
+    .segpick a.on { background: var(--surface-2); color: var(--accent); }
     .viewbar .range { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; }
-    .viewbar .range .lbl { font-size: 0.85rem; color: #aaa; min-width: 7.5rem; text-align: center; }
+    .viewbar .range .lbl { font-size: 0.85rem; color: var(--text-dim); min-width: 7.5rem; text-align: center; }
     .viewbar .range a {
       width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
-      border: 1px solid #333; border-radius: 999px; color: #ccc; text-decoration: none; font-size: 1rem;
+      border: 1px solid var(--line); border-radius: 999px; color: var(--text-dim); text-decoration: none; font-size: 1rem;
     }
-    .viewbar .range a:hover { border-color: #888; color: #fff; }
+    .viewbar .range a:hover { border-color: var(--muted); color: #fff; }
 
     /* Month view: a pie per day. The filled slice is how much of that day got ticked. */
     .mgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; touch-action: pan-y; }
-    .mgrid .dow { text-align: center; font-size: 0.7rem; color: #666; padding-bottom: 0.2rem; }
+    .mgrid .dow { text-align: center; font-size: 0.7rem; color: var(--muted); padding-bottom: 0.2rem; }
     .mgrid .mcell {
       aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
       justify-content: center; gap: 0.2rem; border-radius: 8px; border: 1px solid transparent;
@@ -1000,7 +1000,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
       border: 1px solid #2c2540; background: #1b1726;
     }
     .mgrid .mcell.ahead .pie { opacity: 0.4; }
-    .mgrid .mcell .dnum { font-size: 0.65rem; color: #777; line-height: 1; }
+    .mgrid .mcell .dnum { font-size: 0.65rem; color: var(--muted); line-height: 1; }
     /* Today's number is a filled chip, the one thing on the month that isn't a circle
        or a bare numeral, so the eye lands on it without hunting for the ring. */
     .mgrid .mcell.today .dnum {
@@ -1013,9 +1013,9 @@ function render_habit_section_modal(array $sections, string $csrf): void
       list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-wrap: wrap;
       justify-content: center; gap: 0.4rem 0.9rem;
     }
-    .mleg li { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #ccc; }
+    .mleg li { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-dim); }
     .mleg-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; }
-    .mlegend { margin-top: 0.7rem; font-size: 0.78rem; color: #666; text-align: center; }
+    .mlegend { margin-top: 0.7rem; font-size: 0.78rem; color: var(--muted); text-align: center; }
 
 <?= folder_nav_styles() ?>
 <?= tabbar_styles() ?>

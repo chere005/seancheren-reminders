@@ -323,27 +323,28 @@ JS);
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Calendar widget setup</title>
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="<?= theme_bg() ?>">
   <style>
+    <?= theme_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 1.5rem 1rem; line-height: 1.5; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 1.5rem 1rem; line-height: 1.5; }
     .wrap { max-width: 640px; margin: 0 auto; }
     h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-    .sub { color: #888; font-size: 0.85rem; margin-bottom: 1.5rem; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
     a { color: #34d399; }
-    h2 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: #ddd; }
-    ol { margin: 0 0 0 1.1rem; font-size: 0.92rem; color: #ccc; }
+    h2 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: var(--text-dim); }
+    ol { margin: 0 0 0 1.1rem; font-size: 0.92rem; color: var(--text-dim); }
     ol li { margin-bottom: 0.35rem; }
     code, .url { font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; color: #7dd3fc; word-break: break-all; }
-    .box { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; }
-    textarea { width: 100%; height: 260px; background: #0e0e0e; color: #cfe; border: 1px solid #333;
+    .box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; }
+    textarea { width: 100%; height: 260px; background: #0e0e0e; color: #cfe; border: 1px solid var(--line);
       border-radius: 8px; padding: 0.75rem; font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; line-height: 1.4; }
     button { margin-top: 0.5rem; padding: 0.55rem 1rem; background: #34d399; color: var(--accent-ink); border: none;
       border-radius: 6px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
-    .warn { color: #f0b429; font-size: 0.8rem; margin-top: 0.75rem; }
-    .scope { font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; }
+    .warn { color: var(--gold); font-size: 0.8rem; margin-top: 0.75rem; }
+    .scope { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.5rem; }
     .scope strong { color: #7dd3fc; }
-    nav a { color: #888; text-decoration: none; }
+    nav a { color: var(--muted); text-decoration: none; }
   </style>
 </head>
 <body>
@@ -377,7 +378,7 @@ JS);
 
   <p class="warn">Your feed URL contains a secret token — anyone with it can read your agenda. To revoke it, tell me and I'll reset it (or delete <code>token-<?= htmlspecialchars(safe_user($user), ENT_QUOTES) ?>.json</code> on the server).</p>
   <details style="margin-top:1rem">
-    <summary style="color:#888;font-size:0.85rem;cursor:pointer">Show raw feed URL</summary>
+    <summary style="color: var(--muted);font-size:0.85rem;cursor:pointer">Show raw feed URL</summary>
     <div class="box"><span class="url"><?= htmlspecialchars($feedUrl, ENT_QUOTES) ?></span></div>
   </details>
 </div>
