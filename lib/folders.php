@@ -11,15 +11,16 @@ require_once __DIR__ . '/palette.php';
 const FOLDER_DEFAULT = 'General';
 
 /**
- * The permanent folders: always ensured present, and undeletable. Reminders keeps only
- * "Calendar" permanent now — an undated reminder in it rides along on today (see
- * lib/util.php), which is name-specific, so it can't be removed. "Reminders" is an ordinary
- * folder you can delete or rename (a new account is still *seeded* with it — see
- * folders_starter()). Notes keeps its one "General".
+ * The permanent folders: always ensured present, and undeletable *and* unrenameable.
+ * Reminders keeps only "Calendar" — an undated reminder in it rides along on today (see
+ * lib/util.php), which is name-specific, so it can't be removed or renamed. Notes has *no*
+ * permanent folder: even its seeded "General" can be renamed or deleted (you just can't
+ * delete the very last folder — see folders_delete()). "Reminders" is likewise ordinary,
+ * only *seeded* for a new account (folders_starter()).
  */
 function folders_fixed(string $type): array
 {
-    return $type === 'reminders' ? [FOLDER_CALENDAR] : [FOLDER_DEFAULT];
+    return $type === 'reminders' ? [FOLDER_CALENDAR] : [];
 }
 
 /**
@@ -32,10 +33,11 @@ function folders_starter(string $type): array
     return $type === 'reminders' ? [FOLDER_REMINDERS, FOLDER_CALENDAR] : [FOLDER_DEFAULT];
 }
 
-/** The folder a type falls back to when nothing else is named (an always-present one). */
+/** The folder a type falls back to when nothing else is named — an always-present permanent
+ *  one where there is one (reminders' "Calendar"), else the seeded default name. */
 function folder_fallback(string $type): string
 {
-    return folders_fixed($type)[0];
+    return folders_fixed($type)[0] ?? ($type === 'reminders' ? FOLDER_REMINDERS : FOLDER_DEFAULT);
 }
 
 function folder_is_fixed(string $type, string $name): bool
@@ -498,9 +500,14 @@ function folders_rename(string $dir, string $type, string $old, string $new): bo
 function folders_delete(string $dir, string $type, string $name): void
 {
     if (!in_array($type, ['reminders', 'notes'], true) || folder_is_fixed($type, $name)) {
-        return;   // the permanent folders are never deleted
+        return;   // the permanent folders (reminders' "Calendar") are never deleted
     }
     $data = folders_load($dir);
+    // Never delete the last folder — an app always keeps at least one (the last can still be
+    // renamed). Reminders always has "Calendar", so this only ever bites in Notes.
+    if (count($data[$type] ?? []) <= 1 || !in_array($name, $data[$type] ?? [], true)) {
+        return;
+    }
     $data[$type] = array_values(array_filter($data[$type], fn($f) => $f !== $name));
     if (is_array($data['hidden'][$type] ?? null)) {
         $data['hidden'][$type] = array_values(array_filter($data['hidden'][$type], fn($f) => $f !== $name));
@@ -726,6 +733,9 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
               // never mine to edit — only recolour how it shows in my picker, and reorder it
               // in my list), so it carries no delete ×; my own folders keep theirs unless
               // permanent. Every row drags to reorder by its handle. ?>
+        <?php // The last of my own folders can't be deleted (an app always keeps one), but it
+              // can still be renamed. ?>
+        <?php $ownCount = count(array_filter($rows, fn($r) => empty($r['shared']))); ?>
         <ul class="flist" id="fReorder">
           <?php foreach ($rows as $r): ?>
             <?php $shared = !empty($r['shared']);
@@ -750,35 +760,44 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
                   <?php endforeach; ?>
                 </form>
               </details>
-              <?php // The name is a plain span, or — when rename is on and this is my own
-                    // non-permanent folder — an editable field that posts rename_folder on
-                    // Enter or blur and reopens the manager (fm=1). Shared and fixed rows
-                    // stay plain, since neither is mine to rename. ?>
-              <?php if ($allowRename && !$shared && !in_array($key, $fixed, true)): ?>
-                <form method="post" action="" class="frename-form">
-                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
-                  <input type="hidden" name="action" value="rename_folder">
-                  <input type="hidden" name="view" value="<?= $vw ?>">
-                  <input type="hidden" name="fm" value="1">
-                  <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
-                  <input class="fname frename" name="newname" value="<?= htmlspecialchars($r['label'], ENT_QUOTES) ?>"
-                         maxlength="40" autocomplete="off" aria-label="Folder name">
-                </form>
-              <?php else: ?>
-                <span class="fname"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
-              <?php endif; ?>
-              <?php if ($shared): ?>
-                <span class="fshared-badge" title="Shared by <?= htmlspecialchars($r['partner'], ENT_QUOTES) ?>"><?= htmlspecialchars($r['partner'], ENT_QUOTES) ?></span>
-              <?php elseif (!in_array($key, $fixed, true)): ?>
-                <form method="post" action="" style="display:inline">
-                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
-                  <input type="hidden" name="action" value="delete_folder">
-                  <input type="hidden" name="view" value="<?= $vw ?>">
-                  <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
-                  <button type="submit" class="fdel needs-confirm"
-                          title="Delete folder">&times;</button>
-                </form>
-              <?php endif; ?>
+              <?php // The name reads as plain text; a pencil (in the actions, next to the ×)
+                    // turns it into a field that posts rename_folder on Enter/blur. A shared
+                    // or permanent folder isn't mine to rename, so it gets no pencil; a
+                    // permanent one gets no × either. ?>
+              <?php $canRename = $allowRename && !$shared && !in_array($key, $fixed, true);
+                    $canDelete = !$shared && !in_array($key, $fixed, true) && $ownCount > 1; ?>
+              <span class="fname-cell">
+                <span class="fname frename-label"><?= htmlspecialchars($r['label'], ENT_QUOTES) ?></span>
+                <?php if ($canRename): ?>
+                  <form method="post" action="" class="frename-form" hidden>
+                    <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                    <input type="hidden" name="action" value="rename_folder">
+                    <input type="hidden" name="view" value="<?= $vw ?>">
+                    <input type="hidden" name="fm" value="1">
+                    <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
+                    <input class="fname frename" name="newname" value="<?= htmlspecialchars($r['label'], ENT_QUOTES) ?>"
+                           maxlength="40" autocomplete="off" aria-label="Folder name">
+                  </form>
+                <?php endif; ?>
+              </span>
+              <span class="frow-actions">
+                <?php if ($shared): ?>
+                  <span class="fshared-badge" title="Shared by <?= htmlspecialchars($r['partner'], ENT_QUOTES) ?>"><?= htmlspecialchars($r['partner'], ENT_QUOTES) ?></span>
+                <?php else: ?>
+                  <?php if ($canRename): ?>
+                    <button type="button" class="frename-edit" title="Rename" aria-label="Rename"><?= pencil_icon_svg() ?></button>
+                  <?php endif; ?>
+                  <?php if ($canDelete): ?>
+                    <form method="post" action="" style="display:inline">
+                      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                      <input type="hidden" name="action" value="delete_folder">
+                      <input type="hidden" name="view" value="<?= $vw ?>">
+                      <input type="hidden" name="name" value="<?= htmlspecialchars($key, ENT_QUOTES) ?>">
+                      <button type="submit" class="fdel needs-confirm" title="Delete folder">&times;</button>
+                    </form>
+                  <?php endif; ?>
+                <?php endif; ?>
+              </span>
             </li>
           <?php endforeach; ?>
         </ul>
@@ -835,6 +854,14 @@ function folder_modal_script(): string
          . "var body=new URLSearchParams(new FormData(f));body.set('color',col);"
          . "fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:body}).catch(function(){});"
          . "var sum=det&&det.querySelector('summary');if(sum)sum.style.background=col;"
+         // Repaint the list live too — the folder heading's colour wash and its picker dot —
+         // so a recolour applies without a refresh; and mark dirty so closing reloads the
+         // rest (the picker button's blend) into step.
+         . "try{var key=f.querySelector('input[name=name]').value;var tint=/^#[0-9a-fA-F]{6}$/.test(col)?col+'33':'transparent';"
+         . "document.querySelectorAll('.folder-block[data-folder=\"'+(window.CSS&&CSS.escape?CSS.escape(key):key)+'\"] .folder-label').forEach(function(el){el.style.background=tint;});"
+         . "document.querySelectorAll('.folderpick-opt .fvis[data-folder=\"'+(window.CSS&&CSS.escape?CSS.escape(key):key)+'\"]').forEach(function(b){var d=b.parentNode.querySelector('.fdot');if(d)d.style.background=col;});"
+         . "}catch(_){}"
+         . "fDirty=true;"
          . "if(det)det.open=false;});"
          // Drag a custom folder by its handle to reorder it; the permanent folders stay
          // pinned first. On drop, POST the new order (custom folders only) in the background.

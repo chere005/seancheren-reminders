@@ -1010,13 +1010,14 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        plus_icon_svg(), so they centre by construction and need no padding nudge. */
     /* Same grey outlined pill as the folder head's "+" (.fsec-add) — it's the same act,
        just adding a row to one section rather than a section to a folder. */
+    /* The + that adds a reminder wears the theme (accent) colour. */
     .sec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
-      color: #ccc; border-radius: 999px; width: 20px; height: 20px;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #2a4a3d;
+      color: var(--accent); border-radius: 999px; width: 20px; height: 20px;
       font-size: 0.85rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .sec-add:hover { border-color: #888; color: #fff; }
+    .sec-add:hover { border-color: var(--accent); color: var(--accent); }
     .secadd-row { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
     .secadd-row[hidden] { display: none; }   /* make [hidden] win over flex */
     .secadd-row input[type=text] {
@@ -1120,13 +1121,14 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .folder-rule { display: none; }   /* the full-width rule above each folder replaces this short one */
     /* The "+" that adds a section to this folder — right of its name, always shown so a
        section can be added without first entering edit mode. */
+    /* The + that adds a section wears the section-title colour (gold). */
     .fsec-add {
-      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #333;
-      color: #ccc; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
+      flex: 0 0 auto; align-self: center; background: none; border: 1px solid #4a3f2a;
+      color: #f0b429; border-radius: 999px; width: 22px; height: 22px; margin-left: 0.15rem;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
-    .fsec-add:hover { border-color: #888; color: #fff; }
+    .fsec-add:hover { border-color: #f0b429; color: #f0b429; }
     .fsec-form.newsection { margin: 0; }
     /* Inside a folder block, a folder's sections nest slightly to the right of its heading,
        so the wash-backed folder name reads as the level above them. Reminders' two permanent

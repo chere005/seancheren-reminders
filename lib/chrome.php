@@ -595,20 +595,27 @@ function folder_rename_styles(): string
     input.foldertitle:focus { outline: none; border-color: rgba(255,255,255,0.4); }
     /* Only a field once you're editing — otherwise it's just the folder's name. */
     body:not(.editing) input.foldertitle { pointer-events: none; }
-    /* In the Manage-folders window the row's name is always an editable field (the manager
-       is the edit surface), so it reads as an input rather than borrowing .foldertitle's
-       edit-mode gate. */
+    /* In a manage menu the name reads as plain text; a pencil in the row's actions (next to
+       the ×) reveals the field. Keeps every manage menu (folders, habit sections) a clean
+       list of names, consistently. */
+    .foldermodal .fname-cell { flex: 1; min-width: 0; display: flex; align-items: center; }
+    .foldermodal .frename-label { flex: 1; min-width: 0; font-size: 0.95rem; word-break: break-word; }
+    .foldermodal .fname-cell.editing .frename-label { display: none; }
     .foldermodal .frename-form { flex: 1; min-width: 0; display: flex; margin: 0; }
-    /* The name reads as plain text until you tap/click it — a transparent border and no
-       background — then it shows as a field on focus. Keeps every manage menu (folders,
-       habit sections) a clean list of names rather than a stack of input boxes. */
+    .foldermodal .frename-form[hidden] { display: none; }
     .foldermodal input.fname {
-      flex: 1; min-width: 0; background: none; border: 1px solid transparent; color: #eee;
+      flex: 1; min-width: 0; background: #1b1b1b; border: 1px solid #888; color: #eee;
       border-radius: 6px; padding: 0.3rem 0.5rem; font-family: inherit; font-size: 0.95rem;
-      cursor: pointer;
     }
-    .foldermodal input.fname:hover { border-color: #333; }
-    .foldermodal input.fname:focus { outline: none; background: #1b1b1b; border-color: #888; cursor: text; }
+    .foldermodal input.fname:focus { outline: none; border-color: var(--accent); }
+    /* The row's actions live together on the right: the pencil (rename) then the × (delete). */
+    .foldermodal .frow-actions { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; }
+    .foldermodal .frename-edit {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid #444; color: #999; border-radius: 6px;
+      padding: 0.2rem 0.4rem; cursor: pointer; font-family: inherit; line-height: 1;
+    }
+    .foldermodal .frename-edit:hover { border-color: #888; color: #ddd; }
     CSS;
 }
 
@@ -670,12 +677,31 @@ function folder_rename_script(): string
   else { fitAll(); }
   if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitAll); }
 
+  // In a manage menu the field lives in a .fname-cell that reads as plain text until its
+  // pencil is pressed; put it back to plain text when the edit ends without a change.
+  function closeManage(i) {
+    var cell = i.closest && i.closest('.fname-cell');
+    if (!cell) { return; }
+    cell.classList.remove('editing');
+    var form = i.closest('.frename-form'); if (form) { form.hidden = true; }
+  }
+  // The pencil next to a manage-menu row's × reveals its rename field.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.frename-edit');
+    if (!btn) { return; }
+    e.preventDefault();
+    var li = btn.closest('li'); if (!li) { return; }
+    var cell = li.querySelector('.fname-cell'), form = li.querySelector('.frename-form');
+    if (!cell || !form) { return; }
+    cell.classList.add('editing'); form.hidden = false;
+    var inp = form.querySelector('.frename'); if (inp) { inp.focus(); try { inp.select(); } catch (_) {} }
+  });
   document.addEventListener('focusout', function (e) {
     var i = e.target;
     if (!i.classList || !i.classList.contains('frename')) { return; }
     var was = i.form.querySelector('input[name="name"]').value;
     if (i.value.trim() !== '' && i.value.trim() !== was) { i.form.submit(); }
-    else { i.value = was; }
+    else { i.value = was; closeManage(i); }
   });
   document.addEventListener('keydown', function (e) {
     var i = e.target;

@@ -415,3 +415,13 @@ function plus_icon_svg(int $size = 14, int $weight = 2): string
          . ' stroke="currentColor" stroke-width="' . $weight . '" stroke-linecap="round"'
          . ' aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>';
 }
+
+/** A pencil glyph, drawn as an SVG so it centres by construction (see plus_icon_svg). Used
+ *  by the "rename" button in the manage menus. */
+function pencil_icon_svg(int $size = 14): string
+{
+    return '<svg viewBox="0 0 24 24" width="' . $size . '" height="' . $size . '" fill="none"'
+         . ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+         . ' aria-hidden="true" focusable="false"><path d="M12 20h9"/>'
+         . '<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+}
