@@ -45,7 +45,9 @@ function habit_section_color(array $s, int $i): string
 {
     $pal = habits_palette();
     $c   = (string) ($s['color'] ?? '');
-    return in_array($c, $pal, true) ? $c : $pal[$i % count($pal)];
+    if (in_array($c, $pal, true)) { return $c; }
+    // A colour from an earlier palette generation bumps to today's same slot.
+    return palette_recolor('habits', $c) ?? $pal[$i % count($pal)];
 }
 
 /**

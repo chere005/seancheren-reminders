@@ -133,3 +133,71 @@ function palette_has(string $app, string $hex): bool
 {
     return in_array($hex, app_palette($app), true) || in_array($hex, app_palette($app, true), true);
 }
+
+/**
+ * Every earlier palette generation a stored colour might date from, oldest first, each
+ * as app => [own six, shared six]. Rebuilt from PAL_BASE with each era's own transform
+ * (or its hand-typed table), so a colour picked under any of them can be found again
+ * and bumped to the same slot in today's palette. Built once per request.
+ */
+function pal_legacy(): array
+{
+    static $gens = null;
+    if ($gens !== null) { return $gens; }
+    $lit  = fn(array $set, float $f) => array_map(fn($h) => pal_lighten($h, $f), $set);
+    $tone = fn(float $sMul, float $lShift) => array_map(function ($hex) use ($sMul, $lShift) {
+        if ($sMul == 1.0 && $lShift == 0.0) { return $hex; }
+        [$h, $s, $l] = pal_hsl($hex);
+        return pal_hex($h, min(1.0, $s * $sMul), min(1.0, max(0.0, $l + $lShift)));
+    }, PAL_BASE);
+    // The hand-typed first generation (three apps; habits had no tier yet).
+    $gens = [[
+        'reminders' => [PAL_BASE, ['#8eb6f6', '#f29592', '#9ee5bc', '#f8be8c', '#c298eb', '#babfc9']],
+        'calendar'  => [['#2672ed', '#e5342e', '#46ce7e', '#f18322', '#8a3ad9', '#7c8598'],
+                        ['#689df3', '#ed726e', '#7edda6', '#f5a966', '#ad76e5', '#a4aab7']],
+        'notes'     => [['#125ed9', '#d1201a', '#31b96a', '#dd6e0e', '#7526c5', '#677183'],
+                        ['#4285f0', '#e94f49', '#5ed48f', '#f3933f', '#9954de', '#8d95a5']],
+    ]];
+    // The gentle lightness steps, then the flattened same-everywhere set.
+    $g = [];
+    foreach (['reminders' => [0.00, 0.60], 'calendar' => [0.07, 0.64],
+              'notes' => [0.14, 0.68], 'habits' => [0.21, 0.72]] as $app => [$o, $s]) {
+        $g[$app] = [$lit(PAL_BASE, $o), $lit(PAL_BASE, $s)];
+    }
+    $gens[] = $g;
+    $g = [];
+    foreach (array_keys(PAL_TONES) as $app) { $g[$app] = [PAL_BASE, $lit(PAL_BASE, 0.60)]; }
+    $gens[] = $g;
+    // The three lightness-tier rounds that came just before the leaned palette.
+    foreach ([
+        ['notes' => [0.55, 0.09, 0.50], 'habits' => [0.45, -0.06, 0.55]],
+        ['notes' => [0.70, 0.09, 0.50], 'habits' => [0.58, -0.06, 0.55]],
+        ['notes' => [0.85, 0.10, 0.50], 'habits' => [0.80, -0.08, 0.55]],
+    ] as $round) {
+        $spec = ['reminders' => [1.00, 0.00, 0.55], 'calendar' => [1.15, -0.13, 0.55]] + $round;
+        $g = [];
+        foreach ($spec as $app => [$sm, $ls, $f]) {
+            $own = $tone($sm, $ls);
+            $g[$app] = [$own, $lit($own, $f)];
+        }
+        $gens[] = $g;
+    }
+    return $gens;
+}
+
+/**
+ * A stored colour bumped to today's palette: one already current is kept; one from any
+ * earlier generation maps to the same app, tier and position in the current set; and
+ * anything unrecognised is null, leaving the caller's own fallback to decide.
+ */
+function palette_recolor(string $app, string $hex): ?string
+{
+    if (palette_has($app, $hex)) { return $hex; }
+    foreach (pal_legacy() as $gen) {
+        foreach ([0, 1] as $tier) {
+            $i = array_search($hex, $gen[$app][$tier] ?? [], true);
+            if ($i !== false) { return app_palette($app, $tier === 1)[$i]; }
+        }
+    }
+    return null;
+}

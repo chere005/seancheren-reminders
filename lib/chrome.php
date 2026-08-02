@@ -244,8 +244,9 @@ function settings_modal_styles(): string
 {
     return <<<CSS
     .setmodal .setthemes { margin-top: 1.1rem; }
-    .setmodal .setlabel { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem; }
-    .setmodal .themerow { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .setmodal .setlabel { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;
+                          text-align: center; }
+    .setmodal .themerow { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
     /* A theme in miniature: its page colour ringed by its own line colour (both inline),
        its accent as the dot. The chosen one rings in the text colour instead. */
     .setmodal .themebtn {

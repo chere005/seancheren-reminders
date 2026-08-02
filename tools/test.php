@@ -1596,6 +1596,31 @@ t('every app palette offers six colours and validates its own', function () {
     }
 });
 
+t("a colour stored under an earlier palette bumps to its slot in today's", function () {
+    global $scratch;
+    // Pure lookups: the flattened-era shared blue, the lightness-tier calendar purple
+    // and the first hand-typed notes blue each map to the same slot in the leaned set;
+    // a current colour passes through and a stranger stays unknown.
+    eq(app_palette('notes', true)[0], palette_recolor('notes', pal_lighten(PAL_BASE[0], 0.60)));
+    eq(app_palette('calendar')[4], palette_recolor('calendar', '#7d1bdf'));
+    eq(app_palette('notes')[0], palette_recolor('notes', '#125ed9'));
+    eq(app_palette('reminders')[2], palette_recolor('reminders', app_palette('reminders')[2]));
+    eq(null, palette_recolor('reminders', '#ff0000'));
+    // The calendar reader runs stored colours through the same bump.
+    eq(app_palette('calendar')[4], cal_color_fix('#7d1bdf'));
+    // And a folder file holding an old colour reads back wearing the new one, not a
+    // positional default.
+    $f    = user_data_file($scratch, 'folders', 'example');
+    $data = store_read($f);
+    $keep = $data['colors']['reminders'] ?? [];
+    $data['colors']['reminders']['Work'] = pal_lighten(PAL_BASE[0], 0.60);
+    store_write($f, $data);
+    eq(app_palette('reminders', true)[0], folder_colors($scratch, 'reminders', 'example')['Work'] ?? null,
+       'the folder wears the bumped colour');
+    $data['colors']['reminders'] = $keep;
+    store_write($f, $data);
+});
+
 t('the palettes viewer grades every hex label by its contrast', function () {
     $jar = login('example', 'examplepassword');
     $r = req('GET', '/userpalettes/', [], $jar);

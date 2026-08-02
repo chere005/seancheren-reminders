@@ -266,9 +266,9 @@ function folder_colors(string $dir, string $type, ?string $user = null): array
     $out   = [];
     foreach (array_values($data[$type] ?? []) as $i => $name) {
         $c = (string) ($set[$name] ?? '');
-        // A stored colour from this app's palette (own or shared) is kept; otherwise a
-        // default is handed out by position so a new folder is distinct straight away.
-        $out[$name] = palette_has($type, $c) ? $c : $pal[$i % count($pal)];
+        // A current colour is kept; one stored under an earlier palette generation bumps
+        // to the same slot in today's; only a stranger falls back to a positional default.
+        $out[$name] = palette_recolor($type, $c) ?? $pal[$i % count($pal)];
     }
     return $out;
 }
@@ -314,8 +314,9 @@ function folder_shared_colors(string $dir, string $type, ?string $user = null): 
 function folder_shared_color(array $overrides, array $ownerColors, string $type,
                              string $key, string $folder, int $pos): string
 {
-    if (isset($overrides[$key]) && palette_has($type, (string) $overrides[$key])) {
-        return (string) $overrides[$key];
+    $bumped = isset($overrides[$key]) ? palette_recolor($type, (string) $overrides[$key]) : null;
+    if ($bumped !== null) {
+        return $bumped;
     }
     if (isset($ownerColors[$folder])) {
         return (string) $ownerColors[$folder];
