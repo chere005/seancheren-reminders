@@ -1599,8 +1599,13 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     // A failure blushes the chip; there is no dashed ring around the dot any more.
     has('.sw.low b', $r['body'], 'the under-3:1 chip is marked');
     hasnt('dashed', $r['body'], 'no dashed border anywhere');
-    // The boards come grouped into drafts, in order, so iterations read side by side.
-    foreach ([1, 2, 3] as $d) { has("Draft $d — ", $r['body'], "draft $d has its heading"); }
+    // The boards come grouped into drafts, in order, so iterations read side by side;
+    // each heading folds its group (a JS gesture, so only the wiring is checked here).
+    foreach ([1, 2, 3] as $d) {
+        has("Draft $d — ", $r['body'], "draft $d has its heading");
+        has('<div class="dgroup" data-draft="' . $d . '"', $r['body'], "draft $d wraps its boards");
+    }
+    has('upDraftFold_', $r['body'], 'the draft fold is wired and remembered');
     // The four Draft 2 boards render, and each keeps its whole promise: every one of
     // its swatches clears 3:1, so its head must say all clear, never a count.
     foreach (range(0, 3) as $i) {

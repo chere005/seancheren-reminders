@@ -374,10 +374,18 @@ $kindRows = [
     .btn:hover { border-color: #888; color: #fff; }
     .count { color: #666; font-size: 0.8rem; }
 
-    /* A draft heading groups the boards into iterations of the palette itself. */
-    .draft { font-size: 0.95rem; font-weight: 600; color: #ccc;
+    /* A draft heading groups the boards into iterations of the palette itself, and
+       tapping it folds the whole group, the way every list heading in the suite folds. */
+    .draft { font-size: 0.95rem; font-weight: 600; color: #ccc; cursor: pointer;
+             user-select: none; display: flex; align-items: center; gap: 0.55rem;
              margin: 1.7rem 0 0.8rem; padding-top: 1rem; border-top: 1px solid #262626; }
     .toolbar ~ .draft:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+    .dcol { width: 22px; height: 22px; display: inline-flex; align-items: center;
+            justify-content: center; border: 1px solid #333; border-radius: 999px;
+            color: #ccc; font-size: 0.95rem; line-height: 1; flex: 0 0 auto;
+            transform: rotate(90deg); }
+    .draft.folded .dcol { transform: rotate(0deg); }
+    .dgroup.folded { display: none; }
 
     /* --- One board per theme, painted in that theme's own variables --------------- */
     .theme { border: 1px solid #262626; border-radius: 12px; margin-bottom: 1.1rem;
@@ -514,8 +522,10 @@ $kindRows = [
                 }
             }
         } ?>
-    <?php if (($t['draft'] ?? 1) !== $lastDraft): $lastDraft = $t['draft'] ?? 1; ?>
-      <h2 class="draft"><?= e($draftNames[$lastDraft] ?? '') ?></h2>
+    <?php if (($t['draft'] ?? 1) !== $lastDraft): ?>
+      <?php if ($lastDraft): ?></div><?php endif; $lastDraft = $t['draft'] ?? 1; ?>
+      <h2 class="draft" data-draft="<?= (int) $lastDraft ?>"><span class="dcol">&rsaquo;</span><?= e($draftNames[$lastDraft] ?? '') ?></h2>
+      <div class="dgroup" data-draft="<?= (int) $lastDraft ?>">
     <?php endif; ?>
     <section class="theme" data-key="<?= e($t['key']) ?>" style="<?= e(up_vars_style($v)) ?>">
       <div class="thead">
@@ -566,9 +576,23 @@ $kindRows = [
       </div>
     </section>
   <?php endforeach; ?>
+  <?php if ($lastDraft): ?></div><?php endif; ?>
 </div>
 
 <script>
+  // A draft heading folds its whole group, remembered per draft — the same gesture as
+  // folding one board, one level up.
+  document.querySelectorAll('h2.draft').forEach(function (h) {
+    var key = 'upDraftFold_' + h.dataset.draft;
+    var grp = h.nextElementSibling;
+    function set(f) {
+      h.classList.toggle('folded', f);
+      grp.classList.toggle('folded', f);
+      localStorage.setItem(key, f ? '1' : '0');
+    }
+    if (localStorage.getItem(key) === '1') { set(true); }
+    h.addEventListener('click', function () { set(!h.classList.contains('folded')); });
+  });
   // Folding is remembered per theme, keyed by this page alone so it can't collide with
   // the section/folder keys the apps use. The page opens with everything shown — the
   // boards are the whole content, so starting folded would open on an empty page.
