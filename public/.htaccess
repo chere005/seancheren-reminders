@@ -8,8 +8,11 @@ ServerSignature Off
 
 # The suite's public name is CalMind, but the path is lowercase and the server's
 # filesystem is case-sensitive, so the capitalised forms 404ed. 301 them home. The
-# substitution is relative (no leading /) so the /test/ and /dev/ mirrors, which carry
-# their own copy of this file, stay inside their own prefix. The all-lowercase form is
-# deliberately not in the alternation — matching it would rewrite to itself.
+# target is rebuilt from REQUEST_URI (never a relative substitution: per-directory
+# rewrites prefix those with the *filesystem* path, which leaked the docroot into the
+# redirect), so the /test/ and /dev/ mirrors keep their own prefix in %1. The
+# all-lowercase form is deliberately not in the alternation — it would rewrite to
+# itself and loop.
 RewriteEngine On
-RewriteRule ^(?:CalMind|Calmind|CALMIND|calMind)(/.*)?$ calmind$1 [R=301,L]
+RewriteCond %{REQUEST_URI} ^(.*)/(?:CalMind|Calmind|CALMIND|calMind)((?:/.*)?)$
+RewriteRule ^ %1/calmind%2 [R=301,L]
