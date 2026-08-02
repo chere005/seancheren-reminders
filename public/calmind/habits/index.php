@@ -913,16 +913,17 @@ function render_habit_section_modal(array $sections, string $csrf): void
     body.editing .hsection .del { display: inline-block; }
     .hsection .del:hover { border-color: #f66; color: #f66; }
 
-    /* The name bubble hugs the text and centres itself in the column rather than filling
-       it, so it reads as a label on a pill, not a big empty input. The name centres, wraps
-       to at most two lines and hyphenates a word too long to fit. */
+    /* Every name bubble is the same size — the column's width and the two-line height,
+       the largest a pill can be — so a short name and a wrapped one sit in identical
+       chips, the text centred both ways (wrapping to at most two lines, hyphenating a
+       word too long to fit). */
     /* --hc is the section's colour, set inline per row. Everything below falls back to
        the app's violet when a habit is in no section, so an ungrouped list looks exactly
        as it did. color-mix() is avoided here for the same reason as the folder tint. */
     .hname {
       position: relative; background: #1b1726; border: 1px solid #2c2540; border-radius: 8px;
-      padding: 0.3rem 0.6rem; min-height: 28px; display: flex; align-items: center;
-      gap: 0.35rem; justify-content: center; justify-self: center; width: fit-content; max-width: 100%;
+      padding: 0.3rem 0.6rem; min-height: 49px; /* two lines at 1.02rem/1.15 + padding */
+      display: flex; align-items: center; gap: 0.35rem; justify-content: center;
     }
     .hname[style*="--hc"] { border-color: var(--hc-line); background: var(--hc-soft); }
     .hname[style*="--hc"] .hlabel { color: var(--hc); }

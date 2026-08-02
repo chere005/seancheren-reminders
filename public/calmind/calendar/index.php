@@ -855,7 +855,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .dow span { text-align: center; font-size: 0.7rem; color: var(--muted); padding: 0.25rem 0; }
     .cell {
       min-height: 40px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 6px;
-      padding: 4px 4px 3px; cursor: pointer; position: relative;
+      padding: 4px 2px 3px; cursor: pointer; position: relative;
       display: flex; flex-direction: column; align-items: center; gap: 3px;
     }
     .cell:not(.blank):hover { border-color: var(--accent-soft); background: var(--surface-2); }
@@ -868,11 +868,15 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .cell.today .num { color: var(--accent); font-weight: 700; }
     .cell.selected { border-color: var(--text); background: var(--surface-2); }
     /* The legend's kind icons, one per kind and colour per day — the icon says what kinds
-       the day holds, its colour says whose calendar or folder; the panel has the rest. */
-    .cell .dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; min-height: 12px; }
+       the day holds, its colour says whose calendar or folder; the panel has the rest.
+       They sit in a fixed two-row well (three per row on a phone, two rows max, extras
+       clipped), so every day cell is the same size however busy the day. */
+    .cell .dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center;
+                  align-content: flex-start; height: 23px; overflow: hidden; }
     .cell .ico { display: inline-flex; align-items: center; justify-content: center;
-                 width: 12px; height: 12px; color: var(--muted); }
-    .cell .ico svg { display: block; width: 11px; height: 11px; }
+                 width: 10px; height: 10px; color: var(--muted); }
+    .cell .ico svg { display: block; width: 9px; height: 9px; }
+    .cell .ico.more { font-size: 11px; font-weight: 700; line-height: 1; }
     .cell .ico.reminder.done { color: var(--k-done) !important; }
     body:not(.show-done) .cell .ico.reminder.done { display: none; }
     /* Week mode (swipe up): two weeks of grid, and the chrome around it steps aside. */
@@ -1279,15 +1283,15 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     // $other greys the days either side of the month — they're still tappable.
     $cell = function (string $ymd, int $num, bool $other, int $week) use ($byDay, $todayYmd): string {
         $events = $byDay[$ymd] ?? [];
-        $icons  = '';
+        $icons  = [];
         $seen   = [];
         foreach ($events as $ev) {
             if ($ev['kind'] !== 'event') { continue; }
             $c = (string) ($ev['color'] ?? '');
             if (isset($seen[$c])) { continue; }
             $seen[$c] = true;
-            $icons .= '<span class="ico event" style="color:' . e($c) . '">'
-                    . cal_legend_icon('event') . '</span>';
+            $icons[] = '<span class="ico event" style="color:' . e($c) . '">'
+                     . cal_legend_icon('event') . '</span>';
         }
         // Reminders group by folder colour, and each colour's icon takes the worst state
         // of *its* reminders: overdue beats open, and it only goes grey (hidden unless
@@ -1300,9 +1304,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             $open    = array_filter($rems, fn($ev) => !$ev['done']);
             $overdue = array_filter($open, fn($ev) => $ymd < $todayYmd || !empty($ev['rolled']));
             $cls     = !$open ? ' done' : ($overdue ? ' overdue' : '');
-            $icons .= '<span class="ico reminder' . $cls . '"'
-                    . ($c !== '' ? ' style="color:' . e((string) $c) . '"' : '') . '>'
-                    . cal_legend_icon('reminder') . '</span>';
+            $icons[] = '<span class="ico reminder' . $cls . '"'
+                     . ($c !== '' ? ' style="color:' . e((string) $c) . '"' : '') . '>'
+                     . cal_legend_icon('reminder') . '</span>';
         }
         $seen = [];
         foreach ($events as $ev) {
@@ -1310,9 +1314,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             $c = (string) ($ev['color'] ?? '');
             if (isset($seen[$c])) { continue; }
             $seen[$c] = true;
-            $icons .= '<span class="ico note" style="color:' . e($c) . '">'
-                    . cal_legend_icon('note') . '</span>';
+            $icons[] = '<span class="ico note" style="color:' . e($c) . '">'
+                     . cal_legend_icon('note') . '</span>';
         }
+        // The well holds six (three per row, two rows); a busier day keeps its first
+        // five and wears a + in the sixth slot to say there's more in the panel.
+        if (count($icons) > 6) {
+            $icons   = array_slice($icons, 0, 5);
+            $icons[] = '<span class="ico more" aria-label="More">+</span>';
+        }
+        $icons = implode('', $icons);
         $cls = 'cell' . ($other ? ' other' : '') . ($ymd === $todayYmd ? ' today' : '');
         return '<div class="' . $cls . '" data-date="' . $ymd . '" data-week="' . $week . '"'
              . ' role="button" tabindex="0"><div class="num">' . $num . '</div>'
@@ -2018,11 +2029,13 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   // Start on the selected day (today, or ?day=).
   const INITIAL_DAY = '<?= e($selDay) ?>';
   // An explicit ?day= in the URL always wins — that's someone arriving at a named day.
-  // Otherwise pick up where this session left off, reloading only when the day we want
-  // is in a month this page isn't drawing.
+  // Only a *bare* arrival (coming back to the app) restores the session's remembered
+  // day: ?ym= and ?wk= are deliberate paging, and restoring across them bounced every
+  // page-back straight back to the remembered day's month.
   (function () {
-    const asked = new URLSearchParams(location.search).get('day') || '';
-    const back  = asked ? '' : rememberedDay();
+    const q     = new URLSearchParams(location.search);
+    const asked = q.get('day') || '';
+    const back  = (asked || q.has('ym') || q.has('wk')) ? '' : rememberedDay();
     if (back && /^\d{4}-\d{2}-\d{2}$/.test(back) && back !== INITIAL_DAY) {
       if (document.querySelector('.cell[data-date="' + back + '"]')) { selectDay(back); return; }
       const u = new URL(location.href);

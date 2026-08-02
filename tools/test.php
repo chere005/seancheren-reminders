@@ -1044,6 +1044,16 @@ t('a month cell shows the legend icons, one per kind and colour', function () {
         'action' => 'cal_delete', 'id' => $calB['id'], 'confirm' => '1'], $jar, true);
 });
 
+t('paging is never bounced back by the remembered day', function () {
+    // The session's remembered day only restores on a *bare* arrival — ?ym= and ?wk=
+    // are deliberate paging, and restoring across them bounced every page-back (month
+    // and week mode both) straight back to the remembered day's month. The restore is
+    // JS, so the harness checks the guard it ships.
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    has("q.has('ym') || q.has('wk')", $b, 'paging arrivals skip the remembered-day restore');
+});
+
 t('the calendar ships the data its in-view legend is built from', function () {
     // The legend is drawn in JS from the cells actually on screen, so it can shrink to the
     // shown week(s) in week mode — the harness runs no JS, so this checks the ingredients the
@@ -2017,7 +2027,8 @@ t('wiring: the Calendar remembers the day, and the tab bar is what forgets it', 
 t('wiring: an explicit ?day= still wins over the remembered one', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
-    ok(preg_match("/URLSearchParams\(location\.search\)\.get\('day'\)/", $b) === 1,
+    ok(preg_match("/const q\s*=\s*new URLSearchParams\(location\.search\)/", $b) === 1
+       && strpos($b, "q.get('day')") !== false,
        'the URL is consulted before the remembered day');
 });
 

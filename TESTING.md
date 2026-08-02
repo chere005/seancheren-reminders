@@ -138,7 +138,11 @@ hidden), with the repeat count before its unit selector. *(By eye: the day-panel
 picker lists real sections and lands new reminders in one; the + buttons reveal their fields
 and the × folds them. **The legend renders only the dots actually in view** — the whole month
 in month mode, only the shown week(s) in week mode, updating as you page weeks — and its glyph
-colours match the day dots, including colours propagated from a Reminders/Notes folder.)*
+colours match the day dots, including colours propagated from a Reminders/Notes folder.
+**Paging back and forward works in both modes**, including across month edges in week mode —
+the remembered day restores only on a bare arrival, never by bouncing deliberate paging.
+Every day cell is the same size: the icons sit in a fixed two-row well, three per row on a
+phone, and a day with more than six wears five plus a `+` in the sixth slot.)*
 
 ### `habits`
 Ticking a day answers with the new state and stores it. Habits add, rename and delete. A
