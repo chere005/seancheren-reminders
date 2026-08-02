@@ -1558,18 +1558,32 @@ t('every app palette offers six colours and validates its own', function () {
         ok(palette_has($app, app_palette($app)[0]), 'own colour validates');
         ok(palette_has($app, app_palette($app, true)[0]), 'shared colour validates');
         ok(!palette_has($app, '#ff0000'), 'a stranger does not');
-        // The shared (partner) set is significantly lighter than the own set — that's the
-        // whole point of the two tiers.
+        // The shared (partner) set is a matching lighter version of the own set: clearly
+        // lighter, and the same hue — a pastel of this app's shade, not some other app's.
         foreach (range(0, 5) as $i) {
             ok($lum(app_palette($app, true)[$i]) > $lum(app_palette($app)[$i]) + 30,
                "$app shared colour $i is clearly lighter than own");
         }
+        foreach (range(0, 4) as $i) {   // hue is meaningless on the grey, so 0–4
+            [$ho] = pal_hsl(app_palette($app)[$i]);
+            [$hs] = pal_hsl(app_palette($app, true)[$i]);
+            $d = abs($ho - $hs);
+            ok(min($d, 360 - $d) < 4, "$app shared colour $i keeps its hue");
+        }
     }
-    // The palette is fixed across every app now — own is identical everywhere, and so is
-    // shared — so the same hue reads the same way in reminders, calendar, notes and habits.
-    foreach (['calendar', 'notes', 'habits'] as $app) {
-        eq(app_palette('reminders'), app_palette($app), "$app own matches reminders");
-        eq(app_palette('reminders', true), app_palette($app, true), "$app shared matches reminders");
+    // Each app wears the six hues at its own distinct shade — no two apps share a colour,
+    // and the gap is wide enough to see at dot size (sum of per-channel differences).
+    $dist = fn($a, $b) => abs(hexdec(substr($a, 1, 2)) - hexdec(substr($b, 1, 2)))
+                        + abs(hexdec(substr($a, 3, 2)) - hexdec(substr($b, 3, 2)))
+                        + abs(hexdec(substr($a, 5, 2)) - hexdec(substr($b, 5, 2)));
+    $apps = ['reminders', 'calendar', 'notes', 'habits'];
+    foreach ($apps as $x => $a) {
+        foreach (array_slice($apps, $x + 1) as $b) {
+            foreach (range(0, 5) as $i) {
+                ok($dist(app_palette($a)[$i], app_palette($b)[$i]) >= 40,
+                   "$a and $b hue $i are distinct shades");
+            }
+        }
     }
 });
 

@@ -224,7 +224,7 @@ store_write($file('notes'), [
 // A short, honest few weeks — enough for the week grid and the month pies to have shape.
 $hSecKitchen = $id();
 $hSecRest    = $id();
-$habitPal = app_palette('habits', true);   // habits borrows the lighter reminders tier
+$habitPal = app_palette('habits');   // the own tier — the shared one fails the swatch check and silently reverts
 $habitSpec = [
     ['Cook something new', $hSecKitchen, 0.35],
     ['Wash up before bed', $hSecKitchen, 0.70],

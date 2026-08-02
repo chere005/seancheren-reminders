@@ -178,8 +178,10 @@ The parser is slash-only and US-order, and `2/3 cup` parsing as a date is assert
 known limitation it is rather than left to surprise someone. Month and year repeats clamp
 the day (Jan 31 → Feb 28, Feb 29 → Feb 28) instead of sliding. `repeat_next()`.
 `folder_tint()` is 8-digit hex and refuses anything else. `plus_icon_svg()` is never a
-text plus. Every palette has six colours and validates its own; habits borrows the
-reminders tier. `reminders_folder_migrate()` is idempotent. Output is escaped.
+text plus. Every palette has six colours and validates its own; each app's shade of a
+hue is measurably distinct from every other app's, and its shared set is a clearly
+lighter same-hue version of its own. `reminders_folder_migrate()` is idempotent.
+Output is escaped.
 
 ### `pages`
 Every page renders for two seeded users with no fatal, warning or notice. The public
