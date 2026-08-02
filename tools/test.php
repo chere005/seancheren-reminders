@@ -1599,6 +1599,15 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     // A failure blushes the chip; there is no dashed ring around the dot any more.
     has('.sw.low b', $r['body'], 'the under-3:1 chip is marked');
     hasnt('dashed', $r['body'], 'no dashed border anywhere');
+    // The four proposal boards render, and each keeps its whole promise: every one of
+    // its swatches clears 3:1, so its head must say all clear, never a count.
+    foreach (range(0, 3) as $i) {
+        $at = strpos($r['body'], 'data-key="prop-' . $i . '"');
+        ok($at !== false, "proposal board $i renders");
+        $chunk = substr($r['body'], $at, strpos($r['body'], '</section>', $at) - $at);
+        has('all clear 3:1', $chunk, "proposal board $i is all clear");
+        hasnt('under 3:1', $chunk, "proposal board $i flags nothing");
+    }
     foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
 });
 

@@ -181,8 +181,9 @@ the day (Jan 31 → Feb 28, Feb 29 → Feb 28) instead of sliding. `repeat_next(
 text plus. Every palette has six colours and validates its own; each app's shade of a
 hue is measurably distinct from every other app's, and its shared set is a clearly
 lighter same-hue version of its own. The palettes viewer (`/userpalettes/`) renders and
-grades every swatch's hex label by its contrast on each theme board.
-`reminders_folder_migrate()` is idempotent. Output is escaped.
+grades every swatch's hex label by its contrast on each theme board; its four proposal
+boards (retunes of Midnight, Sage & Cream, Forest, Olive & Slate) must each report
+all-clear at 3:1. `reminders_folder_migrate()` is idempotent. Output is escaped.
 
 ### `pages`
 Every page renders for two seeded users with no fatal, warning or notice. The public
