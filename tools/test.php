@@ -878,6 +878,11 @@ t('wiring: rows carry the pencil and the page ships the conversion window', func
     has('id="convModal"', $b, 'the window is on the page');
     has('value="edit_full"', $b, 'and posts edit_full');
     has('input[name=kind]', $b, 'the kind switch is wired');
+    // The window is the Calendar's edit menu piece for piece: the same "Goes in"
+    // picker label and the same Delete / Cancel / Save row, Delete two-press on the left.
+    has('<span class="tlabel">Goes in</span>', $b, 'the picker label matches the calendar');
+    has('class="del needs-confirm" id="cvDelete"', $b, 'Delete, two-press, like the calendar');
+    has('.convmodal .buttons .del', $b, 'sitting left the way the calendar puts it');
 });
 
 // ---------------------------------------------------------------- 5. folders

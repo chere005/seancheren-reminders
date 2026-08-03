@@ -1362,7 +1362,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .convmodal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
     .convmodal .datewrap input[type=date], .convmodal .timerow input[type=time] {
       flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
-      border-radius: 6px; color: var(--text); font-size: 16px;
+      border-radius: 6px; color: var(--text); font-size: 0.95rem; color-scheme: dark;
     }
     .convmodal .cleardate {
       display: inline-flex; align-items: center; justify-content: center;
@@ -1388,6 +1388,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .convmodal .reprow .repunit { flex: 1; min-width: 0; }
     .convmodal .cvhint { font-size: 0.78rem; color: var(--muted); margin: -0.4rem 0 0.8rem; line-height: 1.4; }
     .convmodal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+    .convmodal .buttons .del {
+      margin-right: auto; background: none; border: none; color: var(--muted);
+      font-size: 0.85rem; cursor: pointer;
+    }
+    .convmodal .buttons .del:hover { color: #f66; }
     .convmodal .buttons button {
       padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
       font-weight: 600; cursor: pointer; font-family: inherit;
@@ -1602,7 +1607,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
         <div class="modal-backdrop" id="convModal">
           <form class="convmodal" method="post" action="" id="cvForm">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <input type="hidden" name="action" value="edit_full">
+            <input type="hidden" name="action" value="edit_full" id="cvAction">
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="hidden" name="id" id="cvId" value="">
             <h2>Edit reminder</h2>
@@ -1644,7 +1649,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
               </div>
             </div>
             <div class="calrow" id="cvSecRow">
-              <span class="tlabel">List</span>
+              <span class="tlabel">Goes in</span>
               <select name="fs" id="cvSec">
                 <?php foreach ($modalSecs as $mf => $secs): ?>
                   <optgroup label="<?= e((string) $mf) ?>">
@@ -1665,6 +1670,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
             </div>
             <p class="cvhint" id="cvHint" hidden>Saving as an event moves it to the calendar<span id="cvHintKids"> — this one keeps its subtasks here as a copy</span>.</p>
             <div class="buttons">
+              <button type="button" class="del needs-confirm" id="cvDelete">Delete</button>
               <button type="button" class="cancel" id="cvCancel">Cancel</button>
               <button type="submit" class="ok">Save</button>
             </div>
@@ -2387,6 +2393,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 
   var close = function () { modal.classList.remove('open'); };
   $('cvCancel').addEventListener('click', close);
+  $('cvDelete').addEventListener('click', function () {
+    $('cvAction').value = 'delete';
+    cvText.removeAttribute('required');    // don't block submit on empty text
+    document.getElementById('cvForm').submit();
+  });
   modal.addEventListener('click', function (e) { if (e.target === modal) { close(); } });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && modal.classList.contains('open')) { e.stopPropagation(); close(); }
