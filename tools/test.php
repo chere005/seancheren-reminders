@@ -4743,6 +4743,7 @@ t('projects lists the theme picker and CalMind with their links', function () {
     has('>CalMind</h3>', $b, 'the CalMind entry');
     has('href="https://github.com/chere005/CalMind"', $b, 'its repo link');
     has('seancheren.com/calmind', $b, 'and the link to the app');
+    has('/calmind/reminders/icon-180.png', $b, 'wearing CalMind\'s own icon');
     has('class="giticon"', $b, 'the icon links wear their icons');
 });
 
