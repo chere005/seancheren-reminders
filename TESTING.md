@@ -121,6 +121,13 @@ the Default-for-new-items picker. **Folder rename** works from the list heading 
 across and refuses a fixed/duplicate/empty name. *(By eye: both rename fields commit on
 Enter/blur; the collapse-all button above the top folder.)*
 
+### `usage`
+Every operation leaves one five-field line (time, IP, user, app, action) in
+`data/usage.log`: sign-in, failed sign-in, sign-out and a POST action are all logged, and
+the log **never carries what an action posted** — that negative is the promise under test.
+The file sits outside the web root (a fetch of `/data/usage.log` finds nothing) and stays
+plain text, not `ENC1:`. *(By eye: nothing — there is no UI for this log; read it over SSH.)*
+
 ### `calendar`
 The day payload is keyed by date. Within a day: events first in time order, then
 reminders, then notes; a day's reminders are undated-first, then oldest, then by time. An

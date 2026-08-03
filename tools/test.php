@@ -4164,6 +4164,41 @@ t('a tick with no token changes nothing', function () {
     ok(empty(rowBy('example', 'untouchable')['done']), 'still open with a wrong token');
 });
 
+// ---------------------------------------------------------------- the usage log
+// One line per operation in data/usage.log — who, from where, which app, what *kind*
+// of action — hooked once in require_login() so every app is covered. The promise
+// worth testing is the negative one: the log never carries content.
+area('usage');
+
+t('operations leave one line each — and never any content', function () {
+    $log = datadir() . '/usage.log';
+    @unlink($log);                                 // only this test's lines below
+    $jar = login('example', 'examplepassword');    // logs 'login'
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'All',
+        'folder' => 'Reminders', 'section' => '', 'text' => 'Skywritten secret 8/9'], $jar);
+    $b = (string) file_get_contents($log);
+    has("\texample\treminders\tlogin\n", $b, 'a sign-in is logged');
+    has("\texample\treminders\tadd\n", $b, 'an add logs user, app and kind');
+    hasnt('Skywritten', $b, 'never what it carried');
+    foreach (explode("\n", trim($b)) as $line) {
+        eq(5, count(explode("\t", $line)), 'every line is the same five fields');
+    }
+    // A failed sign-in logs the attempted name; logging out logs too.
+    req('POST', '/calmind/reminders/', ['username' => 'example', 'password' => 'wrong']);
+    req('GET', '/calmind/reminders/?logout', [], $jar);
+    $b = (string) file_get_contents($log);
+    has("\texample\treminders\tlogin_fail\n", $b, 'a failed sign-in is logged');
+    has("\texample\treminders\tlogout\n", $b, 'a sign-out is logged');
+});
+
+t('the log file lives outside the web root and is plain text', function () {
+    $r = req('GET', '/data/usage.log');
+    ok($r['status'] >= 400 || strpos((string) $r['body'], "\tlogin\n") === false,
+       'the log is not URL-reachable');
+    $b = (string) file_get_contents(datadir() . '/usage.log');
+    ok(strncmp($b, 'ENC1:', 5) !== 0, 'kept greppable, not encrypted — it holds no content');
+});
+
 // ---------------------------------------------------------------- the deploy script
 // Static checks, because a deploy is the one thing here that can destroy data and the
 // one thing no test run may actually perform. These are the promises deploy.sh makes in

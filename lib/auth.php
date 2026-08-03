@@ -10,9 +10,10 @@
  * After this returns, the visitor is authenticated and app_config() is available.
  */
 
-require_once __DIR__ . '/store.php';   // encrypted-at-rest storage helpers
-require_once __DIR__ . '/mail.php';    // sending the sign-up verification code
-require_once __DIR__ . '/util.php';    // small shared helpers (time parsing, …)
+require_once __DIR__ . '/store.php';    // encrypted-at-rest storage helpers
+require_once __DIR__ . '/mail.php';     // sending the sign-up verification code
+require_once __DIR__ . '/util.php';     // small shared helpers (time parsing, …)
+require_once __DIR__ . '/usagelog.php'; // per-user usage log (hooked below)
 
 function app_config(): array
 {
@@ -352,6 +353,7 @@ function require_login(string $area = 'App'): void
 
     // Logout
     if (isset($_GET['logout'])) {
+        usage_log('logout');
         $_SESSION = [];
         session_destroy();
         header('Location: ' . _self_path());
@@ -371,9 +373,11 @@ function require_login(string $area = 'App'): void
             session_regenerate_id(true);
             $_SESSION['auth'] = true;
             $_SESSION['user'] = $u;
+            usage_log('login', $u);
             header('Location: ' . suite_path() . LOGIN_LANDING);
             exit;
         }
+        usage_log('login_fail', $u);
         $error = 'Invalid username or password.';
     }
 
@@ -385,6 +389,13 @@ function require_login(string $area = 'App'): void
 
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(16));
+    }
+
+    // Every authenticated POST leaves one usage line — just the action's name, which
+    // is the kind of operation, never what it carried. One hook here covers every
+    // app, since they all pass through require_login() before handling anything.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '') !== '') {
+        usage_log((string) $_POST['action']);
     }
 
     // The settings window's theme pick, answered here for the same reason.
@@ -504,6 +515,7 @@ function signup_handle(array $cfg): array
         if (!signup_send_code($cfg, $email, $code)) {
             return ['signup', 'Couldn\'t send the email. Try again in a moment.', ''];
         }
+        usage_log('signup_request', $user);
         return ['verify', '', $user];
     }
 
@@ -521,6 +533,7 @@ function signup_handle(array $cfg): array
     if (!hash_equals((string) $p['code'], trim((string) ($_POST['code'] ?? '')))) {
         $pending[$user]['tries'] = (int) $p['tries'] + 1;
         store_write(signups_file($cfg), $pending);
+        usage_log('signup_badcode', $user);
         return ['verify', 'That code doesn\'t match.', $user];
     }
     $accounts = accounts_load($cfg);
@@ -532,6 +545,7 @@ function signup_handle(array $cfg): array
     session_regenerate_id(true);
     $_SESSION['auth'] = true;
     $_SESSION['user'] = $user;
+    usage_log('signup_ok', $user);
     header('Location: ' . suite_path() . LOGIN_LANDING);
     exit;
 }
