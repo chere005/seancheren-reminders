@@ -565,10 +565,12 @@ function render_login(string $area, string $error = '', string $stage = 'login',
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Reminders">
+  <?php // The login page is the suite's front door, so it presents as CalMind — the
+        // individual apps keep their own names on their own pages. ?>
+  <meta name="apple-mobile-web-app-title" content="CalMind">
   <link rel="apple-touch-icon" href="<?= suite_path() ?>/reminders/icon-180.png">
   <link rel="icon" href="<?= suite_path() ?>/reminders/icon-192.png">
-  <link rel="manifest" href="<?= suite_path() ?>/reminders/manifest.webmanifest?v=2">
+  <link rel="manifest" href="<?= suite_path() ?>/manifest.webmanifest">
   <style>
     <?= theme_css() ?>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

@@ -357,6 +357,17 @@ t('a signed-out visitor gets the login page, not the app', function () {
     }
 });
 
+t('the login page presents as CalMind to a home screen too', function () {
+    // The card said CalMind but the page's install identity still said Reminders — the
+    // iOS title meta and the linked manifest are what a home-screen add actually reads.
+    $b = req('GET', '/calmind/reminders/')['body'];
+    has('apple-mobile-web-app-title" content="CalMind"', $b, 'the iOS home-screen name is CalMind');
+    has('/calmind/manifest.webmanifest', $b, "and it links the suite's own manifest");
+    $m = json_decode((string) file_get_contents(__DIR__ . '/../public/calmind/manifest.webmanifest'), true);
+    eq('CalMind', $m['name'] ?? null, 'the manifest names the suite');
+    eq('/calmind/calendar/', $m['start_url'] ?? null, 'and starts where signing in lands');
+});
+
 t('the old suite paths 301 to their /calmind/ homes', function () {
     // Installed home-screen icons, bookmarks and widget scripts still point at the old
     // roots; each carries a stub that forwards, keeping any query string intact.
