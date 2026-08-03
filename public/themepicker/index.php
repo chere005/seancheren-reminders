@@ -15,8 +15,14 @@ function e(?string $s): string { return htmlspecialchars((string) $s, ENT_QUOTES
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'settheme') {
     $t = (string) ($_POST['theme'] ?? '');
     if (isset(THEMES[$t])) {
+        // Scope the cookie to this instance, like the session cookies: a theme picked
+        // on /test/ or /dev/ must not re-dress production's pages, or the other way.
+        $path = '/';
+        foreach (['/test/', '/dev/'] as $b) {
+            if (strncmp($_SERVER['REQUEST_URI'] ?? '/', $b, strlen($b)) === 0) { $path = rtrim($b, '/') . '/'; }
+        }
         setcookie('sitetheme', $t, [
-            'expires' => time() + 31536000, 'path' => '/',
+            'expires' => time() + 31536000, 'path' => $path,
             'secure' => !empty($_SERVER['HTTPS']), 'httponly' => true, 'samesite' => 'Lax',
         ]);
     }

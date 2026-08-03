@@ -4757,6 +4757,12 @@ t('picking a theme sets the sitetheme cookie and re-dresses the public pages', f
     $r = req('POST', '/themepicker/', ['action' => 'settheme', 'theme' => 'sage'], $jar);
     eq(302, $r['status'], 'POST→redirect→GET');
     eq('sage', $jar['sitetheme'] ?? null, 'the cookie carries the choice');
+    // At the site root the cookie is site-wide; the /test/ and /dev/ mirrors narrow it
+    // to their own prefix (a text check, since the mirrors only exist on the server).
+    $ck = implode("\n", array_filter($r['headers'], fn($h) => stripos($h, 'Set-Cookie:') === 0));
+    has('path=/', strtolower($ck), 'the cookie names its path');
+    $src = file_get_contents(dirname(__DIR__) . '/public/themepicker/index.php');
+    has("['/test/', '/dev/']", $src, 'the cookie path is scoped per instance');
     foreach (['/', '/themepicker/'] as $p) {
         $b = req('GET', $p, [], $jar)['body'];
         has('#fefae0', strtolower($b), "$p wears sage");
