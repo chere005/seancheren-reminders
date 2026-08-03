@@ -101,9 +101,17 @@ section on add resolves to the folder's first, and the folder's last section can
 deleted — covered for both Reminders and Notes, plus `sections_normalize()` as a unit
 (default per folder, re-home loose, idempotent). The **Manage-folders "Default for new
 items"** picker sets folder+section together (`set_default_section`) and coerces a bogus
-section to a real one. The **collapse-all** button ships in the toolbar. *(By eye: the
+section to a real one. The **collapse-all** button ships in the toolbar. **The full-edit
+pencil (`edit_full`)**: updates text/date/time/repeat in place and re-files to another
+folder/section (subtasks travelling along); switching the kind to **Event** writes the
+event into my events file — a stray calendar id falls back to a real one, an undated
+conversion lands on today — and removes the reminder *unless it has subtasks*, which keep
+it here as a deliberate copy. A shared view answers `edit_full` with a 403 and renders no
+pencil, and no conversion window. *(By eye: the
 collapse-all toggle actually folds/expands, the toolbar↔first-divider gap matches the gap
-above the toolbar, and the folder-head rename field in edit mode.)*
+above the toolbar, and the folder-head rename field in edit mode. The row pencil opens the
+edit window filled from the row; the kind switch swaps List for Calendar and the hint says
+whether a copy stays; +Date/+Time/+Repeat reveal and fold.)*
 
 ### `folders`
 Add and delete, with a deleted folder's items falling back rather than being destroyed.
@@ -140,7 +148,9 @@ The day payload is keyed by date. Within a day: events first in time order, then
 reminders, then notes; a day's reminders are undated-first, then oldest, then by time. An
 undated Calendar-folder reminder rides on today and is **not** flagged overdue. Adding,
 editing and deleting an item from the day panel, with delete needing the second press.
-Calendars add, recolour, default and delete. A calendar row tap leaves only it showing and
+Calendars add, recolour, **rename** (`cal_rename`: id keeps, colour survives, a blank name
+or a partner's id changes nothing; the manage window renames in place from a pencil) —
+plus default and delete. A calendar row tap leaves only it showing and
 `All` puts them back. Ticking a repeat from the calendar rolls it. A month cell wears **one
 kind icon per colour** — two calendars' events on one day draw two calendar glyphs, and no
 cell repeats a kind+colour pair. The **dot legend** is
@@ -186,12 +196,22 @@ section dropdowns list real sections and open on the stored default; the **+ Rep
 reveals its aligned count/unit and is hidden for notes.)*
 
 ### `sharing`
-`SHARE_PAIRS` is right and a stranger has no partner. A partner's shared folder shows and
-an unshared one doesn't. Writing into a shared folder writes to *their* file, not mine.
-Structural edits to their folder are a 403 that changes nothing. `share_set` both ways.
-A shared row **ticks from the All view**: the check posts against their file and `ret=All`
-lands the redirect back on All — the dead read-only mark is gone. *(By eye: the tick's
-flash and the row hiding/reappearing with Completed, from the All listing.)*
+`SHARE_PAIRS` seeds are right and a stranger has no partner. A partner's shared folder
+shows and an unshared one doesn't. Writing into a shared folder writes to *their* file,
+not mine. Structural edits to their folder are a 403 that changes nothing. `share_set`
+both ways. A shared row **ticks from the All view**: the check posts against their file
+and `ret=All` lands the redirect back on All — the dead read-only mark is gone.
+**Partner lists, strictly mutual**: two fresh accounts share *nothing* until each has
+added the other (`partner_add`) — one-sided is nothing, for either side; the moment one
+removes the other (`partner_del`, confirmed-second-press required), sharing ends both
+ways and the shared folder leaves the other's app. Rename replaces the entry; junk names
+and adding yourself are refused; case and whitespace clean to the stored form. The
+built-in pairs act as never-written seeds — untouched they still pair, a share toggle
+never disturbs them (`shares_save` carries `partners` through), deleting the seeded name
+opts out both ways and re-adding restores it. The share window ships its pencil and the
+partner window on every non-shared page, partner or none. *(By eye: the tick's flash and
+the row hiding/reappearing with Completed, from the All listing; the partner window's
+add/rename/two-press delete and the sharing/waiting badges updating live.)*
 
 ### `widget`
 The feed refuses a bad token and answers a good one with JSON. **The feed is read-only** —

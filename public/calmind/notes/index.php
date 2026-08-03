@@ -122,6 +122,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)),
                          folders_load($cfg['data_dir'])['reminders'], $myFolders);
     }
+    // The partner list behind the share window's pencil (see the Reminders app).
+    if (in_array($_POST['action'], ['partner_add', 'partner_rename', 'partner_del'], true) && !$isShared) {
+        share_partner_post($cfg['data_dir'], $me, (string) $_POST['action']);
+    }
 
     // Nothing destructive happens without the confirmed second press.
     if (in_array($_POST['action'], ['delete', 'delete_section', 'delete_folder'], true)
@@ -1156,7 +1160,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
           $titleControls = ob_get_clean();
       }
     ?>
-    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
+    <?= render_user_menu(false, 'editBtn', '', !$isShared, $titleControls) ?>
   </header>
 
 <?php if (!$editing): ?>
@@ -1181,7 +1185,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('notes'),
                             app_palette('notes', true), 'notes', true, $modalSecs, $defFolder, $defSec);
       } ?>
-  <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
+  <?php if (!$isShared) { echo share_modal_html($partner); } ?>
 
   <?php // A collapse-all button above the top folder — folds every folder block, or expands
         // them all on a second press (the same control Reminders puts by Completed). ?>
@@ -1612,7 +1616,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   });
   window.onSharesChanged = (s) => { window.SHARES = s; window.shareRender(); };
 </script>
-<?php if ($partner && !$isShared) { echo share_modal_script($csrf); } ?>
+<?php if (!$isShared) { echo share_modal_script($csrf, share_partner_rows($cfg['data_dir'], $me)); } ?>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
 <?= rt_script() ?>

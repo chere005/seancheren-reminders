@@ -756,6 +756,130 @@ t('picker dropdowns clamp horizontal overflow and wrap long names', function () 
     has('overflow-y: auto; overflow-x: hidden;', $c, 'the calendar menu pins overflow-x');
 });
 
+t('edit_full: the pencil window updates a reminder and can re-file it', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_folder', 'name' => 'Convsrc'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_folder', 'name' => 'Convdest'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'Convsrc',
+        'folder' => 'Convsrc', 'section' => '', 'text' => 'Water plants'], $jar);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Water plants') { $row = $x; } }
+    ok($row !== null, 'the reminder exists');
+
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'Convsrc',
+        'id' => $row['id'], 'kind' => 'reminder', 'text' => 'Water all plants',
+        'due' => '2030-05-01', 'time' => '09:30', 'rep_unit' => 'week', 'rep_n' => '2',
+        'fs' => "Convdest\x1FGeneral"], $jar);
+    $now = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $row['id']) { $now = $x; } }
+    eq('Water all plants', $now['text'] ?? '', 'text updated');
+    eq('2030-05-01', $now['due'] ?? '', 'date set');
+    eq('09:30', $now['time'] ?? '', 'time set');
+    eq(['n' => 2, 'unit' => 'week'], $now['repeat'] ?? null, 'repeat set');
+    eq('Convdest', $now['folder'] ?? '', 're-filed to the other folder');
+    eq('General', $now['section'] ?? '', 'into its first section');
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete', 'view' => 'All',
+        'id' => $row['id'], 'confirm' => '1'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete_folder', 'view' => 'All',
+        'name' => 'Convsrc', 'confirm' => '1'], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete_folder', 'view' => 'All',
+        'name' => 'Convdest', 'confirm' => '1'], $jar);
+});
+
+t('edit_full: converting a plain reminder moves it onto the calendar', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Team lunch'], $jar);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Team lunch') { $row = $x; } }
+    ok($row !== null, 'the reminder exists');
+    $cal = (string) (stored('calendars', 'example')[0]['id'] ?? '');
+
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row['id'], 'kind' => 'event', 'text' => 'Team lunch',
+        'due' => '2030-06-10', 'time' => '12:00', 'cal' => $cal], $jar);
+    $gone = true; $ev = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $row['id']) { $gone = false; } }
+    foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Team lunch') { $ev = $x; } }
+    ok($gone, 'no subtasks, so the reminder moved out entirely');
+    ok($ev !== null, 'and the event exists');
+    eq('2030-06-10', $ev['date'] ?? '', 'on the picked day');
+    eq('12:00', $ev['time'] ?? '', 'at the picked time');
+    eq($cal, $ev['cal'] ?? '', 'in the picked calendar');
+    // A stray calendar id is re-validated: it falls back to a real one, never lands raw.
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Stray cal check'], $jar);
+    $row2 = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Stray cal check') { $row2 = $x; } }
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row2['id'], 'kind' => 'event', 'text' => 'Stray cal check', 'cal' => 'nosuchcal'], $jar);
+    $ev2 = null;
+    foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Stray cal check') { $ev2 = $x; } }
+    ok($ev2 !== null && in_array($ev2['cal'], array_column(stored('calendars', 'example'), 'id'), true),
+       'a stray calendar id fell back to a real one');
+    eq(date('Y-m-d'), $ev2['date'] ?? '', 'and an undated conversion lands on today');
+    // Clean up both events so later feed/calendar counts aren't disturbed.
+    $evs = array_values(array_filter(stored('events', 'example'),
+        fn($x) => !in_array($x['text'] ?? '', ['Team lunch', 'Stray cal check'], true)));
+    store_write(user_data_file(datadir(), 'events', 'example'), $evs);
+});
+
+t('edit_full: a reminder with subtasks stays behind as a copy when converted', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Plan the trip'], $jar);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Plan the trip') { $row = $x; } }
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_subtask', 'view' => 'All',
+        'parent' => $row['id']], $jar);
+
+    $cal = (string) (stored('calendars', 'example')[0]['id'] ?? '');
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row['id'], 'kind' => 'event', 'text' => 'Plan the trip',
+        'due' => '2030-07-01', 'cal' => $cal], $jar);
+    $kept = null; $ev = null; $kid = false;
+    $list = stored('reminders', 'example');
+    foreach ($list as $i => $x) {
+        if (($x['id'] ?? '') === $row['id']) {
+            $kept = $x;
+            $kid  = isset($list[$i + 1]) && (int) ($list[$i + 1]['indent'] ?? 0) > 0;
+        }
+    }
+    foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Plan the trip') { $ev = $x; } }
+    ok($ev !== null, 'the event was written');
+    ok($kept !== null, 'but the reminder stayed — its subtasks live here');
+    ok($kid, 'with its subtask still under it');
+    // Clean up: the duplicate pair.
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete', 'view' => 'All',
+        'id' => $row['id'], 'confirm' => '1'], $jar);
+    $evs = array_values(array_filter(stored('events', 'example'), fn($x) => ($x['text'] ?? '') !== 'Plan the trip'));
+    store_write(user_data_file(datadir(), 'events', 'example'), $evs);
+});
+
+t('edit_full: a shared view is refused, and shared rows carry no pencil', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar);
+    $r = req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full',
+        'view' => '@buddy:Dinners', 'id' => 'x', 'kind' => 'event', 'text' => 'x'], $jar);
+    eq(403, $r['status'], "a shared view can't be full-edited — their rows aren't mine to convert");
+    $b = req('GET', '/calmind/reminders/?folder=' . urlencode('@buddy:Dinners'), [], $jar)['body'];
+    ok(strpos($b, 'class="rowedit"') === false, 'no pencil renders in a shared view');
+    ok(strpos($b, 'id="convModal"') === false, 'and no conversion window either');
+});
+
+t('wiring: rows carry the pencil and the page ships the conversion window', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    has('class="rowedit"', $b, 'rows carry the pencil');
+    has('body.editing .rowedit', $b, 'shown only in edit mode');
+    has('id="convModal"', $b, 'the window is on the page');
+    has('value="edit_full"', $b, 'and posts edit_full');
+    has('input[name=kind]', $b, 'the kind switch is wired');
+});
+
 // ---------------------------------------------------------------- 5. folders
 area('folders');
 
@@ -1232,7 +1356,7 @@ t('deleting a reminder or note from the calendar only unschedules it', function 
     eq('', (string) ($note2['date'] ?? ''), 'but its date is gone');
 });
 
-t('calendars: add, recolour, default, delete', function () {
+t('calendars: add, recolour, rename, default, delete', function () {
     $jar = login('example', 'examplepassword');
     $c = csrf($jar, '/calmind/calendar/');
     req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_add', 'name' => 'Testcal',
@@ -1248,9 +1372,38 @@ t('calendars: add, recolour, default, delete', function () {
         if ($x['id'] === $cal['id']) { eq($col, $x['color'], 'recoloured'); }
     }
 
+    // Rename keeps the id (events and shares point at it), only the name moves.
+    $r = req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_rename', 'id' => $cal['id'],
+        'name' => 'Renamedcal', 'ym' => date('Y-m')], $jar, true);
+    has('"Renamedcal"', $r['body'], 'the fresh list comes back renamed');
+    foreach (stored('calendars', 'example') as $x) {
+        if ($x['id'] === $cal['id']) { eq('Renamedcal', $x['name'], 'renamed in the file');
+                                       eq($col, $x['color'], 'colour survives the rename'); }
+    }
+    // A blank name is refused, and a partner's calendar id isn't in my list to rename.
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_rename', 'id' => $cal['id'],
+        'name' => '  ', 'ym' => date('Y-m')], $jar, true);
+    foreach (stored('calendars', 'example') as $x) {
+        if ($x['id'] === $cal['id']) { eq('Renamedcal', $x['name'], 'a blank rename changes nothing'); }
+    }
+    $buddyCal = stored('calendars', 'buddy')[0] ?? null;
+    ok($buddyCal !== null, 'buddy has a calendar to try against');
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_rename', 'id' => $buddyCal['id'],
+        'name' => 'Hijacked', 'ym' => date('Y-m')], $jar, true);
+    foreach (stored('calendars', 'buddy') as $x) {
+        if ($x['id'] === $buddyCal['id']) { eq($buddyCal['name'], $x['name'], "a partner's calendar can't be renamed from here"); }
+    }
+
     req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_delete', 'id' => $cal['id'],
         'confirm' => '1', 'ym' => date('Y-m')], $jar, true);
-    ok(!in_array('Testcal', array_column(stored('calendars', 'example'), 'name'), true), 'deleted');
+    ok(!in_array('Renamedcal', array_column(stored('calendars', 'example'), 'name'), true), 'deleted');
+});
+
+t('wiring: the manage window renames in place', function () {
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/calmind/calendar/', [], $jar);
+    has('crename-edit', $r['body'], 'own rows carry the rename pencil');
+    has("calApi('cal_rename'", $r['body'], 'which posts cal_rename');
 });
 
 t('tapping a calendar row leaves only it showing', function () {
@@ -1607,6 +1760,115 @@ t('share_set adds and removes a share', function () {
     req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
         'kind' => 'folder', 'key' => 'House', 'on' => ''], $jar, true);
     ok(!in_array('House', shares_load(datadir(), 'buddy')['folders'], true), 'unshared');
+});
+
+t('partners: sharing needs BOTH names added, and stops the moment one goes', function () {
+    // Two fresh accounts with no built-in pair — the handshake from nothing.
+    ensure_account('pat', 'patpassword');
+    ensure_account('quinn', 'quinnpassword');
+    eq(null, share_partner('pat'), 'no partner to start');
+
+    // pat adds quinn: one-sided, so still nothing — for either of them.
+    $jp = login('pat', 'patpassword');
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_add',
+        'name' => 'Quinn '], $jp, true);   // sloppy case/space cleans to 'quinn'
+    $j = json_decode($r['body'], true);
+    eq([['name' => 'quinn', 'mutual' => false]], $j['partners'] ?? null, 'listed, not yet mutual');
+    eq(null, share_partner('pat'),   "one-sided: pat still has no partner");
+    eq(null, share_partner('quinn'), 'and neither does quinn');
+
+    // quinn adds pat back: now — and only now — the partnership exists, both ways.
+    $jq = login('quinn', 'quinnpassword');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jq), 'action' => 'partner_add',
+        'name' => 'pat'], $jq, true);
+    eq('quinn', share_partner('pat'), 'mutual: pat sees quinn');
+    eq('pat', share_partner('quinn'), 'and quinn sees pat');
+
+    // And what a partnership carries: quinn shares a folder, pat's picker offers it.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jq), 'action' => 'add_folder',
+        'name' => 'Ourplans'], $jq);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jq), 'action' => 'share_set',
+        'kind' => 'folder', 'key' => 'Ourplans', 'on' => '1'], $jq, true);
+    has('@quinn:Ourplans', req('GET', '/calmind/reminders/?folder=All', [], $jp)['body'],
+        "quinn's shared folder reaches pat");
+
+    // quinn removes pat: everything stops at once, in both directions, shares intact or not.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jq), 'action' => 'partner_del',
+        'name' => 'pat', 'confirm' => '1'], $jq, true);
+    eq(null, share_partner('pat'),   'the safeguard: removal on one side ends it for both');
+    eq(null, share_partner('quinn'), 'quinn too');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jp)['body'];
+    ok(strpos($b, '@quinn:Ourplans') === false, "and quinn's folder is gone from pat's app");
+    // pat's own list still remembers quinn — as waiting, in case quinn comes back.
+    eq([['name' => 'quinn', 'mutual' => false]], share_partner_rows(datadir(), 'pat'));
+});
+
+t('partners: a removal without the confirmed second press does nothing', function () {
+    ensure_account('pat', 'patpassword');
+    $jp = login('pat', 'patpassword');
+    $before = share_partner_list(datadir(), 'pat');
+    ok(in_array('quinn', $before, true), 'quinn is on the list from the last test');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_del',
+        'name' => 'quinn'], $jp, true);
+    eq($before, share_partner_list(datadir(), 'pat'), 'no confirm, no removal');
+});
+
+t('partners: rename replaces the entry; junk and self-adds are refused', function () {
+    $jp = login('pat', 'patpassword');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_rename',
+        'name' => 'quinn', 'newname' => 'Robin'], $jp, true);
+    eq(['robin'], share_partner_list(datadir(), 'pat'), 'renamed (and lowercased)');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_add',
+        'name' => 'pat'], $jp, true);
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_add',
+        'name' => '../evil name'], $jp, true);
+    eq(['robin'], share_partner_list(datadir(), 'pat'), 'neither yourself nor junk can be added');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jp), 'action' => 'partner_del',
+        'name' => 'robin', 'confirm' => '1'], $jp, true);
+    eq([], share_partner_list(datadir(), 'pat'), 'cleaned up');
+});
+
+t('partners: the built-in pairs are seeds — they work untouched, and opt out cleanly', function () {
+    // Untouched lists: the pair still stands (this is what keeps sean ⇄ aki working).
+    eq('example', share_partner('buddy'));
+    eq('buddy', share_partner('example'));
+    // Toggling a share must not disturb the seeding (shares_save carries partners through).
+    $jar = login('buddy', 'buddypassword');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
+        'kind' => 'folder', 'key' => 'House', 'on' => '1'], $jar, true);
+    eq('example', share_partner('buddy'), 'a share toggle leaves the partnership alone');
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'share_set',
+        'kind' => 'folder', 'key' => 'House', 'on' => ''], $jar, true);
+    // buddy deletes the seeded example: sharing stops both ways, though example's own
+    // (virtual) list still names buddy — one side is never enough.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'partner_del',
+        'name' => 'example', 'confirm' => '1'], $jar, true);
+    eq(null, share_partner('buddy'), 'buddy opted out');
+    eq(null, share_partner('example'), 'which ends it for example too — strictly mutual');
+    // Adding the name back restores the pair.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'partner_add',
+        'name' => 'example'], $jar, true);
+    eq('example', share_partner('buddy'), 'and re-adding restores it');
+    eq('buddy', share_partner('example'));
+});
+
+t('wiring: the share window carries the pencil, and works before any partner exists', function () {
+    // A fresh account has no partner, but still gets the Share button, the window and
+    // the partner list — that's how the first partnership starts.
+    ensure_account('fresh', 'freshpassword');
+    $jar = login('fresh', 'freshpassword');
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('id="shareBtn"', $b, "$p offers Share with no partner");
+        has('id="shareEditBtn"', $b, "$p share window carries the pencil");
+        has('id="partnerModal"', $b, "$p ships the partner window");
+        has('No sharing partner yet', $b, "$p explains the empty state");
+    }
+    // With a partner, the window keeps its three lists and gains the pencil.
+    $jb = login('buddy', 'buddypassword');
+    $b = req('GET', '/calmind/reminders/', [], $jb)['body'];
+    has('id="shareCals"', $b, 'the share lists still render for a partnered user');
+    has('id="shareEditBtn"', $b, 'beside the pencil');
 });
 
 // ---------------------------------------------------------------- 11. widget / api
@@ -2150,19 +2412,21 @@ area('security');
 function ALL_ACTIONS(): array
 {
     return [
-        '/calmind/reminders/' => ['add', 'toggle', 'edit_text', 'delete', 'add_section', 'rename_section',
+        '/calmind/reminders/' => ['add', 'toggle', 'edit_text', 'edit_full', 'delete', 'add_section', 'rename_section',
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
                           'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
-                          'folder_vis_only', 'reorder_folders', 'share_set', 'change_password', 'set_theme'],
+                          'folder_vis_only', 'reorder_folders', 'share_set', 'partner_add',
+                          'partner_rename', 'partner_del', 'change_password', 'set_theme'],
         '/calmind/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
                           'reorder', 'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
-                          'folder_vis_only', 'reorder_folders', 'share_set'],
+                          'folder_vis_only', 'reorder_folders', 'share_set', 'partner_add',
+                          'partner_rename', 'partner_del'],
         '/calmind/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
-                          'toggle_reminder', 'cal_add', 'cal_color', 'cal_shared_color', 'cal_default',
+                          'toggle_reminder', 'cal_add', 'cal_rename', 'cal_color', 'cal_shared_color', 'cal_default',
                           'cal_delete', 'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
-                          'folder_vis', 'share_set'],
+                          'folder_vis', 'share_set', 'partner_add', 'partner_rename', 'partner_del'],
         '/calmind/habits/'    => ['toggle', 'rename_habit', 'set_section_color', 'reorder', 'add_habit',
                           'add_section', 'rename_section', 'delete_habit', 'delete_section',
                           'msec_vis', 'msec_only', 'msec_all'],
@@ -2171,6 +2435,17 @@ function ALL_ACTIONS(): array
         // too: a tick or an add with no token has to be as dead as anywhere else.
         '/calmind/calendar/quick.php' => ['tick', 'add_reminder', 'add_event'],
     ];
+}
+
+/**
+ * Visit every swept page once, so the one-time normalize-on-read repairs (sections,
+ * folder migration) land *before* a snapshot is taken. Without this the security area
+ * only passed when some earlier area happened to have loaded the pages first — running
+ * `php tools/test.php security` alone tripped over the repair, not over a real write.
+ */
+function warm_pages(array $jar): void
+{
+    foreach (array_keys(ALL_ACTIONS()) as $page) { req('GET', $page, [], $jar); }
 }
 
 /** A cheap fingerprint of everything a user owns, to prove a request changed nothing. */
@@ -2186,6 +2461,7 @@ function snapshot(string $user = 'example'): string
 
 t('every mutating action refuses a POST with no CSRF token', function () {
     $jar   = login('example', 'examplepassword');
+    warm_pages($jar);
     $before = snapshot();
     $checked = 0;
     foreach (ALL_ACTIONS() as $page => $actions) {
@@ -2203,6 +2479,7 @@ t('every mutating action refuses a POST with no CSRF token', function () {
 
 t('every mutating action refuses a POST with the wrong CSRF token', function () {
     $jar    = login('example', 'examplepassword');
+    warm_pages($jar);
     $before = snapshot();
     foreach (ALL_ACTIONS() as $page => $actions) {
         foreach ($actions as $a) {
@@ -2257,6 +2534,7 @@ t("one user cannot reach another user's file by asking for it", function () {
 
 t('the destructive actions all need the confirmed second press', function () {
     $jar = login('example', 'examplepassword');
+    warm_pages($jar);
     $before = snapshot();
     $tries = [
         ['/calmind/reminders/', ['action' => 'delete', 'view' => 'All', 'id' => (rows('example')[0]['id'] ?? 'x')]],

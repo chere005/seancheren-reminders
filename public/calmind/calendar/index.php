@@ -144,7 +144,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     $stay = '';   // extra query bits for the redirect (e.g. keep edit mode on)
 
     // --- Manage calendars (AJAX: answers with the fresh list, no reload) ---
-    if (in_array($action, ['cal_add', 'cal_delete', 'cal_color', 'cal_reorder', 'cal_default'], true)) {
+    if (in_array($action, ['cal_add', 'cal_delete', 'cal_rename', 'cal_color', 'cal_reorder', 'cal_default'], true)) {
         $calIdsNow = array_column($calList, 'id');
         $name      = mb_substr(trim(preg_replace('/\s+/', ' ', (string) ($_POST['name'] ?? ''))), 0, 40);
 
@@ -159,6 +159,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             foreach ($evs as &$ev) { if (($ev['cal'] ?? '') === $id) { $ev['cal'] = ''; $touched = true; } }
             unset($ev);
             if ($touched) { save_json_list($evFile, $evs); }
+        } elseif ($action === 'cal_rename' && $name !== '') {
+            // Calendars are keyed by id everywhere (events, shares, prefs), so a rename
+            // is just the name field — nothing else needs re-pointing. Only my own list
+            // is walked, so a partner's shared calendar can never be renamed from here.
+            foreach ($calList as &$c) {
+                if (($c['id'] ?? '') === $id) { $c['name'] = $name; break; }
+            }
+            unset($c);
         } elseif ($action === 'cal_color') {
             $color = (string) ($_POST['color'] ?? '');
             if (in_array($color, CAL_COLORS, true)) {
@@ -286,6 +294,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         share_handle_set($cfg['data_dir'], $me,
                          array_column($calList, 'id'),
                          $remFolders, folders_load($cfg['data_dir'])['notes']);
+    }
+
+    // --- The partner list behind the share window's pencil (see the Reminders app) ---
+    if (in_array($action, ['partner_add', 'partner_rename', 'partner_del'], true)) {
+        share_partner_post($cfg['data_dir'], $me, $action);
     }
 
     // An event's calendar, ignored unless it names one that exists.
@@ -1129,6 +1142,19 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .callist .cdel:hover { border-color: #f66; color: #f66; }
+    /* Rename pencil + its in-place field, matching the folder manager's pair. */
+    .callist .crename-edit {
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
+      padding: 0.2rem 0.4rem; cursor: pointer; font-family: inherit; line-height: 1;
+    }
+    .callist .crename-edit:hover { border-color: var(--muted); color: var(--text-dim); }
+    .callist input.crename {
+      flex: 1; min-width: 0; padding: 0.2rem 0.4rem; background: var(--surface);
+      border: 1px solid #3a3a3a; border-radius: 6px; color: var(--text);
+      font-size: 16px; font-family: inherit;   /* 16px stops iOS from zooming on focus */
+    }
+    .callist input.crename:focus { outline: none; border-color: var(--accent); }
     .callist .cmember { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; }
     /* Per-folder All/Dated/None dropdown: an icon-only button that drops a worded menu. */
     .rfmode { position: relative; flex: 0 0 auto; }
@@ -1247,7 +1273,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       </div>
     <?php $titleControls = ob_get_clean(); ?>
     <?php // Widget now sits in the shared settings footer, so no app-specific extra here. ?>
-    <?= render_user_menu(false, 'editBtn', '', (bool) $partner, $titleControls) ?>
+    <?= render_user_menu(false, 'editBtn', '', true, $titleControls) ?>
   </header>
 
 
@@ -1553,7 +1579,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   </div>
 </div>
 
-<?php if ($partner) { echo share_modal_html($partner); } ?>
+<?php echo share_modal_html($partner); ?>
 
 <div class="swatches" id="swatchPop" hidden></div>
 
@@ -2195,6 +2221,32 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         sw.addEventListener('click', e => { e.stopPropagation(); openSwatches(sw, c.id); });
         const name = document.createElement('span'); name.className = 'cname'; name.textContent = c.name;
         li.append(sw, name);
+        // Rename in place: the pencil swaps the name for a field; Enter or leaving it
+        // posts cal_rename (the fresh list redraws the row), Escape just redraws.
+        const pen = document.createElement('button');
+        pen.type = 'button'; pen.className = 'crename-edit'; pen.title = 'Rename'; pen.setAttribute('aria-label', 'Rename');
+        pen.innerHTML = <?= json_encode(pencil_icon_svg()) ?>;
+        pen.addEventListener('click', e => {
+          e.stopPropagation();
+          const inp = document.createElement('input');
+          inp.className = 'crename'; inp.maxLength = 40; inp.value = c.name;
+          inp.setAttribute('aria-label', 'Calendar name');
+          name.replaceWith(inp); pen.disabled = true;
+          let done = false;
+          const commit = () => {
+            if (done) { return; } done = true;
+            const v = inp.value.trim();
+            if (v === '' || v === c.name) { renderCals(); return; }
+            calApi('cal_rename', { id: c.id, name: v });
+          };
+          inp.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+            if (ev.key === 'Escape') { done = true; renderCals(); }
+          });
+          inp.addEventListener('blur', commit);
+          inp.focus(); inp.select();
+        });
+        li.append(pen);
         if (canDelete) {
           const del = document.createElement('button');
           del.type = 'button'; del.className = 'cdel needs-confirm'; del.textContent = '×'; del.title = 'Delete calendar';
@@ -2575,6 +2627,6 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   });
 </script>
 <?= chrome_script() ?>
-<?php if ($partner) { echo share_modal_script($csrf); } ?>
+<?php echo share_modal_script($csrf, share_partner_rows($cfg['data_dir'], $me)); ?>
 </body>
 </html>

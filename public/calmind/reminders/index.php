@@ -238,6 +238,11 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
             data-done="<?= $done ? '1' : '0' ?>"
             data-due="<?= e($r['due'] ?? '') ?>"
             data-text="<?= e($r['text'] ?? '') ?>"
+            data-time="<?= e($r['time'] ?? '') ?>"
+            data-rep-n="<?= (int) (($r['repeat']['n'] ?? 0) ?: 0) ?>"
+            data-rep-unit="<?= e($r['repeat']['unit'] ?? '') ?>"
+            data-folder="<?= e($r['folder'] ?? '') ?>"
+            data-rsection="<?= e($r['section'] ?? '') ?>"
             data-created="<?= (int) ($r['created'] ?? 0) ?>">
           <span class="drag-handle" title="Drag to reorder" aria-hidden="true">&#9776;</span>
           <form method="post" action="" style="display:inline">
@@ -253,6 +258,12 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
           <?php endif; ?>
           <?php if (!empty($r['due'])): ?>
             <span class="due <?= $when ?>"><?= e($r['due']) ?></span>
+          <?php endif; ?>
+          <?php // The full-edit pencil (edit mode only, my own top-level rows): opens the
+                // window that can also turn this reminder into an event. A subtask's slot
+                // holds its "‹" instead, and a partner's rows are never mine to convert. ?>
+          <?php if ((int) ($r['indent'] ?? 0) === 0 && strncmp($view, '@', 1) !== 0): ?>
+            <button type="button" class="rowedit" title="Edit" aria-label="Edit"><?= pencil_icon_svg(12) ?></button>
           <?php endif; ?>
           <?= subtask_button(min(1, (int) ($r['indent'] ?? 0)), $csrf, $view, (string) $r['id']) ?>
           <form method="post" action="" style="display:inline">
@@ -357,7 +368,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
 
     // A shared folder is someone else's list: you can work its reminders, but its
     // folders and sections stay theirs to arrange.
-    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder', 'reorder_folders'], true)) {
+    if ($isShared && in_array($_POST['action'], ['add_section', 'delete_section', 'delete_folder', 'reorder', 'reorder_folders', 'edit_full'], true)) {
         http_response_code(403);
         exit('That belongs to ' . htmlspecialchars(share_name($owner), ENT_QUOTES) . '.');
     }
@@ -375,6 +386,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     if ($_POST['action'] === 'share_set' && $partner && !$isShared) {
         share_handle_set($cfg['data_dir'], $me, array_keys(share_calendars($cfg['data_dir'], $me)),
                          $myFolders, folders_load($cfg['data_dir'])['notes']);
+    }
+    // The partner list behind the share window's pencil — reachable with no partner
+    // yet, since adding the first one is the whole point. Writes my own list only;
+    // sharing itself stays off until the other side adds me back (share_mutual()).
+    if (in_array($_POST['action'], ['partner_add', 'partner_rename', 'partner_del'], true) && !$isShared) {
+        share_partner_post($cfg['data_dir'], $me, (string) $_POST['action']);
     }
 
     // Folder actions don't touch the reminders list.
@@ -863,6 +880,82 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             }
             break;
 
+        case 'edit_full':
+            // The pencil's full-edit window: retype, redate, retime, repeat, refile — or
+            // switch the kind to Event, which writes an event onto one of my calendars.
+            // Converting moves the reminder out of this list unless it has subtasks;
+            // those can't ride on a calendar, so then the event is written and the
+            // reminder stays behind as their home (a deliberate duplicate).
+            $id     = (string) ($_POST['id'] ?? '');
+            $text   = trim((string) ($_POST['text'] ?? ''));
+            $kind   = ($_POST['kind'] ?? 'reminder') === 'event' ? 'event' : 'reminder';
+            $due    = (string) ($_POST['due'] ?? '');
+            $dueOk  = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $due);
+            $time   = trim((string) ($_POST['time'] ?? ''));
+            $timeOk = (bool) preg_match('/^\d{2}:\d{2}$/', $time);
+            $rep    = repeat_clean($_POST['rep_unit'] ?? '', $_POST['rep_n'] ?? 1);
+            $at     = null;
+            foreach ($list as $i => $it) {
+                if (!is_section($it) && ($it['id'] ?? '') === $id) { $at = $i; break; }
+            }
+            if ($id === '' || $text === '' || $at === null) { break; }
+            // Same reading as adding one: a typed "Vet 8/3 2pm" counts, and the window's
+            // own date/time fields win over it (the text then stays exactly as typed).
+            [$parsed, $pdate, $ptime] = parse_when_from_text($text);
+            $byHand  = $dueOk || $timeOk;
+            $ptext   = mb_substr($byHand ? $text : $parsed, 0, 500);
+            $effDue  = $dueOk ? $due : ($pdate ?? '');
+            $effTime = $timeOk ? $time : ($ptime ?? '');
+
+            if ($kind === 'event') {
+                // The calendar is re-validated against my own; a stray id falls back to
+                // the Calendar app's default (the reader tolerates '' too).
+                $calRows = store_read(user_data_file($cfg['data_dir'], 'calendars'));
+                $calIds  = [];
+                foreach ($calRows as $c) {
+                    if (($c['type'] ?? '') !== 'set' && !empty($c['id'])) { $calIds[] = (string) $c['id']; }
+                }
+                $cal = (string) ($_POST['cal'] ?? '');
+                if (!in_array($cal, $calIds, true)) {
+                    $d   = (string) (store_read(user_data_file($cfg['data_dir'], 'calprefs'))['default_cal'] ?? '');
+                    $cal = in_array($d, $calIds, true) ? $d : (string) ($calIds[0] ?? '');
+                }
+                $evFile = user_data_file($cfg['data_dir'], 'events');
+                $evs    = store_read($evFile);
+                // An event *is* its date, so an undated reminder converts onto today.
+                $evs[]  = ['id' => bin2hex(random_bytes(6)), 'text' => $ptext,
+                           'date' => $effDue !== '' ? $effDue : date('Y-m-d'),
+                           'time' => $effTime, 'cal' => $cal, 'repeat' => $rep, 'created' => time()];
+                store_write($evFile, array_values($evs));
+                // Subtasks are the rows following the parent at a deeper indent.
+                $kids = isset($list[$at + 1]) && !is_section($list[$at + 1])
+                     && (int) ($list[$at + 1]['indent'] ?? 0) > (int) ($list[$at]['indent'] ?? 0);
+                if (!$kids) { array_splice($list, $at, 1); }
+                break;
+            }
+
+            // Still a reminder: update it in place, and re-file it if the window moved it.
+            $list[$at]['text']   = $ptext;
+            $list[$at]['due']    = $effDue !== '' ? $effDue : null;
+            $list[$at]['time']   = $effTime !== '' ? $effTime : null;
+            $list[$at]['repeat'] = $rep;
+            $fs = (string) ($_POST['fs'] ?? '');
+            [$toFolder, $toSection] = strpos($fs, "\x1F") !== false ? explode("\x1F", $fs, 2) : ['', ''];
+            if ($toFolder !== '' && in_array($toFolder, $myFolders, true)) {
+                if (!isset($sectionSet[$toFolder . "\x1F" . $toSection])) {
+                    $toSection = $firstSec[$toFolder] ?? SECTION_DEFAULT_NAME;
+                }
+                // The subtasks travel with their parent, folder and section both.
+                $end = $at + 1;
+                while ($end < count($list) && !is_section($list[$end])
+                       && (int) ($list[$end]['indent'] ?? 0) > (int) ($list[$at]['indent'] ?? 0)) { $end++; }
+                for ($j = $at; $j < $end; $j++) {
+                    $list[$j]['folder']  = $toFolder;
+                    $list[$j]['section'] = $toSection;
+                }
+            }
+            break;
+
         case 'clear_done':
             // Clear completed within the folder being viewed (or all when viewing All).
             $list = array_filter($list, function ($r) use ($viewFolder) {
@@ -1230,6 +1323,77 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     /* The lift-out "‹" reads as the mirror of the section indent controls, so it stays
        the quieter of the two — adding is the common act, undoing is not. */
     .subtask-btn.out { font-size: 1.15rem; }
+    /* The full-edit pencil: edit mode only, left of the subtask "+", same 30px box. */
+    .rowedit {
+      display: none; flex: 0 0 auto; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 6px; line-height: 1; cursor: pointer; font-family: inherit;
+    }
+    .rowedit svg { display: block; }
+    body.editing .rowedit { display: inline-flex; }
+    .rowedit:hover { border-color: var(--muted); color: var(--text-dim); }
+
+    /* The pencil's window — the Calendar's edit modal brought over (same classes inside,
+       scoped to .convmodal so nothing here collides with the folder manager). */
+    .convmodal {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+      width: 100%; max-width: 380px; padding: 1.25rem; max-height: 85vh; overflow-y: auto;
+    }
+    .convmodal h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .convmodal input[type=text] {
+      width: 100%; padding: 0.6rem 0.75rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; margin-bottom: 0.85rem;
+    }
+    .convmodal input:focus, .convmodal select:focus { outline: none; border-color: var(--muted); }
+    .convmodal .kind { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .convmodal .kind label {
+      flex: 1; text-align: center; padding: 0.5rem; border: 1px solid var(--line);
+      border-radius: 6px; font-size: 0.9rem; color: var(--text-dim); cursor: pointer; user-select: none;
+    }
+    .convmodal .kind input { display: none; }
+    .convmodal .kind input:checked + span { color: var(--accent); font-weight: 700; }
+    .convmodal .kind label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .convmodal .daterow { margin-bottom: 1rem; }
+    .convmodal .adddate {
+      background: none; border: 1px dashed #3a5a4d; color: var(--accent); border-radius: 6px;
+      padding: 0.45rem 0.8rem; font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    }
+    .convmodal .adddate:hover { background: var(--accent-soft); }
+    .convmodal .datewrap { display: flex; align-items: center; gap: 0.5rem; }
+    .convmodal .datewrap input[type=date], .convmodal .timerow input[type=time] {
+      flex: 1; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px;
+    }
+    .convmodal .cleardate {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
+      padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1; font-family: inherit;
+    }
+    .convmodal .cleardate:hover { border-color: #f66; color: #f66; }
+    .convmodal .timerow { display: flex; align-items: center; gap: 0.5rem; }
+    .convmodal .calrow { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    /* [hidden] must win over the flex displays above, or every optional row shows at once. */
+    .convmodal .calrow[hidden], .convmodal .timerow[hidden], .convmodal .datewrap[hidden] { display: none; }
+    .convmodal .addrow-wrap { margin-bottom: 1rem; }
+    .convmodal .tlabel { font-size: 0.85rem; color: var(--text-dim); flex: 0 0 auto; width: 4.75rem; }
+    .convmodal .calrow select {
+      flex: 1; min-width: 0; padding: 0.5rem 0.6rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; font-family: inherit;
+    }
+    .convmodal .reprow .repevery { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--text-dim); }
+    .convmodal .reprow .repn {
+      width: 3rem; padding: 0.5rem 0.35rem; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 6px; color: var(--text); font-size: 16px; text-align: center;
+    }
+    .convmodal .reprow .repunit { flex: 1; min-width: 0; }
+    .convmodal .cvhint { font-size: 0.78rem; color: var(--muted); margin: -0.4rem 0 0.8rem; line-height: 1.4; }
+    .convmodal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+    .convmodal .buttons button {
+      padding: 0.55rem 1.1rem; border: none; border-radius: 6px; font-size: 0.95rem;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .convmodal .buttons .cancel { background: var(--surface-2); color: var(--text-dim); }
+    .convmodal .buttons .ok { background: var(--accent); color: var(--accent-ink); }
 
     /* A partner's shared folder shown read-only in my "All": their rows carry no controls,
        just a static tick where the check would be. The badge marks whose it is. */
@@ -1385,7 +1549,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                          array_merge($hidFolders, $sharedHidden), $csrf);
       $titleControls = ob_get_clean();
     ?>
-    <?= render_user_menu(false, 'editBtn', '', $partner && !$isShared, $titleControls) ?>
+    <?= render_user_menu(false, 'editBtn', '', !$isShared, $titleControls) ?>
   </header>
 
   <?php // Completed and Section keep the row under the header; the folder picker
@@ -1422,8 +1586,92 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
             ? $defSecRaw : ($modalSecs[$defFolder][0] ?? SECTION_DEFAULT_NAME);
         render_folder_modal($modalRows, $csrf, $view, '', app_palette('reminders'),
                             app_palette('reminders', true), 'reminders', true, $modalSecs, $defFolder, $defSec);
-      } ?>
-  <?php if ($partner && !$isShared) { echo share_modal_html($partner); } ?>
+
+        // The pencil's full-edit window — the Calendar's edit screen brought over, with
+        // the kind switch live so a reminder can become an event. My own calendars for
+        // the event side; my folder→section list (the same $modalSecs) for the reminder side.
+        $cvCals = [];
+        foreach (store_read(user_data_file($cfg['data_dir'], 'calendars')) as $c) {
+            if (($c['type'] ?? '') !== 'set' && !empty($c['id'])) {
+                $cvCals[] = ['id' => (string) $c['id'], 'name' => (string) ($c['name'] ?? 'Calendar')];
+            }
+        }
+        $cvDefCal = (string) (store_read(user_data_file($cfg['data_dir'], 'calprefs'))['default_cal'] ?? '');
+        if (!in_array($cvDefCal, array_column($cvCals, 'id'), true)) { $cvDefCal = $cvCals[0]['id'] ?? ''; }
+        ?>
+        <div class="modal-backdrop" id="convModal">
+          <form class="convmodal" method="post" action="" id="cvForm">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="edit_full">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="id" id="cvId" value="">
+            <h2>Edit reminder</h2>
+            <input type="text" name="text" id="cvText" placeholder="What is it?" maxlength="500" required>
+            <div class="kind" id="cvKindRow">
+              <label><input type="radio" name="kind" value="reminder" checked><span>&#9745; Reminder</span></label>
+              <label><input type="radio" name="kind" value="event"><span>&#128197; Event</span></label>
+            </div>
+            <div class="daterow">
+              <button type="button" class="adddate" id="cvAddDate">+ Add date</button>
+              <div class="datewrap" id="cvDateWrap" hidden>
+                <input type="date" name="due" id="cvDate" value="">
+                <button type="button" class="cleardate" id="cvClearDate" title="Remove date">&times;</button>
+              </div>
+            </div>
+            <div class="addrow-wrap">
+              <button type="button" class="adddate" id="cvAddTime">+ Time</button>
+              <div class="timerow" id="cvTimeRow" hidden>
+                <span class="tlabel">Time</span>
+                <input type="time" name="time" id="cvTime" value="">
+                <button type="button" class="cleardate" id="cvClearTime" title="Remove time">&times;</button>
+              </div>
+            </div>
+            <div class="addrow-wrap">
+              <button type="button" class="adddate" id="cvAddRepeat">+ Repeat</button>
+              <div class="calrow reprow" id="cvRepRow" hidden>
+                <span class="tlabel">Repeat</span>
+                <span class="repevery">every
+                  <input type="text" name="rep_n" id="cvRepN" value="1" maxlength="3" class="repn"
+                         inputmode="numeric" autocomplete="off"></span>
+                <select name="rep_unit" id="cvRepUnit" class="repunit">
+                  <option value="">Never</option>
+                  <option value="day">days</option>
+                  <option value="week">weeks</option>
+                  <option value="month">months</option>
+                  <option value="year">years</option>
+                </select>
+                <button type="button" class="cleardate" id="cvClearRep" title="Remove repeat">&times;</button>
+              </div>
+            </div>
+            <div class="calrow" id="cvSecRow">
+              <span class="tlabel">List</span>
+              <select name="fs" id="cvSec">
+                <?php foreach ($modalSecs as $mf => $secs): ?>
+                  <optgroup label="<?= e((string) $mf) ?>">
+                    <?php foreach ($secs as $sn): ?>
+                      <option value="<?= e($mf . "\x1F" . $sn) ?>"><?= e($sn) ?></option>
+                    <?php endforeach; ?>
+                  </optgroup>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="calrow" id="cvCalRow" hidden>
+              <span class="tlabel">Calendar</span>
+              <select name="cal" id="cvCal">
+                <?php foreach ($cvCals as $c): ?>
+                  <option value="<?= e($c['id']) ?>"<?= $c['id'] === $cvDefCal ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <p class="cvhint" id="cvHint" hidden>Saving as an event moves it to the calendar<span id="cvHintKids"> — this one keeps its subtasks here as a copy</span>.</p>
+            <div class="buttons">
+              <button type="button" class="cancel" id="cvCancel">Cancel</button>
+              <button type="submit" class="ok">Save</button>
+            </div>
+          </form>
+        </div>
+      <?php } ?>
+  <?php if (!$isShared) { echo share_modal_html($partner); } ?>
 
   <?php // Every folder on screen renders as a block: its sections, then the catch-all
         // that holds whatever isn't in one. The catch-all always renders, so there is
@@ -2088,6 +2336,94 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 </script>
 <?= folder_modal_script() ?>
 <?= chrome_script() ?>
-<?php if ($partner && !$isShared) { echo share_modal_script($csrf); } ?>
+<?php if (!$isShared) { echo share_modal_script($csrf, share_partner_rows($cfg['data_dir'], $me)); } ?>
+<?php if (!$isShared): ?>
+<script>(function () {
+  // The full-edit window behind each row's pencil. Opens filled from the row's data
+  // attributes; the kind switch swaps the List row for the Calendar one, and the hint
+  // says what converting will do — including whether subtasks keep a copy here.
+  var modal = document.getElementById('convModal');
+  if (!modal) { return; }
+  var $ = function (id) { return document.getElementById(id); };
+  var cvId = $('cvId'), cvText = $('cvText'), cvDate = $('cvDate'), cvDateWrap = $('cvDateWrap'),
+      cvAddDate = $('cvAddDate'), cvTime = $('cvTime'), cvTimeRow = $('cvTimeRow'), cvAddTime = $('cvAddTime'),
+      cvRepRow = $('cvRepRow'), cvAddRepeat = $('cvAddRepeat'), cvRepN = $('cvRepN'), cvRepUnit = $('cvRepUnit'),
+      cvSecRow = $('cvSecRow'), cvCalRow = $('cvCalRow'), cvSec = $('cvSec'),
+      cvHint = $('cvHint'), cvHintKids = $('cvHintKids');
+
+  var revealDate = function (on) { cvDateWrap.hidden = !on; cvAddDate.hidden = on; if (!on) { cvDate.value = ''; } };
+  var revealTime = function (on) { cvTimeRow.hidden = !on; cvAddTime.hidden = on; if (!on) { cvTime.value = ''; } };
+  var revealRep  = function (on) {
+    cvRepRow.hidden = !on; cvAddRepeat.hidden = on;
+    if (on && cvRepUnit.value === '') { cvRepUnit.value = 'week'; }
+    if (on && !(parseInt(cvRepN.value, 10) > 0)) { cvRepN.value = 1; }
+    if (!on) { cvRepUnit.value = ''; }
+  };
+  var hasKids = false;
+  var paintKind = function (k) {
+    cvSecRow.hidden = k !== 'reminder';
+    cvCalRow.hidden = k !== 'event';
+    cvHint.hidden = k !== 'event';
+    cvHintKids.style.display = hasKids ? '' : 'none';
+  };
+  modal.querySelectorAll('input[name=kind]').forEach(function (r) {
+    r.addEventListener('change', function () { if (r.checked) { paintKind(r.value); } });
+  });
+  cvAddDate.addEventListener('click', function () {
+    revealDate(true); cvDate.value = cvDate.value || '<?= date('Y-m-d') ?>';
+    cvDate.focus(); if (cvDate.showPicker) { try { cvDate.showPicker(); } catch (_) {} }
+  });
+  $('cvClearDate').addEventListener('click', function () { revealDate(false); });
+  cvAddTime.addEventListener('click', function () {
+    revealTime(true); cvTime.focus(); if (cvTime.showPicker) { try { cvTime.showPicker(); } catch (_) {} }
+  });
+  $('cvClearTime').addEventListener('click', function () { revealTime(false); });
+  cvAddRepeat.addEventListener('click', function () { revealRep(true); cvRepN.focus(); });
+  $('cvClearRep').addEventListener('click', function () { revealRep(false); });
+  cvRepUnit.addEventListener('change', function () {
+    if (cvRepUnit.value === '') { revealRep(false); return; }
+    if (!(parseInt(cvRepN.value, 10) > 0)) { cvRepN.value = 1; }
+  });
+
+  var close = function () { modal.classList.remove('open'); };
+  $('cvCancel').addEventListener('click', close);
+  modal.addEventListener('click', function (e) { if (e.target === modal) { close(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) { e.stopPropagation(); close(); }
+  }, true);
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.rowedit');
+    if (!btn) { return; }
+    var li = btn.closest('li');
+    if (!li) { return; }
+    var d = li.dataset;
+    cvId.value = d.id || '';
+    cvText.value = d.text || '';
+    revealDate(false); if (d.due) { cvDateWrap.hidden = false; cvAddDate.hidden = true; cvDate.value = d.due; }
+    revealTime(false); if (d.time) { cvTimeRow.hidden = false; cvAddTime.hidden = true; cvTime.value = d.time; }
+    var repOn = d.repUnit && parseInt(d.repN, 10) > 0;
+    cvRepUnit.value = repOn ? d.repUnit : ''; cvRepN.value = repOn ? d.repN : 1;
+    cvRepRow.hidden = !repOn; cvAddRepeat.hidden = !!repOn;
+    // The row's own list, so an untouched Save never re-files it. Every visible row's
+    // section is in the select (the list spans all my folders), but if it ever weren't,
+    // a temporary option pins the current spot rather than silently moving the row.
+    var want = (d.folder || '') + '\u001F' + (d.rsection || '');
+    cvSec.value = want;
+    if (cvSec.value !== want) {
+      var o = document.createElement('option');
+      o.value = want; o.textContent = (d.rsection || '') + ' (' + (d.folder || '') + ')';
+      cvSec.appendChild(o); cvSec.value = want;
+    }
+    // Subtasks are the rows that follow at a deeper indent — the next sibling says it all.
+    var next = li.nextElementSibling;
+    hasKids = !!(next && parseInt(next.style.getPropertyValue('--ind') || '0', 10) > 0);
+    var kr = modal.querySelector('input[name=kind][value=reminder]');
+    kr.checked = true; paintKind('reminder');
+    modal.classList.add('open');
+    setTimeout(function () { cvText.focus(); }, 30);
+  });
+})();</script>
+<?php endif; ?>
 </body>
 </html>
