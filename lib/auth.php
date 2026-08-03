@@ -446,7 +446,7 @@ function require_login(string $area = 'App'): void
  * (encrypted like everything else) with its code and a fifteen-minute expiry.
  */
 /** The code every sign-up gets while emailing is switched off. */
-const SIGNUP_CODE = '1234';
+const SIGNUP_CODE = '5678';
 
 function signups_file(array $cfg): string
 {

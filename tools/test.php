@@ -3799,7 +3799,7 @@ t('a wrong code is counted and the fifth one ends the sign-up', function () use 
     for ($i = 0; $i < 5; $i++) {
         req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '9999'], $jar);
     }
-    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => '1234'], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'doomed', 'code' => SIGNUP_CODE], $jar);
     eq(200, $r['status'], 'even the right code is too late now');
     ok(!isset(store_read($scratch . '/accounts.json')['doomed']), 'no account was made');
     ok(!isset(store_read($scratch . '/signups.json')['doomed']), 'and the pending row is gone');
@@ -3810,7 +3810,7 @@ t('the right code makes the account and signs you in', function () use ($scratch
     req('GET', '/calmind/reminders/', [], $jar);
     req('POST', '/calmind/reminders/', ['action' => 'signup', 'newuser' => 'newbie',
         'email' => 'newbie@example.com', 'newpass' => 'newbiepass'], $jar);
-    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'newbie', 'code' => '1234'], $jar);
+    $r = req('POST', '/calmind/reminders/', ['action' => 'verify', 'newuser' => 'newbie', 'code' => SIGNUP_CODE], $jar);
     eq(302, $r['status'], 'verifying redirects');
     eq('/calmind/calendar/', $r['location'], 'straight into the app');
     $acc = store_read($scratch . '/accounts.json');
