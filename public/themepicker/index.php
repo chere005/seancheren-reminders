@@ -35,9 +35,6 @@ $current = site_theme();
 ob_start();
 ?>
 <h1>Themes</h1>
-<p>The four themes from the apps, tried on this site. Each card below is a read-only
-preview; picking one re-dresses the public pages here (Home, Projects, About, Contact)
-in this browser. The apps keep their own per-account theme — nothing here touches them.</p>
 
 <style>
   .tp-card { border: 1px solid var(--line); border-radius: 12px; margin: 1rem 0; overflow: hidden; }
