@@ -651,7 +651,9 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
 
       // The show/hide box lives inside the row's link, so it has to swallow the click
       // that would otherwise navigate to that folder. It posts in the background and
-      // reloads to re-filter what's on screen.
+      // then lands on the "All" view — the ticks describe the All canvas, so composing
+      // them from a single-folder view used to change the flags while the screen kept
+      // showing just that folder, which read as the boxes doing nothing at all.
       m.addEventListener('click', function (e) {
         var cb = e.target.closest('.fvis');
         if (!cb) { return; }
@@ -660,15 +662,15 @@ function render_folder_pick(array $groups, string $active, string $activeLabel =
         cb.classList.toggle('on', on);
         cb.setAttribute('aria-checked', on ? 'true' : 'false');
         before();
-        var reload = function () { location.reload(); };
+        var toAll = function () { location.href = location.pathname + '?folder=All'; };
         // "All" is a master switch: ticked only when every folder is showing, so one tap
         // shows them all, and a second — with them all already on — hides the lot.
         if (cb.classList.contains('fvis-all')) {
           var keys = allKeys();
           post({ csrf: CSRF, action: 'folder_vis_all', show: on ? '1' : '',
-                 keys: keys.join('\x1F') }, reload);
+                 keys: keys.join('\x1F') }, toAll);
         } else {
-          post({ csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' }, reload);
+          post({ csrf: CSRF, action: 'folder_vis', name: cb.dataset.folder, show: on ? '1' : '' }, toAll);
         }
       });
 

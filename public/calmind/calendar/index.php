@@ -2408,9 +2408,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         ? { csrf: CSRF, action: 'cal_vis_all', show: on ? 1 : '' }
         : { csrf: CSRF, action: 'cal_vis', name: cb.dataset.cal, show: on ? 1 : '' };
       try { sessionStorage.setItem('calPickOpen', '1'); } catch (_) {}
+      // Land on the all-calendars view (keeping the month and day): the ticks describe
+      // that view, and composing them from a single-calendar view used to change the
+      // flags while the grid kept showing just that calendar.
+      const u = new URL('?cal=all', location.href);
+      u.searchParams.set('ym', '<?= e($ym) ?>');
+      if (selected) u.searchParams.set('day', selected);
+      const go = () => { location.href = u.toString(); };
       fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
                   body: new URLSearchParams(body) })
-        .then(() => location.reload()).catch(() => location.reload());
+        .then(go).catch(go);
     });
     // Carry the open day across, the way the old select did. A tap on the checkbox is
     // handled above, so it never navigates.

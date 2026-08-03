@@ -76,6 +76,10 @@ $folders  = $isShared ? folders_load($cfg['data_dir'], $owner)['reminders'] : $m
 $defFolder = folder_default_get($cfg['data_dir'], 'reminders');
 $addTarget = $viewFolder === 'All' ? $defFolder : $viewFolder;
 $backUrl   = _self_path() . '?folder=' . urlencode($view);
+// A tick on a shared row in the "All" listing posts view=@partner:Folder (that's the
+// file it writes) but must land back on All, not jump into the shared view — ret says
+// so, and only 'All' is accepted so it can't carry anything else.
+if (($_POST['ret'] ?? '') === 'All') { $backUrl = _self_path() . '?folder=All'; }
 // Structural changes (folders, sections, deletes) are only reachable from edit mode,
 // so they hand it back on the way through — everything else lands out of edit mode.
 $editBack  = $backUrl . '&edit=1';
@@ -266,14 +270,24 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
 
 /** A read-only list of the partner's reminders (in "All"): text, time and due only —
  *  no check, drag or delete, since their data is never mine to edit. */
-function render_ro_rows(array $rows, string $today): void
+function render_ro_rows(array $rows, string $today, string $csrf, string $viewKey): void
 {
     echo '<ul class="rlist ro">';
     foreach (sort_by_date($rows) as $r) {
         $done = !empty($r['done']);
         $when = !empty($r['due']) ? ($r['due'] < $today ? 'past' : ($r['due'] === $today ? 'today' : 'future')) : '';
-        echo '<li class="ro-row' . ($done ? ' done' : '') . '">';
-        echo '<span class="ro-mark' . ($done ? ' on' : '') . '" aria-hidden="true">' . ($done ? '&#10003;' : '') . '</span>';
+        echo '<li class="ro-row' . ($done ? ' done' : '') . '" data-id="' . e($r['id'] ?? '') . '">';
+        // The one live control on a shared row here: the tick. It posts against the
+        // partner's file (view is the @partner:Folder key) and lands back on All —
+        // everything else about their list stays theirs to arrange.
+        echo '<form method="post" action="" style="display:inline">'
+           . '<input type="hidden" name="csrf" value="' . $csrf . '">'
+           . '<input type="hidden" name="action" value="toggle">'
+           . '<input type="hidden" name="view" value="' . e($viewKey) . '">'
+           . '<input type="hidden" name="ret" value="All">'
+           . '<input type="hidden" name="id" value="' . e($r['id'] ?? '') . '">'
+           . '<button class="check" type="submit" title="Toggle done">'
+           . ($done ? '&#10003;' : '&nbsp;&nbsp;') . '</button></form>';
         echo '<span class="text">' . e($r['text'] ?? '') . '</span>';
         if (!empty($r['time'])) { echo '<span class="attime">' . e(date('g:ia', strtotime($r['time']))) . '</span>'; }
         if (!empty($r['due']))  { echo '<span class="due ' . $when . '">' . e($r['due']) . '</span>'; }
@@ -285,7 +299,7 @@ function render_ro_rows(array $rows, string $today): void
 /** One of the partner's shared folders, rendered read-only in my "All": a badged head,
  *  then their sections and the loose catch-all, all non-interactive. */
 function render_shared_folder_ro(string $dir, string $partner, string $folder, string $key,
-                                 string $color, string $today): void
+                                 string $color, string $today, string $csrf): void
 {
     // Normalise their list in memory (never saved — their data is theirs) so their loose
     // reminders show under a real section rather than a nameless catch-all.
@@ -318,7 +332,7 @@ function render_shared_folder_ro(string $dir, string $partner, string $folder, s
             <?= section_collapse_button() ?>
             <span class="section-title"><?= e($sn) ?></span>
           </div>
-          <?php render_ro_rows($bySec[$sn], $today); ?>
+          <?php render_ro_rows($bySec[$sn], $today, $csrf, $key); ?>
         </div>
       <?php endforeach; ?>
       <?php if ($loose): ?>
@@ -327,7 +341,7 @@ function render_shared_folder_ro(string $dir, string $partner, string $folder, s
             <?= section_collapse_button() ?>
             <span class="section-title"><?= DEFAULT_SECTION ?></span>
           </div>
-          <?php render_ro_rows($loose, $today); ?>
+          <?php render_ro_rows($loose, $today, $csrf, $key); ?>
         </div>
       <?php endif; ?>
     </div>
@@ -1224,13 +1238,9 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.15rem;
     }
     ul.rlist.ro > li { padding-left: 0.25rem; }
+    /* A shared row's tick is the real .check control now; only the text stays theirs. */
     .ro-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--line-soft); }
     .ro-row.done .text { color: var(--muted); text-decoration: line-through; }
-    .ro-mark {
-      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 6px;
-      color: var(--accent); font-size: 0.95rem; line-height: 1;
-    }
 
     ul { list-style: none; }
     li {
@@ -1427,9 +1437,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     ?>
     <?php foreach ($renderUnits as $u): ?>
       <?php if ($u[0] === 'shared'):
-              // The partner's shared folder, read-only and badged, in its interleaved spot.
+              // The partner's shared folder in its interleaved spot: badged, structure
+              // read-only, but the ticks are live — they write to the partner's file
+              // and land back here on All.
               render_shared_folder_ro($cfg['data_dir'], $partner, $u[1], $u[3],
-                  folder_shared_color($sharedOverrides, $theirColors, 'reminders', $u[3], $u[1], $u[2]), $today);
+                  folder_shared_color($sharedOverrides, $theirColors, 'reminders', $u[3], $u[1], $u[2]), $today, $csrf);
               continue;
             endif; ?>
       <?php $sfolder = $u[1]; ?>

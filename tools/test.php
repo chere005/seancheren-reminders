@@ -1539,6 +1539,44 @@ t("writing into a partner's shared folder writes to their file", function () {
     }
 });
 
+t("a shared row ticks from the All view and lands back on All", function () {
+    // The All listing used to draw a partner's rows as dead read-only marks — the one
+    // thing you could not do from All was check something off their shared list. The
+    // tick is live now: it posts against their file (view=@partner:Folder) and ret=All
+    // brings the redirect back to All rather than jumping into the shared view.
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    has('name="ret" value="All"', $b, 'shared rows carry the return-to-All field');
+    hasnt('ro-mark', $b, 'the dead read-only mark is gone');
+    $row = null;
+    foreach (stored('reminders', 'buddy') as $r) {
+        if (($r['type'] ?? '') !== 'section' && ($r['folder'] ?? '') === 'Dinners'
+            && empty($r['done']) && empty($r['repeat'])) { $row = $r; break; }
+    }
+    ok($row !== null, 'an open row of theirs exists');
+    $r = req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'toggle',
+        'view' => '@buddy:Dinners', 'ret' => 'All', 'id' => $row['id']], $jar);
+    has('folder=All', (string) $r['location'], 'the redirect lands on All, not the shared view');
+    $now = null;
+    foreach (stored('reminders', 'buddy') as $x) { if (($x['id'] ?? '') === $row['id']) { $now = $x; } }
+    ok(!empty($now['done']), "the tick landed in buddy's file");
+    // And back again, so their data is left as found.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'toggle',
+        'view' => '@buddy:Dinners', 'ret' => 'All', 'id' => $row['id']], $jar);
+});
+
+t('a picker checkbox lands on the All view, so ticks match the screen', function () {
+    // Composing the boxes from a single-folder view used to flip the stored flags while
+    // the screen kept showing just that folder — the boxes read as doing nothing, even
+    // across a refresh. The box handler navigates to All now; the Calendar's does the
+    // same (keeping its month and day).
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    has("location.pathname + '?folder=All'", $b, 'the folder picker box lands on All');
+    $c = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    has("new URL('?cal=all', location.href)", $c, "the calendar's box lands on all calendars");
+});
+
 t("structural edits to a partner's folder are refused", function () {
     $jar = login('example', 'examplepassword');
     $view = '@buddy:Dinners';

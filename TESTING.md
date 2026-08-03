@@ -108,9 +108,12 @@ above the toolbar, and the folder-head rename field in edit mode.)*
 ### `folders`
 Add and delete, with a deleted folder's items falling back rather than being destroyed.
 The permanent folders can't be deleted. A colour off the palette is refused. The picker's
-three gestures: the box toggles one, a row tap makes it the only one showing, `All` shows
+three gestures: the box toggles one **and lands on the All view** (ticks describe the All
+canvas — from a single-folder view the flags used to change while the screen didn't, in
+the Calendar's picker too), a row tap makes it the only one showing, `All` shows
 everything and then hides everything. The default folder. The heading wears its colour as
-a wash and no longer carries a dot.
+a wash and no longer carries a dot. *(By eye: box taps from a single-folder view land on
+All with the menu reopened, in Reminders, Notes and the Calendar.)*
 
 ### `notes`
 Adding opens the editor. A body is sanitised on the way in — `<script>`, event handlers
@@ -186,6 +189,9 @@ reveals its aligned count/unit and is hidden for notes.)*
 `SHARE_PAIRS` is right and a stranger has no partner. A partner's shared folder shows and
 an unshared one doesn't. Writing into a shared folder writes to *their* file, not mine.
 Structural edits to their folder are a 403 that changes nothing. `share_set` both ways.
+A shared row **ticks from the All view**: the check posts against their file and `ret=All`
+lands the redirect back on All — the dead read-only mark is gone. *(By eye: the tick's
+flash and the row hiding/reappearing with Completed, from the All listing.)*
 
 ### `widget`
 The feed refuses a bad token and answers a good one with JSON. **The feed is read-only** —
