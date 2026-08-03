@@ -1,9 +1,19 @@
 <?php
-// Shared chrome for the static top-level pages (Home, Projects, About, Contact).
-// Dark theme echoing the Reminders app: #111 bg, #eee text, #34d399 accent, pill nav.
+// Shared chrome for the static top-level pages (Home, Projects, About, Contact, Themes).
+// Wears one of the suite's THEMES (lib/auth.php), chosen per browser by the `sitetheme`
+// cookie from /themepicker/ — midnight (the original #111/#eee/#34d399 look) by default.
+// The cookie only dresses these pages; the apps keep their own per-user theme prefs.
+
+require_once __DIR__ . '/auth.php';   // THEMES / theme_vars()
+
+/** The theme these public pages wear: the sitetheme cookie when it names a real one. */
+function site_theme(): string {
+  $t = (string) ($_COOKIE['sitetheme'] ?? '');
+  return isset(THEMES[$t]) ? $t : 'midnight';
+}
 
 function site_nav($active) {
-  $links = ['' => 'Home', 'projects' => 'Projects', 'about' => 'About', 'contact' => 'Contact'];
+  $links = ['' => 'Home', 'projects' => 'Projects', 'about' => 'About', 'contact' => 'Contact', 'themepicker' => 'Themes'];
   $out = '<nav class="sitenav">';
   foreach ($links as $slug => $label) {
     $href = $slug === '' ? '/' : '/' . $slug . '/';
@@ -15,6 +25,11 @@ function site_nav($active) {
 
 function site_page($active, $title, $bodyHtml) {
   $nav = site_nav($active);
+  $t = theme_vars(site_theme());
+  $vars = '';
+  foreach ($t['vars'] as $k => $v) { $vars .= "$k: $v; "; }
+  $scheme = $t['scheme'];
+  $bg = $t['vars']['--bg'];
   echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -22,12 +37,13 @@ function site_page($active, $title, $bodyHtml) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="$bg">
 <title>$title &middot; seancheren.com</title>
 <style>
-  :root { --accent: #34d399; --accent-ink: #06251b; }
+  :root { {$vars}color-scheme: $scheme; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #111; color: #eee;
+    margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.6; -webkit-font-smoothing: antialiased;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -35,35 +51,34 @@ function site_page($active, $title, $bodyHtml) {
   .wrap { max-width: 640px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
   .sitenav {
     display: flex; flex-wrap: wrap; gap: 0.5rem;
-    padding-bottom: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid #2a2a2a;
+    padding-bottom: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
   }
   .sitenav a {
-    text-decoration: none; color: #ccc; border: 1px solid #333; background: #1a1a1a;
+    text-decoration: none; color: var(--text-dim); border: 1px solid var(--line); background: var(--surface);
     border-radius: 999px; padding: 0.3rem 0.9rem; font-size: 0.95rem;
   }
-  .sitenav a:hover { background: #2a2a2a; color: #fff; }
+  .sitenav a:hover { background: var(--surface-2); color: var(--text); }
   .sitenav a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
   /* One luminance ramp rather than three unrelated colours: the page title is the
-     brightest thing on the page, section headings carry the accent, and subheadings are
-     a desaturated relative of it — so the hierarchy reads without any of the three
-     competing with the green of a link in body text. */
+     brightest thing on the page, section headings carry the accent, and subheadings sit
+     a step dimmer — so the hierarchy reads without any of the three competing with the
+     accent of a link in body text. */
   h1 {
-    font-size: 1.7rem; margin: 0.5rem 0 1rem; color: #fff;
+    font-size: 1.7rem; margin: 0.5rem 0 1rem; color: var(--text);
     letter-spacing: -0.015em; font-weight: 700;
   }
   h2 {
     font-size: 1.25rem; margin: 2rem 0 0.5rem; color: var(--accent);
     letter-spacing: -0.01em;
   }
-  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: #9fb8ae; font-weight: 600; }
-  p { margin: 0.75rem 0; color: #d8dcda; }
-  /* Underlined, and a touch lighter than the h2 green, so a link inside a section never
-     reads as another heading. */
-  a { color: #5fe0b0; text-underline-offset: 2px; }
-  a:hover { color: #8af0ca; }
+  h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: var(--text-dim); font-weight: 600; }
+  p { margin: 0.75rem 0; color: var(--text-dim); }
+  /* Underlined, so a link inside a section never reads as another heading. */
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:hover { opacity: 0.8; }
   ul { margin: 0.5rem 0; padding-left: 1.25rem; }
   li { margin: 0.2rem 0; }
-  .sig { margin-top: 1.5rem; color: #888; }
+  .sig { margin-top: 1.5rem; color: var(--muted); }
   .sig .date { font-size: 0.85rem; }
   .lists-col ul { columns: 2; column-gap: 2rem; }
   @media (max-width: 480px) { .lists-col ul { columns: 1; } }

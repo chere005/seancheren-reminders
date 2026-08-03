@@ -2334,7 +2334,7 @@ t('every page of the suite renders for a seeded user', function () {
 });
 
 t('the public pages need no login', function () {
-    foreach (['/', '/about/', '/projects/', '/contact/', '/chat/'] as $p) {
+    foreach (['/', '/about/', '/projects/', '/contact/', '/themepicker/', '/chat/'] as $p) {
         $r = req('GET', $p);
         eq(200, $r['status'], "$p status");
         hasnt('Fatal error', $r['body'], $p);
@@ -4706,7 +4706,7 @@ t('resolution goes mine, then theirs, then a default by position', function () {
 area('site');
 
 t('every public page renders for a stranger', function () {
-    foreach (['/', '/about/', '/projects/', '/contact/'] as $p) {
+    foreach (['/', '/about/', '/projects/', '/contact/', '/themepicker/'] as $p) {
         $r = req('GET', $p);
         eq(200, $r['status'], "$p status");
         hasnt('name="password"', $r['body'], "$p must not ask for a login");
@@ -4717,7 +4717,7 @@ t('every public page renders for a stranger', function () {
 });
 
 t('a public page wears the site nav and never the app tab bar', function () {
-    foreach (['/', '/about/', '/projects/', '/contact/'] as $p) {
+    foreach (['/', '/about/', '/projects/', '/contact/', '/themepicker/'] as $p) {
         $b = req('GET', $p)['body'];
         hasnt('class="tabbar"', $b, "$p must not carry the app tab bar");
         hasnt('segmented', $b, "$p must not carry the app segmented control");
@@ -4728,11 +4728,55 @@ t('a public page wears the site nav and never the app tab bar', function () {
 });
 
 t('the public pages are the same shell', function () {
-    foreach (['/about/', '/projects/', '/contact/'] as $p) {
+    foreach (['/about/', '/projects/', '/contact/', '/themepicker/'] as $p) {
         $b = req('GET', $p)['body'];
         has('<!DOCTYPE html', $b, "$p is a whole document");
         has('#34d399', strtolower($b), "$p carries the suite accent");
     }
+});
+
+t('projects links the CalMind repo with its git icon', function () {
+    $b = req('GET', '/projects/')['body'];
+    has('https://github.com/chere005/CalMind', $b, 'the repo link');
+    has('class="giticon"', $b, 'wearing the git icon');
+});
+
+t('the theme picker shows all four themes, read-only, current marked', function () {
+    $b = req('GET', '/themepicker/')['body'];
+    foreach (THEMES as $key => $row) {
+        has('>' . htmlspecialchars($row[0], ENT_QUOTES) . '<', $b, "$key is shown");
+    }
+    has('pointer-events: none', $b, 'the previews are inert');
+    // Midnight is the default, so its card says Current and carries no Use form.
+    has('>Current<', $b, 'the default theme is marked current');
+    eq(count(THEMES) - 1, substr_count($b, 'class="tp-use"'), 'every other theme offers Use');
+});
+
+t('picking a theme sets the sitetheme cookie and re-dresses the public pages', function () {
+    $jar = [];
+    $r = req('POST', '/themepicker/', ['action' => 'settheme', 'theme' => 'sage'], $jar);
+    eq(302, $r['status'], 'POST→redirect→GET');
+    eq('sage', $jar['sitetheme'] ?? null, 'the cookie carries the choice');
+    foreach (['/', '/themepicker/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('#fefae0', strtolower($b), "$p wears sage");
+        has('color-scheme: light', $b, "$p flips color-scheme for the cream theme");
+    }
+    // An unknown name is ignored: redirect, but no cookie and midnight stays.
+    $jar2 = [];
+    $r = req('POST', '/themepicker/', ['action' => 'settheme', 'theme' => 'plaid'], $jar2);
+    eq(302, $r['status'], 'a bad name still redirects');
+    ok(!isset($jar2['sitetheme']), 'and sets no cookie');
+    has('#111111', req('GET', '/', [], $jar2)['body'], 'the page stays midnight');
+});
+
+t('the sitetheme cookie never reaches the apps', function () {
+    $jar = login('example', 'examplepassword');
+    $jar['sitetheme'] = 'sage';
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
+    // The theme swatches in settings legitimately carry every theme's colours, so the
+    // check is what :root actually wears, not whether sage's hex appears anywhere.
+    has('--bg: #111111', $b, 'the app keeps its own per-user theme');
 });
 
 // ---------------------------------------------------------------- quick add / widget tick

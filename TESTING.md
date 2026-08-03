@@ -413,8 +413,12 @@ the palette, or a folder they never shared, is refused. Resolution goes mine, th
 then a shared-palette default by position.
 
 ### `site`
-Home, projects, about and contact render for a stranger, ask for no login, leak nothing,
-and carry the site nav — never the app tab bar.
+Home, projects, about, contact and the theme picker render for a stranger, ask for no
+login, leak nothing, and carry the site nav — never the app tab bar. Projects links the
+CalMind repo with its git icon. The theme picker shows all four suite themes as inert
+previews with the current one marked; picking one sets the `sitetheme` cookie
+(POST→redirect) and re-dresses the public pages — a bad name sets nothing — and the
+cookie never reaches the apps, which keep their own per-user theme.
 
 ### `quick`
 `quick.php` is the one page the widget can reach that writes. A quick add lands on today
