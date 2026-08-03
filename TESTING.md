@@ -226,7 +226,11 @@ opens a section name (and renaming works in Notes as well as Reminders, with the
 following the rename). Editing reads the date out of the text; a rename with no date in
 it leaves the date alone; a date picked by hand wins and leaves the text verbatim. Habits
 reorder, and a reorder that never mentions a habit keeps it. The Calendar remembers the
-day and the tab bar is what forgets it. The tab bar `+` uses a symmetric margin.
+day and the tab bar is what forgets it. The tab bar `+` uses a symmetric margin. Every
+chrome page ships the revive machinery: reload on return after five clear seconds away
+(and on a back-cache `pageshow`), standing down mid-edit and mid-typing. *(By eye: the
+actual revive — background the PWA, tick something from the widget or another device,
+come back and the check mark is there; and returning mid-typing must NOT reload.)*
 
 ### `security`
 Data-driven over **every mutating action in the suite**, so an action added next week is

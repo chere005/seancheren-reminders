@@ -2032,6 +2032,21 @@ t('wiring: the Calendar remembers the day, and the tab bar is what forgets it', 
     has('removeItem("calDay")', $cal, 'and tapping it asks for today again');
 });
 
+t('wiring: a page revived from the background reloads itself', function () {
+    // iOS restores a home-screen PWA's page from memory on app-switch, so ticks made
+    // elsewhere (the Calendar panel, the widget, a sharing partner, another device)
+    // never showed until a manual reload. Every chrome_script() page now reloads on
+    // return — after five clear seconds away, and never mid-edit or mid-typing. The
+    // behaviour is JS + iOS, so the harness checks each page ships the machinery.
+    $jar = login('example', 'examplepassword');
+    foreach (['/calmind/reminders/', '/calmind/calendar/', '/calmind/notes/', '/calmind/habits/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('Date.now() - away > 5000', $b, "$p reloads only after real time away");
+        has('if (e.persisted && !busy())', $b, "$p covers the back-forward cache too");
+        has("classList.contains('editing')", $b, "$p stands down while editing");
+    }
+});
+
 t('wiring: an explicit ?day= still wins over the remembered one', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/calmind/calendar/', [], $jar)['body'];

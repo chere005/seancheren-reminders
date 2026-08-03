@@ -955,6 +955,42 @@ function keep_scroll_script(): string
 JS;
 }
 
+/**
+ * Reload a page that comes back after time away. These are home-screen PWAs: iOS
+ * restores the last-rendered page from memory on app-switch (and Safari's back-cache
+ * does the same), so ticks and edits made elsewhere — the Calendar panel, the widget,
+ * another device, a sharing partner — never showed until a reload nobody thinks to do.
+ * Guarded so it can't interrupt anyone mid-act: never in edit mode, never while a
+ * field or the note editor holds focus, never with a window or swatch tray open, and
+ * only after five clear seconds away. The scroll keeper's stash carries the position
+ * across, so the refresh doesn't jump the list.
+ */
+function revive_script(): string
+{
+    return <<<'JS'
+<script>(function () {
+  var away = null;
+  var busy = function () {
+    if (document.body.classList.contains('editing')) { return true; }
+    var a = document.activeElement;
+    if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable)) { return true; }
+    return !!document.querySelector('[class*="modal"].open, details[open]');
+  };
+  var revive = function () {
+    try { sessionStorage.setItem('scroll:' + location.pathname, String(window.scrollY || 0)); } catch (_) {}
+    location.reload();
+  };
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { away = Date.now(); return; }
+    if (away !== null && Date.now() - away > 5000 && !busy()) { revive(); return; }
+    away = null;
+  });
+  // Safari's back-forward cache restores a page with no visibility change at all.
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !busy()) { revive(); } });
+})();</script>
+JS;
+}
+
 function chrome_script(): string
 {
     return "<script>(function(){var b=document.getElementById('userBtn'),m=document.getElementById('userMenu');"
@@ -979,5 +1015,6 @@ function chrome_script(): string
          . folder_collapse_script()
          . folder_collapse_all_script()
          . keep_scroll_script()
-         . keep_edit_script();
+         . keep_edit_script()
+         . revive_script();
 }
