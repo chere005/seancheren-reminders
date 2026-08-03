@@ -4735,10 +4735,15 @@ t('the public pages are the same shell', function () {
     }
 });
 
-t('projects links the CalMind repo with its git icon', function () {
+t('projects lists the theme picker and CalMind with their links', function () {
     $b = req('GET', '/projects/')['body'];
-    has('https://github.com/chere005/CalMind', $b, 'the repo link');
-    has('class="giticon"', $b, 'wearing the git icon');
+    has('>Theme Picker</h3>', $b, 'the theme picker entry');
+    has('href="/themepicker/"', $b, 'its T-icon link to the page');
+    has('https://github.com/chere005/CalMind/tree/main/public/themepicker', $b, 'and to its folder in the repo');
+    has('>CalMind</h3>', $b, 'the CalMind entry');
+    has('href="https://github.com/chere005/CalMind"', $b, 'its repo link');
+    has('seancheren.com/calmind', $b, 'and the link to the app');
+    has('class="giticon"', $b, 'the icon links wear their icons');
 });
 
 t('the theme picker shows all four themes, read-only, current marked', function () {
