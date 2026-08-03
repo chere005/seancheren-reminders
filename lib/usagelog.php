@@ -31,6 +31,12 @@ function usage_log(string $action, ?string $user = null): void
         $clean($action),
     ]) . "\n";
     @file_put_contents($file, $line, FILE_APPEND | LOCK_EX);
+    // The log is read over SSH, but on the live host the data dir belongs to the web
+    // user (drwx------) and the SSH login only shares its group. Add group traversal
+    // to the dir and group read to the log — self-healing, and nothing else in the
+    // dir becomes readable by it.
+    @chmod($dir, (((int) @fileperms($dir)) & 0777) | 0010);
+    @chmod($file, (((int) @fileperms($file)) & 0777) | 0040);
 }
 
 /** Which app the request hit, read off the URI: reminders, calendar, bookshelf, … */

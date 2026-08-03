@@ -89,7 +89,9 @@ JSON still reads. `user_data_file()` keeps one person's data out of another's.
 ### `reminders`
 Adding, with and without a date and time typed into the line. Ticking a plain reminder
 marks it done; ticking a repeat rolls it to the next occurrence instead and never marks
-it done. Inline text edit. Delete needs the confirmed second press. Sections add, rename
+it done — and the redirect carries `rolled=<id>` (a plain toggle must not), which the
+page turns into a flash on that row so the roll never reads as a dead checkbox. The
+calendar's `toggle_reminder` does the same. *(By eye: the flash itself, in both apps.)* Inline text edit. Delete needs the confirmed second press. Sections add, rename
 and delete. The subtask `+` creates a child under its parent — same folder, same section,
 `indent` 1, empty, focused on return — and does **not** indent the row it was pressed on.
 A subtask lifts back out. A section can never be indented. `clear_done` removes only the
@@ -126,7 +128,9 @@ Every operation leaves one five-field line (time, IP, user, app, action) in
 `data/usage.log`: sign-in, failed sign-in, sign-out and a POST action are all logged, and
 the log **never carries what an action posted** — that negative is the promise under test.
 The file sits outside the web root (a fetch of `/data/usage.log` finds nothing) and stays
-plain text, not `ENC1:`. *(By eye: nothing — there is no UI for this log; read it over SSH.)*
+plain text, not `ENC1:`; the writer leaves it group-readable and the data dir
+group-traversable, which is what lets the SSH login tail it on the live host.
+*(By eye: nothing — there is no UI for this log; read it over SSH.)*
 
 ### `calendar`
 The day payload is keyed by date. Within a day: events first in time order, then

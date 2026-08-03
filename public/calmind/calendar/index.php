@@ -391,7 +391,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 if ($rr !== null && empty($it['done']) && !empty($it['due'])) {
                     // A repeat never finishes: ticking it moves it to the next date.
                     // Never backwards, so a long-overdue one lands on its next future day.
+                    // Rolling silently read as a dead checkbox, so the redirect says
+                    // which row rolled and the day panel flashes it.
                     $it['due'] = repeat_next($it['due'], $rr, max($it['due'], date('Y-m-d')));
+                    $stay .= '&rolled=' . rawurlencode($id);
                 } else {
                     $it['done'] = empty($it['done']);
                 }
@@ -923,6 +926,11 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     /* Edit is an icon too, so it doesn't need the text buttons' side padding. */
     .dp-head .hedit { padding: 0.35rem 0.6rem; font-size: 0.95rem; }
     body.show-done .dp-head #calShowAll { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+    /* A ticked repeat rolls to its next date rather than checking off; the flash is
+       what says the tick worked. */
+    @keyframes rollflash { from { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+                           to   { background: transparent; box-shadow: none; } }
+    .dp-item.rolled-flash { animation: rollflash 2s ease-out; }
     .dp-item .dp-del { display: none; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
       padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
     body.editing .dp-item .dp-del { display: inline-block; }
@@ -1880,6 +1888,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       const overdue = it.kind === 'reminder' && !it.done && (date < TODAY || it.rolled);
       const row = document.createElement('div');
       row.className = 'dp-item' + (it.done ? ' done' : '');
+      row.dataset.id = it.id || '';
       // Reminders can be checked off right here.
       if (it.kind === 'reminder') {
         const cb = document.createElement('input');
@@ -2063,6 +2072,20 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       return;
     }
     if (INITIAL_DAY) selectDay(INITIAL_DAY);
+  })();
+
+  // A ticked repeat comes back as ?rolled=<id>: it didn't check off, it moved to its
+  // next date. If it's still on the panel, flash it; if it rolled off this day, the
+  // disappearance is its own feedback.
+  (function () {
+    const q = new URLSearchParams(location.search), rid = q.get('rolled');
+    if (!rid) { return; }
+    const u = new URL(location.href); u.searchParams.delete('rolled'); history.replaceState(null, '', u);
+    const row = document.querySelector('#dpList .dp-item[data-id="'
+      + (window.CSS && CSS.escape ? CSS.escape(rid) : rid) + '"]');
+    if (!row) { return; }
+    row.classList.add('rolled-flash');
+    setTimeout(() => row.classList.remove('rolled-flash'), 2200);
   })();
 
   document.getElementById('calShowAll').addEventListener('click', () => {

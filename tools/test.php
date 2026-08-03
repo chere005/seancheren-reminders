@@ -491,12 +491,26 @@ t('ticking a repeating reminder rolls it to the next date instead', function () 
     $row = rowBy('example', 'Water the tomatoes');       // every 2 days, from the seeder
     ok($row !== null, 'the seeded repeat exists');
     $was = $row['due'];
-    req('POST', '/calmind/reminders/',
+    $r = req('POST', '/calmind/reminders/',
         ['csrf' => csrf($jar), 'action' => 'toggle', 'view' => 'All', 'id' => $row['id']], $jar);
     $now = rowBy('example', 'Water the tomatoes');
     ok(empty($now['done']), 'a repeat is never marked done');
     ok($now['due'] > $was, "due should have moved forward (was $was, now {$now['due']})");
     eq(2, (int) round((strtotime($now['due']) - strtotime($was)) / 86400), 'by two days');
+    // Rolling silently read as a dead checkbox: the redirect names the rolled row and
+    // the page flashes it, so the tick visibly did something.
+    has('rolled=' . $row['id'], (string) $r['location'], 'the redirect says which row rolled');
+    $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
+    has('rolled-flash', $b, 'and the page ships the flash');
+    // A plain (non-repeating) toggle must not claim a roll.
+    $plain = rowBy('example', 'Book the rental car') ?? rowBy('example', 'col prop rem');
+    if ($plain) {
+        $r2 = req('POST', '/calmind/reminders/',
+            ['csrf' => csrf($jar), 'action' => 'toggle', 'view' => 'All', 'id' => $plain['id']], $jar);
+        hasnt('rolled=', (string) $r2['location'], 'a plain toggle carries no rolled=');
+        req('POST', '/calmind/reminders/',
+            ['csrf' => csrf($jar), 'action' => 'toggle', 'view' => 'All', 'id' => $plain['id']], $jar);
+    }
 });
 
 t('editing a reminder\'s text', function () {
@@ -1247,11 +1261,16 @@ t('ticking a reminder from the calendar rolls a repeat too', function () {
     $row = rowBy('example', 'Rent');       // monthly, from the seeder
     ok($row !== null);
     $was = $row['due'];
-    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'toggle_reminder',
+    $r = req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'toggle_reminder',
         'id' => $row['id'], 'day' => $was, 'ym' => date('Y-m')], $jar);
     $now = rowBy('example', 'Rent');
     ok(empty($now['done']), 'not marked done');
     ok($now['due'] > $was, 'rolled forward a month');
+    // The redirect names the rolled row so the day panel can flash it — the roll must
+    // read as the tick working, not as a checkbox that did nothing.
+    has('rolled=' . $row['id'], (string) $r['location'], 'the redirect says which row rolled');
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    has('rolled-flash', $b, 'and the page ships the flash');
 });
 
 // ---------------------------------------------------------------- 8. habits
@@ -4212,6 +4231,12 @@ t('the log file lives outside the web root and is plain text', function () {
        'the log is not URL-reachable');
     $b = (string) file_get_contents(datadir() . '/usage.log');
     ok(strncmp($b, 'ENC1:', 5) !== 0, 'kept greppable, not encrypted — it holds no content');
+    // On the live host the data dir belongs to the web user and the SSH login only
+    // shares its group — the writer adds group traversal to the dir and group read to
+    // the log, so `ssh … tail usage.log` works without opening anything else up.
+    clearstatcache();
+    ok((fileperms(datadir() . '/usage.log') & 0040) === 0040, 'the log is group-readable');
+    ok((fileperms(datadir()) & 0010) === 0010, 'the data dir is group-traversable');
 });
 
 // ---------------------------------------------------------------- the deploy script

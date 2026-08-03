@@ -799,7 +799,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     $rep = repeat_get($r);
                     if ($rep !== null && !$r['done'] && !empty($r['due'])) {
                         // A repeat never finishes: ticking it moves it to the next date.
+                        // Rolling silently read as a dead checkbox, so the redirect says
+                        // which row rolled and the page flashes it with its new date.
                         $r['due'] = repeat_next($r['due'], $rep, max($r['due'], date('Y-m-d')));
+                        $stay .= '&rolled=' . rawurlencode($id);
                     } else {
                         $r['done'] = !$r['done'];
                     }
@@ -1261,6 +1264,12 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .due.past   { color: var(--k-overdue); background: var(--k-overdue-bg); }   /* gone by */
     .due.today  { color: var(--k-reminder); background: var(--k-reminder-bg); }   /* due today */
     .due.future { color: var(--k-event-soft); background: var(--k-event-bg); }   /* still ahead */
+    /* A ticked repeat rolls to its next date rather than checking off; the flash is
+       what says the tick worked, and the date chip stays lit a moment longer. */
+    @keyframes rollflash { from { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+                           to   { background: transparent; box-shadow: none; } }
+    li.rolled-flash { animation: rollflash 2s ease-out; border-radius: 8px; }
+    li.rolled-flash .due { color: var(--accent); background: var(--accent-soft); }
     /* Fixed size + flex-centring, so the glyph (or the empty check) sits dead centre
        rather than being positioned by padding and a couple of &nbsp;s. */
     .check, .del {
@@ -2050,6 +2059,19 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     if (!li) { return; }
     li.scrollIntoView({ block: 'center', behavior: 'auto' });
     startInlineEdit(li, true);
+  })();
+
+  // A ticked repeat comes back as ?rolled=<id>: it didn't check off, it moved to its
+  // next date — flash the row so the tick visibly did something.
+  (function () {
+    const q = new URLSearchParams(location.search), rid = q.get('rolled');
+    if (!rid) { return; }
+    const u = new URL(location.href); u.searchParams.delete('rolled'); history.replaceState(null, '', u);
+    const li = document.querySelector('li[data-id="' + rid + '"]');
+    if (!li) { return; }
+    li.scrollIntoView({ block: 'center', behavior: 'auto' });
+    li.classList.add('rolled-flash');
+    setTimeout(() => li.classList.remove('rolled-flash'), 2200);
   })();
 </script>
 <?= folder_modal_script() ?>
