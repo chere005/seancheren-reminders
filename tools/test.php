@@ -4310,6 +4310,11 @@ t('the seeding wrapper refuses everything by default', function () use ($root) {
        'no rsync line sends tools/');
 });
 
+t('usagelog.sh parses', function () use ($root) {
+    exec('sh -n ' . escapeshellarg($root . '/tools/usagelog.sh') . ' 2>&1', $out, $code);
+    eq(0, $code, implode("\n", $out));
+});
+
 t('deploy.sh parses', function () use ($root) {
     exec('bash -n ' . escapeshellarg($root . '/deploy.sh') . ' 2>&1', $o, $rc);
     eq(0, $rc, 'bash -n: ' . implode("\n", $o));

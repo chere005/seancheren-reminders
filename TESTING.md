@@ -133,7 +133,7 @@ the log **never carries what an action posted** — that negative is the promise
 The file sits outside the web root (a fetch of `/data/usage.log` finds nothing) and stays
 plain text, not `ENC1:`; the writer leaves it group-readable and the data dir
 group-traversable, which is what lets the SSH login tail it on the live host.
-*(By eye: nothing — there is no UI for this log; read it over SSH.)*
+*(By eye: nothing — there is no UI for this log; `tools/usagelog.sh` reads it over SSH.)*
 
 ### `calendar`
 The day payload is keyed by date. Within a day: events first in time order, then
