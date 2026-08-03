@@ -158,6 +158,20 @@ function stored(string $base, string $user): array
     global $scratch;
     return store_read(user_data_file($scratch, $base, $user));
 }
+
+/**
+ * Drop blank orphaned subtasks from a user's reminders. The UI deletes an empty
+ * subtask on blur, but tests that make one via POST leave it — and since adding
+ * prepends to the stored list, the outline model would hand that stray to whatever
+ * the next test adds above it. Position-sensitive tests start from a clean list.
+ */
+function drop_blank_subtasks(string $user = 'example'): void
+{
+    global $scratch;
+    $f = user_data_file($scratch, 'reminders', $user);
+    store_write($f, array_values(array_filter(store_read($f),
+        fn($x) => !((int) ($x['indent'] ?? 0) > 0 && trim((string) ($x['text'] ?? '')) === ''))));
+}
 /** Every non-section row of a user's reminders. */
 function rows(string $user): array
 {
@@ -789,6 +803,7 @@ t('edit_full: the pencil window updates a reminder and can re-file it', function
 
 t('edit_full: converting a plain reminder moves it onto the calendar', function () {
     $jar = login('example', 'examplepassword');
+    drop_blank_subtasks();
     $c   = csrf($jar);
     req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
         'text' => 'Team lunch'], $jar);
@@ -857,6 +872,86 @@ t('edit_full: a reminder with subtasks stays behind as a copy when converted', f
         'id' => $row['id'], 'confirm' => '1'], $jar);
     $evs = array_values(array_filter(stored('events', 'example'), fn($x) => ($x['text'] ?? '') !== 'Plan the trip'));
     store_write(user_data_file(datadir(), 'events', 'example'), $evs);
+});
+
+t('edit_full: a reminder can become the title of a new note', function () {
+    $jar = login('example', 'examplepassword');
+    drop_blank_subtasks();
+    $c   = csrf($jar);
+    // Without subtasks it moves out entirely; the note lands in the picked folder/section.
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Gift ideas list'], $jar);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Gift ideas list') { $row = $x; } }
+    $nFolder = stored('folders', 'example')['notes'][0] ?? 'General';
+    $nSec    = null;
+    foreach (stored('notes', 'example') as $x) {
+        if (($x['type'] ?? '') === 'section' && ($x['folder'] ?? '') === $nFolder) { $nSec = $x['name']; break; }
+    }
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row['id'], 'kind' => 'note', 'text' => 'Gift ideas list', 'due' => '2030-09-01',
+        'nfs' => $nFolder . "\x1F" . ($nSec ?? '')], $jar);
+    $gone = true; $note = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $row['id']) { $gone = false; } }
+    foreach (stored('notes', 'example') as $x) { if (($x['title'] ?? '') === 'Gift ideas list') { $note = $x; } }
+    ok($gone, 'no subtasks, so the reminder moved out entirely');
+    ok($note !== null, 'and the note exists');
+    eq('2030-09-01', $note['date'] ?? '', 'carrying the date');
+    eq($nFolder, $note['folder'] ?? '', 'in the picked folder');
+    ok(($note['section'] ?? '') !== '', 'filed in a real section');
+    // With subtasks the reminder stays behind as their home — the note is a copy.
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Trip packing'], $jar);
+    $row2 = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Trip packing') { $row2 = $x; } }
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_subtask', 'view' => 'All',
+        'parent' => $row2['id']], $jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row2['id'], 'kind' => 'note', 'text' => 'Trip packing', 'nfs' => 'junk'], $jar);
+    $kept = null; $note2 = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $row2['id']) { $kept = $x; } }
+    foreach (stored('notes', 'example') as $x) { if (($x['title'] ?? '') === 'Trip packing') { $note2 = $x; } }
+    ok($kept !== null, 'subtasks keep the reminder here');
+    ok($note2 !== null, 'the note was still written');
+    ok(in_array($note2['folder'] ?? '', stored('folders', 'example')['notes'], true),
+       'a junk destination fell back to a real note folder');
+    // Clean up.
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete', 'view' => 'All',
+        'id' => $row2['id'], 'confirm' => '1'], $jar);
+    $ns = array_values(array_filter(stored('notes', 'example'),
+        fn($x) => !in_array($x['title'] ?? '', ['Gift ideas list', 'Trip packing'], true)));
+    store_write(user_data_file(datadir(), 'notes', 'example'), $ns);
+});
+
+t('duplicate: the copy lands under the original, subtasks and all', function () {
+    $jar = login('example', 'examplepassword');
+    drop_blank_subtasks();
+    $c   = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add', 'view' => 'All',
+        'text' => 'Water the ferns'], $jar);
+    $row = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Water the ferns') { $row = $x; } }
+    req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_subtask', 'view' => 'All',
+        'parent' => $row['id']], $jar);
+    $r = req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'duplicate', 'view' => 'All',
+        'id' => $row['id']], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+    $list = array_values(stored('reminders', 'example'));
+    $ids  = [];
+    foreach ($list as $i => $x) { if (($x['text'] ?? '') === 'Water the ferns') { $ids[] = $i; } }
+    eq(2, count($ids), 'two of them now');
+    $orig = $list[$ids[0]]; $copy = $list[$ids[1]];
+    ok($copy['id'] !== $orig['id'], 'the copy has its own id');
+    eq($orig['folder'], $copy['folder'], 'same folder');
+    eq($orig['section'], $copy['section'], 'same section');
+    // The block travelled: original, its subtask, then the copy, then the copy's subtask.
+    eq(1, (int) ($list[$ids[0] + 1]['indent'] ?? 0), 'the original keeps its subtask');
+    eq(1, (int) ($list[$ids[1] + 1]['indent'] ?? 0), 'and the copy got its own');
+    ok($list[$ids[0] + 1]['id'] !== $list[$ids[1] + 1]['id'], 'as a fresh row, not a shared one');
+    foreach ([$orig['id'], $copy['id']] as $rid) {
+        req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'delete', 'view' => 'All',
+            'id' => $rid, 'confirm' => '1'], $jar);
+    }
 });
 
 t('edit_full: a shared view is refused, and shared rows carry no pencil', function () {
@@ -1402,6 +1497,121 @@ t('calendars: add, recolour, rename, default, delete', function () {
     req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'cal_delete', 'id' => $cal['id'],
         'confirm' => '1', 'ym' => date('Y-m')], $jar, true);
     ok(!in_array('Renamedcal', array_column(stored('calendars', 'example'), 'name'), true), 'deleted');
+});
+
+t('the edit window turns an event or reminder into the title of a new note', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar, '/calmind/calendar/');
+    $cal = (string) (stored('calendars', 'example')[0]['id'] ?? '');
+    // An event is its date — converting moves it out entirely.
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'add_event', 'text' => 'Gallery visit',
+        'date' => '2030-03-03', 'time' => '14:00', 'cal' => $cal, 'ym' => '2030-03'], $jar);
+    $ev = null;
+    foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Gallery visit') { $ev = $x; } }
+    ok($ev !== null, 'the event exists');
+    // First prove a plain edit with kindchoice equal to its own kind stays an edit.
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'edit_item', 'kind' => 'event',
+        'kindchoice' => 'event', 'id' => $ev['id'], 'text' => 'Gallery visit later',
+        'date' => '2030-03-04', 'cal' => $cal, 'ym' => '2030-03'], $jar);
+    $ev2 = null;
+    foreach (stored('events', 'example') as $x) { if (($x['id'] ?? '') === $ev['id']) { $ev2 = $x; } }
+    eq('Gallery visit later', $ev2['text'] ?? '', 'kindchoice matching the kind is just an edit');
+    // Now the conversion.
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'edit_item', 'kind' => 'event',
+        'kindchoice' => 'note', 'id' => $ev['id'], 'text' => 'Gallery visit later',
+        'date' => '2030-03-04', 'time' => '15:00', 'cal' => $cal, 'ym' => '2030-03'], $jar);
+    $gone = true; $note = null;
+    foreach (stored('events', 'example') as $x) { if (($x['id'] ?? '') === $ev['id']) { $gone = false; } }
+    foreach (stored('notes', 'example') as $x) { if (($x['title'] ?? '') === 'Gallery visit later') { $note = $x; } }
+    ok($gone, 'the event moved out entirely');
+    ok($note !== null, 'and became a note');
+    eq('2030-03-04', $note['date'] ?? '', 'carrying the date');
+    eq('15:00', $note['time'] ?? '', 'and the time');
+
+    // A reminder without subtasks moves the same way.
+    drop_blank_subtasks();
+    $rc = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $rc, 'action' => 'add', 'view' => 'All',
+        'text' => 'Sort receipts'], $jar);
+    $rem = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Sort receipts') { $rem = $x; } }
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'edit_item', 'kind' => 'reminder',
+        'kindchoice' => 'note', 'id' => $rem['id'], 'text' => 'Sort receipts', 'ym' => date('Y-m')], $jar);
+    $rGone = true; $rNote = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['id'] ?? '') === $rem['id']) { $rGone = false; } }
+    foreach (stored('notes', 'example') as $x) { if (($x['title'] ?? '') === 'Sort receipts') { $rNote = $x; } }
+    ok($rGone, 'the reminder moved out');
+    ok($rNote !== null, 'and became a note');
+
+    // A partner's id creates nothing: the source is found-and-detached first.
+    $bEv = null;
+    foreach (stored('events', 'buddy') as $x) { $bEv = $x; break; }
+    ok($bEv !== null, 'buddy has an event to try against');
+    $notesBefore = count(stored('notes', 'example'));
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'edit_item', 'kind' => 'event',
+        'kindchoice' => 'note', 'id' => $bEv['id'], 'text' => 'Hijack', 'ym' => date('Y-m')], $jar);
+    eq($notesBefore, count(stored('notes', 'example')), "a partner's id makes no note");
+    ok(in_array($bEv['id'], array_column(stored('events', 'buddy'), 'id'), true), "and buddy's event survives");
+
+    // Clean up the two notes.
+    $ns = array_values(array_filter(stored('notes', 'example'),
+        fn($x) => !in_array($x['title'] ?? '', ['Gallery visit later', 'Sort receipts'], true)));
+    store_write(user_data_file(datadir(), 'notes', 'example'), $ns);
+});
+
+t('the day panel duplicates an event or a reminder block', function () {
+    $jar = login('example', 'examplepassword');
+    $c   = csrf($jar, '/calmind/calendar/');
+    $cal = (string) (stored('calendars', 'example')[0]['id'] ?? '');
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'add_event', 'text' => 'Band practice',
+        'date' => '2030-04-04', 'cal' => $cal, 'ym' => '2030-04'], $jar);
+    $ev = null;
+    foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Band practice') { $ev = $x; } }
+    $r = req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'duplicate_item', 'kind' => 'event',
+        'id' => $ev['id'], 'ym' => '2030-04', 'day' => '2030-04-04'], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+    $twins = array_values(array_filter(stored('events', 'example'), fn($x) => ($x['text'] ?? '') === 'Band practice'));
+    eq(2, count($twins), 'two of the event now');
+    ok($twins[0]['id'] !== $twins[1]['id'], 'with their own ids');
+    eq($twins[0]['date'], $twins[1]['date'], 'same day');
+    eq($twins[0]['cal'], $twins[1]['cal'], 'same calendar');
+
+    // A reminder duplicates as its whole block, like in the Reminders app.
+    drop_blank_subtasks();
+    $rc = csrf($jar);
+    req('POST', '/calmind/reminders/', ['csrf' => $rc, 'action' => 'add', 'view' => 'All',
+        'text' => 'Pack the car'], $jar);
+    $rem = null;
+    foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Pack the car') { $rem = $x; } }
+    req('POST', '/calmind/reminders/', ['csrf' => $rc, 'action' => 'add_subtask', 'view' => 'All',
+        'parent' => $rem['id']], $jar);
+    req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'duplicate_item', 'kind' => 'reminder',
+        'id' => $rem['id'], 'ym' => date('Y-m')], $jar);
+    $list = array_values(stored('reminders', 'example'));
+    $idx  = [];
+    foreach ($list as $i => $x) { if (($x['text'] ?? '') === 'Pack the car') { $idx[] = $i; } }
+    eq(2, count($idx), 'two of the reminder now');
+    eq(1, (int) ($list[$idx[1] + 1]['indent'] ?? 0), 'the copy brought its subtask');
+    // Clean up both apps' twins.
+    store_write(user_data_file(datadir(), 'events', 'example'), array_values(array_filter(
+        stored('events', 'example'), fn($x) => ($x['text'] ?? '') !== 'Band practice')));
+    $drop = [$list[$idx[0]]['id'], $list[$idx[1]]['id'], $list[$idx[0] + 1]['id'], $list[$idx[1] + 1]['id']];
+    store_write(user_data_file(datadir(), 'reminders', 'example'), array_values(array_filter(
+        $list, fn($x) => !in_array($x['id'] ?? '', $drop, true))));
+});
+
+t('wiring: the day panel gesture reveals icons, and the window offers Note when editing', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    // Hold/double-click only reveals the row's icons now — reveal(), never openRow, on the timer.
+    has('lpT = null; reveal(); }, 500', $b, 'the long-press reveals rather than opening the window');
+    has("row.addEventListener('dblclick', (e) => { e.preventDefault(); reveal(); });", $b, 'double-click too');
+    has("pen.className = 'dp-edit'", $b, 'rows carry the pencil');
+    has("dup.className = 'dp-dup'", $b, 'the duplicate button');
+    has('id="dupItemForm"', $b, 'and its form');
+    // Editing an event or reminder constrains the kind row to [itself, Note].
+    has("constrainKinds([kind, 'note'], kind)", $b, 'the kind switch comes back, cut down to Note');
+    has("if (kind === 'note') { mKindRow.hidden = true; }", $b, 'a note never converts out');
 });
 
 t('wiring: the manage window renames in place', function () {
@@ -2340,6 +2550,13 @@ t('each section header carries its own + Habit, shown out of edit mode', functio
 });
 
 t('a fresh habits app starts with a default section, ready to add to', function () {
+    // freshy is normally made by the pages area; running `regress` alone still works.
+    global $scratch;
+    $acc = store_read($scratch . '/accounts.json');
+    if (!isset($acc['freshy'])) {
+        $acc['freshy'] = ['email' => 'f@example.com', 'password' => 'freshpassword', 'created' => time()];
+        store_write($scratch . '/accounts.json', $acc);
+    }
     $jar = login('freshy', 'freshpassword');
     $b = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
     ok(preg_match_all('/<div class="hsection"/', $b) >= 1, 'a default section is there from the start');
@@ -2390,6 +2607,29 @@ t('wiring: an explicit ?day= still wins over the remembered one', function () {
        'the URL is consulted before the remembered day');
 });
 
+t('wiring: icon buttons are circles, and the tab highlight is one fixed size', function () {
+    $jar = login('example', 'examplepassword');
+    // A sample from each surface: the row clusters, the managers' controls, the modal
+    // ×s, the habit tick grid — every icon button that was a rounded square is a circle.
+    $r = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    ok(preg_match('/\.check, \.del \{[^}]*border-radius: 50%/', $r) === 1, 'the tick and × are circles');
+    ok(preg_match('/\.rowedit, \.dup \{[^}]*border-radius: 50%/', $r) === 1, 'the pencil and duplicate too');
+    ok(preg_match('/\.foldermodal \.flist \.fdel \{[^}]*border-radius: 50%/', $r) === 1, 'the folder manager ×');
+    ok(preg_match('/\.foldermodal \.fswatches button \{[^}]*border-radius: 50%/', $r) === 1, 'and its swatches');
+    $c = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    ok(preg_match('/\.callist \.cdel \{[^}]*border-radius: 50%/', $c) === 1, 'the calendar manager ×');
+    ok(preg_match('/\.callist \.cswatch \{[^}]*border-radius: 50%/', $c) === 1, 'its swatch');
+    $h = req('GET', '/calmind/habits/?v=week', [], $jar)['body'];
+    ok(preg_match('/\.cell \{[^}]*border-radius: 50%/', $h) === 1, 'the habit ticks are circles');
+    // No icon button still wears the old rounded square: every 6px radius left on a
+    // button rule should be a text control, which these pages have none of by class.
+    // The tab bar's active highlight: one fixed size, centred, spacing untouched.
+    has('width: 36px; height: 36px;', $r, 'the highlight is a fixed size');
+    has('transform: translate(-50%, -50%); background: var(--surface-2); border-radius: 50%;', $r,
+        'centred behind the icon as a circle');
+    ok(strpos($r, 'inset: 3px 12px') === false, 'the old inset-based pill is gone');
+});
+
 t('wiring: the tab bar clusters its tabs and centres the + inside the bar', function () {
     $jar = login('example', 'examplepassword');
     $b = req('GET', '/calmind/reminders/', [], $jar)['body'];
@@ -2417,18 +2657,18 @@ area('security');
 function ALL_ACTIONS(): array
 {
     return [
-        '/calmind/reminders/' => ['add', 'toggle', 'edit_text', 'edit_full', 'delete', 'add_section', 'rename_section',
+        '/calmind/reminders/' => ['add', 'toggle', 'edit_text', 'edit_full', 'duplicate', 'delete', 'add_section', 'rename_section',
                           'delete_section', 'add_subtask', 'set_indent', 'reorder', 'clear_done',
                           'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
                           'folder_vis_only', 'reorder_folders', 'share_set', 'partner_add',
                           'partner_rename', 'partner_del', 'change_password', 'set_theme'],
-        '/calmind/notes/'     => ['add', 'save', 'delete', 'add_section', 'rename_section', 'delete_section',
+        '/calmind/notes/'     => ['add', 'save', 'duplicate', 'delete', 'add_section', 'rename_section', 'delete_section',
                           'reorder', 'add_folder', 'delete_folder', 'rename_folder', 'set_default_folder',
                           'set_default_section', 'set_folder_color', 'folder_vis', 'folder_vis_all',
                           'folder_vis_only', 'reorder_folders', 'share_set', 'partner_add',
                           'partner_rename', 'partner_del'],
-        '/calmind/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'delete_item',
+        '/calmind/calendar/'  => ['add_reminder', 'add_event', 'add_note', 'edit_item', 'duplicate_item', 'delete_item',
                           'toggle_reminder', 'cal_add', 'cal_rename', 'cal_color', 'cal_shared_color', 'cal_default',
                           'cal_delete', 'cal_reorder', 'cal_vis', 'cal_vis_all', 'cal_vis_only', 'rf_mode',
                           'folder_vis', 'share_set', 'partner_add', 'partner_rename', 'partner_del'],
@@ -2799,6 +3039,47 @@ t('a note folder colour comes from the notes palette', function () {
 });
 
 // ---------------------------------------------------------------- 16b. drag payloads
+t('a note duplicates in place, body and spot carried over', function () {
+    $jar = login('example', 'examplepassword');
+    $nc  = csrf($jar, '/calmind/notes/');
+    // Its own note with a unique title, so nothing seeded can collide with the count.
+    $r0 = req('POST', '/calmind/notes/', ['csrf' => $nc, 'action' => 'add', 'view' => 'All'], $jar);
+    preg_match('/id=([a-f0-9]+)/', (string) $r0['location'], $m0);
+    req('POST', '/calmind/notes/', ['csrf' => $nc, 'action' => 'save', 'view' => 'All',
+        'id' => $m0[1] ?? '', 'title' => 'Dup probe note', 'date' => '2030-02-02',
+        'body' => '<p>the body rides along</p>',
+        'folder' => stored('folders', 'example')['notes'][0] ?? 'General', 'section' => ''], $jar);
+    $src = null;
+    foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === ($m0[1] ?? '')) { $src = $x; } }
+    ok($src !== null && ($src['title'] ?? '') === 'Dup probe note', 'a note to duplicate');
+    $r = req('POST', '/calmind/notes/', ['csrf' => $nc, 'action' => 'duplicate', 'view' => 'All',
+        'id' => $src['id']], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+    $list = array_values(stored('notes', 'example'));
+    $idx  = [];
+    foreach ($list as $i => $x) {
+        if (($x['type'] ?? '') !== 'section' && ($x['title'] ?? '') === $src['title']) { $idx[] = $i; }
+    }
+    eq(2, count($idx), 'two of it now');
+    $copy = $list[$idx[1]];
+    ok($copy['id'] !== $src['id'], 'the copy has its own id');
+    eq($idx[0] + 1, $idx[1], 'and sits directly under the original');
+    eq($src['body'] ?? '', $copy['body'] ?? '', 'body carried over');
+    eq($src['folder'] ?? '', $copy['folder'] ?? '', 'same folder');
+    eq($src['section'] ?? '', $copy['section'] ?? '', 'same section');
+    eq($src['date'] ?? null, $copy['date'] ?? null, 'same date');
+    store_write(user_data_file(datadir(), 'notes', 'example'), array_values(array_filter(
+        $list, fn($x) => !in_array($x['id'] ?? '', [$src['id'], $copy['id']], true))));
+});
+
+t('wiring: note rows carry the duplicate button in the edit cluster', function () {
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/notes/?folder=All', [], $jar)['body'];
+    has('class="ndup"', $b, 'the duplicate form is on each row');
+    has('value="duplicate"', $b, 'posting duplicate');
+    has('body.editing .ndel .del, body.editing .ndup .dup', $b, 'shown only in edit mode');
+});
+
 // What the drag JS actually posts, replayed against the server — the gesture itself is
 // by-eye (the harness runs no JS), but the payload contract is checkable, and "the drag
 // looked right then reverted on reload" bugs live entirely on this side of it.

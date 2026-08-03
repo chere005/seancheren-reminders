@@ -909,8 +909,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
       width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
       cursor: pointer; padding: 0;
     }
-    .hsection .del { display: none; margin-left: auto; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
-    body.editing .hsection .del { display: inline-block; }
+    .hsection .del { display: none; margin-left: auto; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 50%; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    body.editing .hsection .del { display: inline-flex; }
     .hsection .del:hover { border-color: #f66; color: #f66; }
 
     /* Every name bubble is the same size — the column's width and the two-line height,
@@ -932,8 +932,8 @@ function render_habit_section_modal(array $sections, string $csrf): void
       overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
-    .hname .del { display: none; flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; }
-    body.editing .hname .del { display: inline-block; }
+    .hname .del { display: none; flex: 0 0 auto; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 50%; font-size: 0.9rem; line-height: 1; cursor: pointer; }
+    body.editing .hname .del { display: inline-flex; }
     .hname .del:hover { border-color: #f66; color: #f66; }
     /* In edit mode the name is a field; a double-tap opens it outside edit mode too. */
     body.editing .hname .hlabel { cursor: text; }
@@ -948,7 +948,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
 
     .cell {
       aspect-ratio: 1 / 1; min-height: 0; background: #1b1726; border: 1px solid #2c2540;
-      border-radius: 8px; cursor: pointer; padding: 0; transition: background 0.1s;
+      border-radius: 50%; cursor: pointer; padding: 0; transition: background 0.1s;
     }
     /* 2px rather than 1px, and box-sizing keeps the square exactly the same size, so
        today's column doesn't shift the grid by a pixel as the date rolls over. */
@@ -992,7 +992,7 @@ function render_habit_section_modal(array $sections, string $csrf): void
     .mgrid .dow { text-align: center; font-size: 0.7rem; color: var(--muted); padding-bottom: 0.2rem; }
     .mgrid .mcell {
       aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 0.2rem; border-radius: 8px; border: 1px solid transparent;
+      justify-content: center; gap: 0.2rem; border-radius: 50%; border: 1px solid transparent;
     }
     /* Same as the week grid: a 2px accent ring, which reads at this size where a 1px
        one on a transparent border disappeared against the pies. */

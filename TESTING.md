@@ -105,9 +105,12 @@ section to a real one. The **collapse-all** button ships in the toolbar. **The f
 pencil (`edit_full`)**: updates text/date/time/repeat in place and re-files to another
 folder/section (subtasks travelling along); switching the kind to **Event** writes the
 event into my events file — a stray calendar id falls back to a real one, an undated
-conversion lands on today — and removes the reminder *unless it has subtasks*, which keep
-it here as a deliberate copy. A shared view answers `edit_full` with a 403 and renders no
-pencil, and no conversion window. *(By eye: the
+conversion lands on today — and switching to **Note** writes a note titled with the text
+into the picked note folder/section (junk destinations fall back). Either conversion
+removes the reminder *unless it has subtasks*, which keep it here as a deliberate copy.
+A shared view answers `edit_full` with a 403 and renders no pencil, and no conversion
+window. **`duplicate`** copies the whole block — parent and subtask, fresh ids — directly
+under the original and stays in edit mode. *(By eye: the
 collapse-all toggle actually folds/expands, the toolbar↔first-divider gap matches the gap
 above the toolbar, and the folder-head rename field in edit mode. The row pencil opens the
 edit window filled from the row; the kind switch swaps List for Calendar and the hint says
@@ -131,7 +134,8 @@ like the reminders ones — including the required-real-sections model (a fresh 
 renameable `General`, "Notes" is an ordinary name now, the last section is undeletable) and
 the Default-for-new-items picker. **Folder rename** works from the list heading (edit mode)
 *and* the Manage-folders window; `folders_rename()` carries colour/hidden/order/default
-across and refuses a fixed/duplicate/empty name. *(By eye: both rename fields commit on
+across and refuses a fixed/duplicate/empty name. **`duplicate`** copies a note in place —
+body, folder, section and date carried over, fresh id, directly under the original. *(By eye: both rename fields commit on
 Enter/blur; the collapse-all button above the top folder.)*
 
 ### `usage`
@@ -150,7 +154,12 @@ undated Calendar-folder reminder rides on today and is **not** flagged overdue. 
 editing and deleting an item from the day panel, with delete needing the second press.
 Calendars add, recolour, **rename** (`cal_rename`: id keeps, colour survives, a blank name
 or a partner's id changes nothing; the manage window renames in place from a pencil) —
-plus default and delete. A calendar row tap leaves only it showing and
+plus default and delete. **The edit window converts one way into notes**: `edit_item` with
+`kindchoice=note` turns an event or reminder into the title of a new note (an event moves
+out entirely, a matching `kindchoice` stays a plain edit, a partner's id creates nothing);
+**`duplicate_item`** copies an event, or a reminder with its whole block, staying in edit
+mode. *(By eye: hold/double-click on a day-panel row reveals the pencil/duplicate/× circles
+instead of jumping into the window; the kind pills show [itself, Note] when editing.)* A calendar row tap leaves only it showing and
 `All` puts them back. Ticking a repeat from the calendar rolls it. A month cell wears **one
 kind icon per colour** — two calendars' events on one day draw two calendar glyphs, and no
 cell repeats a kind+colour pair. The **dot legend** is
@@ -474,6 +483,9 @@ failures only exist in standalone mode.
       emptied folder — OK moves the section and the folder disappears; Cancel puts the
       section back and nothing posts. The permanent Calendar folder (Reminders) and the
       last remaining Notes folder are never offered for deletion.
+- [ ] Icon buttons are circles everywhere — row clusters, manager ×s/pencils/swatches,
+      modal clear-×s, habit grid cells — and the tab bar's active highlight is one fixed
+      circle that never nudges the icons' spacing.
 - [ ] A drop line never appears over a partner's shared block, for rows or for sections.
 
 **Themes** — one pass per theme worth checking (the harness sees the vars, not the paint)

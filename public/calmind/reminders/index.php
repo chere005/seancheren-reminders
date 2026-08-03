@@ -264,6 +264,13 @@ function render_rows(array $rows, string $csrf, string $view, string $today, str
                 // holds its "‹" instead, and a partner's rows are never mine to convert. ?>
           <?php if ((int) ($r['indent'] ?? 0) === 0 && strncmp($view, '@', 1) !== 0): ?>
             <button type="button" class="rowedit" title="Edit" aria-label="Edit"><?= pencil_icon_svg(12) ?></button>
+            <form method="post" action="" style="display:inline">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <input type="hidden" name="action" value="duplicate">
+              <input type="hidden" name="view" value="<?= e($view) ?>">
+              <input type="hidden" name="id" value="<?= e($r['id']) ?>">
+              <button class="dup" type="submit" title="Duplicate" aria-label="Duplicate"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            </form>
           <?php endif; ?>
           <?= subtask_button(min(1, (int) ($r['indent'] ?? 0)), $csrf, $view, (string) $r['id']) ?>
           <form method="post" action="" style="display:inline">
@@ -888,7 +895,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             // reminder stays behind as their home (a deliberate duplicate).
             $id     = (string) ($_POST['id'] ?? '');
             $text   = trim((string) ($_POST['text'] ?? ''));
-            $kind   = ($_POST['kind'] ?? 'reminder') === 'event' ? 'event' : 'reminder';
+            $kind   = (string) ($_POST['kind'] ?? 'reminder');
+            if (!in_array($kind, ['reminder', 'event', 'note'], true)) { $kind = 'reminder'; }
             $due    = (string) ($_POST['due'] ?? '');
             $dueOk  = (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $due);
             $time   = trim((string) ($_POST['time'] ?? ''));
@@ -906,6 +914,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             $ptext   = mb_substr($byHand ? $text : $parsed, 0, 500);
             $effDue  = $dueOk ? $due : ($pdate ?? '');
             $effTime = $timeOk ? $time : ($ptime ?? '');
+
+            // Subtasks are the rows following the parent at a deeper indent; they can't
+            // ride to another app, so a conversion leaves a parent with any behind as a copy.
+            $kids = isset($list[$at + 1]) && !is_section($list[$at + 1])
+                 && (int) ($list[$at + 1]['indent'] ?? 0) > (int) ($list[$at]['indent'] ?? 0);
+
+            if ($kind === 'note') {
+                // The reminder becomes the title of a new note — notes are made *from*
+                // things, never unmade into them, so this door only swings one way.
+                $nFolders = folders_load($cfg['data_dir'])['notes'];
+                $nFile    = user_data_file($cfg['data_dir'], 'notes');
+                $nList    = sections_normalize(store_read($nFile), $nFolders);
+                $nfs = (string) ($_POST['nfs'] ?? '');
+                [$nFolder, $nSection] = strpos($nfs, "\x1F") !== false ? explode("\x1F", $nfs, 2) : ['', ''];
+                if (!in_array($nFolder, $nFolders, true)) { $nFolder = folder_default_get($cfg['data_dir'], 'notes'); }
+                $nSecs = [];
+                foreach ($nList as $it2) {
+                    if (($it2['type'] ?? '') === 'section' && ($it2['folder'] ?? '') === $nFolder) {
+                        $nSecs[] = (string) $it2['name'];
+                    }
+                }
+                if (!in_array($nSection, $nSecs, true)) { $nSection = $nSecs[0] ?? SECTION_DEFAULT_NAME; }
+                $nList[] = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($ptext, 0, 200),
+                            'body' => '', 'folder' => $nFolder, 'section' => $nSection,
+                            'date' => $effDue, 'time' => $effTime !== '' ? $effTime : null,
+                            'created' => time(), 'updated' => time()];
+                store_write($nFile, array_values($nList));
+                if (!$kids) { array_splice($list, $at, 1); }
+                break;
+            }
 
             if ($kind === 'event') {
                 // The calendar is re-validated against my own; a stray id falls back to
@@ -927,9 +965,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                            'date' => $effDue !== '' ? $effDue : date('Y-m-d'),
                            'time' => $effTime, 'cal' => $cal, 'repeat' => $rep, 'created' => time()];
                 store_write($evFile, array_values($evs));
-                // Subtasks are the rows following the parent at a deeper indent.
-                $kids = isset($list[$at + 1]) && !is_section($list[$at + 1])
-                     && (int) ($list[$at + 1]['indent'] ?? 0) > (int) ($list[$at]['indent'] ?? 0);
                 if (!$kids) { array_splice($list, $at, 1); }
                 break;
             }
@@ -953,6 +988,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     $list[$j]['folder']  = $toFolder;
                     $list[$j]['section'] = $toSection;
                 }
+            }
+            break;
+
+        case 'duplicate':
+            // A copy of the reminder directly under it — the whole outline block, so a
+            // parent's subtasks are duplicated with it. Everything carries over except
+            // the ids (fresh) and created (now); stored order puts the copy right after
+            // its original, which is also what breaks their date tie.
+            $id = (string) ($_POST['id'] ?? '');
+            foreach ($list as $i => $it) {
+                if (is_section($it) || ($it['id'] ?? '') !== $id) { continue; }
+                $end = $i + 1;
+                while ($end < count($list) && !is_section($list[$end])
+                       && (int) ($list[$end]['indent'] ?? 0) > (int) ($it['indent'] ?? 0)) { $end++; }
+                $copies = [];
+                foreach (array_slice($list, $i, $end - $i) as $row) {
+                    $row['id']      = bin2hex(random_bytes(6));
+                    $row['created'] = time();
+                    $copies[] = $row;
+                }
+                array_splice($list, $end, 0, $copies);
+                $stay = '&edit=1';   // duplicating is an edit-mode action; stay in it
+                break;
             }
             break;
 
@@ -1295,7 +1353,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .section-head form { margin-left: auto; }
     .section-del {
       flex: 0 0 auto; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
-      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 50%;
       font-size: 0.95rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
@@ -1311,8 +1369,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        way, so a row never changes width when it gains or loses its indent. */
     .subtask-btn {
       display: none; flex: 0 0 auto; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid var(--line);
-      color: var(--muted); border-radius: 6px; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
+      width: 26px; height: 26px; padding: 0; background: none; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 50%; font-size: 1.05rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .subtask-btn svg { display: block; }
     /* The form is only a wrapper for the POST — it must not take a slot of its own. */
@@ -1323,15 +1381,16 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     /* The lift-out "‹" reads as the mirror of the section indent controls, so it stays
        the quieter of the two — adding is the common act, undoing is not. */
     .subtask-btn.out { font-size: 1.15rem; }
-    /* The full-edit pencil: edit mode only, left of the subtask "+", same 30px box. */
-    .rowedit {
+    /* The full-edit pencil and the duplicate button: edit mode only, in the row's
+       right-hand cluster — pencil, duplicate, subtask +, delete ×, all one size. */
+    .rowedit, .dup {
       display: none; flex: 0 0 auto; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0; background: none; border: 1px solid var(--line);
-      color: var(--muted); border-radius: 6px; line-height: 1; cursor: pointer; font-family: inherit;
+      width: 26px; height: 26px; padding: 0; background: none; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 50%; line-height: 1; cursor: pointer; font-family: inherit;
     }
-    .rowedit svg { display: block; }
-    body.editing .rowedit { display: inline-flex; }
-    .rowedit:hover { border-color: var(--muted); color: var(--text-dim); }
+    .rowedit svg, .dup svg { display: block; }
+    body.editing .rowedit, body.editing .dup { display: inline-flex; }
+    .rowedit:hover, .dup:hover { border-color: var(--muted); color: var(--text-dim); }
 
     /* The pencil's window — the Calendar's edit modal brought over (same classes inside,
        scoped to .convmodal so nothing here collides with the folder manager). */
@@ -1366,8 +1425,9 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     }
     .convmodal .cleardate {
       display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1; font-family: inherit;
+      width: 30px; height: 30px; padding: 0; flex: 0 0 auto;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; cursor: pointer; line-height: 1; font-family: inherit;
     }
     .convmodal .cleardate:hover { border-color: #f66; color: #f66; }
     .convmodal .timerow { display: flex; align-items: center; gap: 0.5rem; }
@@ -1455,8 +1515,10 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
       width: 30px; height: 30px; padding: 0;
       background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer;
-      border-radius: 6px; font-size: 0.95rem; line-height: 1;
+      border-radius: 50%; font-size: 0.95rem; line-height: 1;
     }
+    /* The delete × joins the 26px edit cluster; the tick keeps its 30px tap target. */
+    .del { width: 26px; height: 26px; }
     .check:hover { border-color: var(--accent); color: var(--accent); }
     .del:hover { border-color: #f66; color: #f66; }
 
@@ -1603,6 +1665,23 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
         }
         $cvDefCal = (string) (store_read(user_data_file($cfg['data_dir'], 'calprefs'))['default_cal'] ?? '');
         if (!in_array($cvDefCal, array_column($cvCals, 'id'), true)) { $cvDefCal = $cvCals[0]['id'] ?? ''; }
+        // And my note folders with their sections, for the Note kind's "Goes in".
+        $cvNoteFolders = folders_load($cfg['data_dir'])['notes'];
+        $cvNoteList    = sections_normalize(store_read(user_data_file($cfg['data_dir'], 'notes')), $cvNoteFolders);
+        $cvNoteSecs    = [];
+        foreach ($cvNoteFolders as $nf) {
+            $cvNoteSecs[$nf] = [];
+            foreach ($cvNoteList as $it) {
+                if (($it['type'] ?? '') === 'section' && ($it['folder'] ?? '') === $nf) {
+                    $cvNoteSecs[$nf][] = (string) $it['name'];
+                }
+            }
+        }
+        $cvNoteDefF = folder_default_get($cfg['data_dir'], 'notes');
+        $cvNoteDefS = folder_default_section_get($cfg['data_dir'], 'notes');
+        if (!in_array($cvNoteDefS, $cvNoteSecs[$cvNoteDefF] ?? [], true)) {
+            $cvNoteDefS = $cvNoteSecs[$cvNoteDefF][0] ?? SECTION_DEFAULT_NAME;
+        }
         ?>
         <div class="modal-backdrop" id="convModal">
           <form class="convmodal" method="post" action="" id="cvForm">
@@ -1613,8 +1692,9 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
             <h2>Edit reminder</h2>
             <input type="text" name="text" id="cvText" placeholder="What is it?" maxlength="500" required>
             <div class="kind" id="cvKindRow">
-              <label><input type="radio" name="kind" value="reminder" checked><span>&#9745; Reminder</span></label>
               <label><input type="radio" name="kind" value="event"><span>&#128197; Event</span></label>
+              <label><input type="radio" name="kind" value="reminder" checked><span>&#9745; Reminder</span></label>
+              <label><input type="radio" name="kind" value="note"><span>&#128221; Note</span></label>
             </div>
             <div class="daterow">
               <button type="button" class="adddate" id="cvAddDate">+ Add date</button>
@@ -1631,7 +1711,7 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                 <button type="button" class="cleardate" id="cvClearTime" title="Remove time">&times;</button>
               </div>
             </div>
-            <div class="addrow-wrap">
+            <div class="addrow-wrap" id="cvRepWrap">
               <button type="button" class="adddate" id="cvAddRepeat">+ Repeat</button>
               <div class="calrow reprow" id="cvRepRow" hidden>
                 <span class="tlabel">Repeat</span>
@@ -1668,7 +1748,20 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
                 <?php endforeach; ?>
               </select>
             </div>
-            <p class="cvhint" id="cvHint" hidden>Saving as an event moves it to the calendar<span id="cvHintKids"> — this one keeps its subtasks here as a copy</span>.</p>
+            <div class="calrow" id="cvNoteRow" hidden>
+              <span class="tlabel">Goes in</span>
+              <select name="nfs" id="cvNfs">
+                <?php foreach ($cvNoteSecs as $nf => $secs): ?>
+                  <optgroup label="<?= e((string) $nf) ?>">
+                    <?php foreach ($secs as $sn): ?>
+                      <?php $sel = ($nf === $cvNoteDefF && $sn === $cvNoteDefS); ?>
+                      <option value="<?= e($nf . "\x1F" . $sn) ?>"<?= $sel ? ' selected' : '' ?>><?= e($sn) ?></option>
+                    <?php endforeach; ?>
+                  </optgroup>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <p class="cvhint" id="cvHint" hidden><span id="cvHintMain"></span><span id="cvHintKids"> — this one keeps its subtasks here as a copy</span>.</p>
             <div class="buttons">
               <button type="button" class="del needs-confirm" id="cvDelete">Delete</button>
               <button type="button" class="cancel" id="cvCancel">Cancel</button>
@@ -2354,8 +2447,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   var cvId = $('cvId'), cvText = $('cvText'), cvDate = $('cvDate'), cvDateWrap = $('cvDateWrap'),
       cvAddDate = $('cvAddDate'), cvTime = $('cvTime'), cvTimeRow = $('cvTimeRow'), cvAddTime = $('cvAddTime'),
       cvRepRow = $('cvRepRow'), cvAddRepeat = $('cvAddRepeat'), cvRepN = $('cvRepN'), cvRepUnit = $('cvRepUnit'),
-      cvSecRow = $('cvSecRow'), cvCalRow = $('cvCalRow'), cvSec = $('cvSec'),
-      cvHint = $('cvHint'), cvHintKids = $('cvHintKids');
+      cvSecRow = $('cvSecRow'), cvCalRow = $('cvCalRow'), cvNoteRow = $('cvNoteRow'), cvSec = $('cvSec'),
+      cvRepWrap = $('cvRepWrap'), cvHint = $('cvHint'), cvHintMain = $('cvHintMain'), cvHintKids = $('cvHintKids');
 
   var revealDate = function (on) { cvDateWrap.hidden = !on; cvAddDate.hidden = on; if (!on) { cvDate.value = ''; } };
   var revealTime = function (on) { cvTimeRow.hidden = !on; cvAddTime.hidden = on; if (!on) { cvTime.value = ''; } };
@@ -2369,7 +2462,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
   var paintKind = function (k) {
     cvSecRow.hidden = k !== 'reminder';
     cvCalRow.hidden = k !== 'event';
-    cvHint.hidden = k !== 'event';
+    cvNoteRow.hidden = k !== 'note';
+    cvRepWrap.hidden = k === 'note';          // notes don't repeat
+    cvHint.hidden = k === 'reminder';
+    cvHintMain.textContent = k === 'note' ? 'Saving as a note moves it to Notes'
+                                          : 'Saving as an event moves it to the calendar';
     cvHintKids.style.display = hasKids ? '' : 'none';
   };
   modal.querySelectorAll('input[name=kind]').forEach(function (r) {

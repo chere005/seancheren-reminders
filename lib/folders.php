@@ -979,8 +979,9 @@ function folder_nav_styles(): string
     }
     .foldermodal .addrow input:focus { outline: none; border-color: var(--muted); }
     .foldermodal .addrow .plus {
-      flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
-      border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      flex: 0 0 auto; width: 40px; height: 40px; align-self: center;
+      background: var(--accent); color: var(--accent-ink); border: none;
+      border-radius: 50%; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .foldermodal .addrow .plus:hover { filter: brightness(1.1); }
@@ -1005,8 +1006,10 @@ function folder_nav_styles(): string
     .foldermodal .flist li.fdrop-before { box-shadow: 0 -2px 0 0 var(--accent, #34d399); }
     .foldermodal .flist li.fdrop-after { box-shadow: 0 2px 0 0 var(--accent, #34d399); }
     .foldermodal .flist .fdel {
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; padding: 0; flex: 0 0 auto;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .foldermodal .flist .fdel:hover { border-color: #f66; color: #f66; }
     /* Badge marking a shared row as the partner's, in place of an owner heading — the same
@@ -1018,7 +1021,7 @@ function folder_nav_styles(): string
     /* The folder's colour: a swatch that opens the palette under it. */
     .foldermodal .fcolor { flex: 0 0 auto; position: relative; }
     .foldermodal .fcolor summary {
-      width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line);   /* square, like the calendar's */
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
       cursor: pointer; list-style: none;
     }
     .foldermodal .fcolor summary::-webkit-details-marker { display: none; }
@@ -1029,7 +1032,7 @@ function folder_nav_styles(): string
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .foldermodal .fswatches button {
-      width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; padding: 0;   /* square */
+      width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; padding: 0;
     }
     /* Which folder new items land in — same shape as the Calendar's default picker. */
     .foldermodal .defrow { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.8rem; }

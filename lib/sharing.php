@@ -343,8 +343,9 @@ function share_modal_styles(): string
     .sh-badge.waiting { color: var(--muted); border-color: var(--line); }
     .sh-prename, .sh-pdel {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.2rem 0.4rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
+      width: 26px; height: 26px; padding: 0;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .sh-prename:hover { border-color: var(--muted); color: var(--text-dim); }
     .sh-pdel:hover, .sh-pdel.armed { border-color: #f66; color: #f66; }
@@ -357,8 +358,9 @@ function share_modal_styles(): string
     }
     .sh-addrow input:focus { outline: none; border-color: var(--muted); }
     .sh-plus {
-      flex: 0 0 auto; width: 38px; display: inline-flex; align-items: center; justify-content: center;
-      background: var(--accent); color: var(--accent-ink); border: none; border-radius: 6px;
+      flex: 0 0 auto; width: 38px; height: 38px; align-self: center;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent); color: var(--accent-ink); border: none; border-radius: 50%;
       font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit; padding: 0;
     }
     .sh-plus:hover { filter: brightness(1.1); }

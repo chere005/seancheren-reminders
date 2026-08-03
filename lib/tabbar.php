@@ -33,11 +33,13 @@ function tabbar_styles(): string
     .segmented a { position: relative; }
     .segmented a .ico { font-size: 1.35rem; line-height: 1; position: relative; z-index: 1; }
     .segmented a:hover { color: var(--text-dim); }
-    /* The selected tab's highlight is inset a little from the tab's edges, so it reads as
-       a pill sitting inside the tab rather than filling it corner to corner. */
+    /* The selected tab's highlight: a fixed-size circle centred behind the icon — the
+       same size on every tab (an inset-based pill varied with the tab's own box), and
+       absolutely positioned, so it can never change the tabs' spacing. */
     .segmented a.active { color: var(--accent); }
     .segmented a.active::before {
-      content: ''; position: absolute; inset: 3px 12px; background: var(--surface-2); border-radius: 8px; z-index: 0;
+      content: ''; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px;
+      transform: translate(-50%, -50%); background: var(--surface-2); border-radius: 50%; z-index: 0;
     }
     .segmented a.active:hover { color: var(--accent); }
     /* The middle "+" tab: a round accent-coloured add button that opens the quick-add app. When it's

@@ -416,6 +416,44 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($it);
         save_json_list($file, $list);
+    } elseif ($action === 'edit_item' && ($_POST['kindchoice'] ?? '') === 'note'
+              && in_array($kind, ['event', 'reminder'], true) && $id !== '' && $text !== '') {
+        // The edit window's kind switch, one way only: an event or reminder becomes the
+        // title of a new note (notes are made from things, never unmade into them). The
+        // source is found and detached first, so an id that isn't mine — a partner's
+        // row — creates nothing. An event is its date, so it moves out entirely; a
+        // reminder with subtasks stays behind as their home, the note is a copy.
+        $found = false;
+        if ($kind === 'event') {
+            $evFile = user_data_file($cfg['data_dir'], 'events');
+            $evs    = load_json_list($evFile);
+            $keep   = [];
+            foreach ($evs as $ev2) {
+                if (($ev2['id'] ?? '') === $id) { $found = true; continue; }
+                $keep[] = $ev2;
+            }
+            if ($found) { save_json_list($evFile, $keep); }
+        } else {
+            $rFile = user_data_file($cfg['data_dir'], 'reminders');
+            $rl    = load_reminder_list($rFile);
+            foreach ($rl as $i2 => $r2) {
+                if (($r2['type'] ?? '') === 'section' || ($r2['id'] ?? '') !== $id) { continue; }
+                $found = true;
+                $kids  = isset($rl[$i2 + 1]) && (($rl[$i2 + 1]['type'] ?? '') !== 'section')
+                      && (int) ($rl[$i2 + 1]['indent'] ?? 0) > (int) ($r2['indent'] ?? 0);
+                if (!$kids) { array_splice($rl, $i2, 1); save_json_list($rFile, $rl); }
+                break;
+            }
+        }
+        if ($found) {
+            // The same shape add_note writes; normalisation files it on the Notes side.
+            $nFile = user_data_file($cfg['data_dir'], 'notes');
+            $nl    = load_json_list($nFile);
+            $nl[]  = ['id' => bin2hex(random_bytes(6)), 'title' => mb_substr($ptext, 0, 200),
+                      'date' => $effDate, 'time' => $timeOk ? $time : $ptime,
+                      'body' => '', 'created' => time(), 'updated' => time()];
+            save_json_list($nFile, $nl);
+        }
     } elseif ($action === 'edit_item' && ($spec = kind_spec($kind)) && $id !== '' && $text !== '') {
         $file = user_data_file($cfg['data_dir'], $spec['base']);
         $list = load_json_list($file);
@@ -434,6 +472,31 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($it);
         save_json_list($file, $list);
+    } elseif ($action === 'duplicate_item' && ($spec = kind_spec($kind)) && $id !== '') {
+        // A copy of the row directly after it, everything carried over but the id and
+        // timestamps. A reminder copies its whole outline block, so subtasks come along
+        // — the same rule as the Reminders app's own duplicate.
+        $file = user_data_file($cfg['data_dir'], $spec['base']);
+        $list = $kind === 'reminder' ? load_reminder_list($file) : load_json_list($file);
+        foreach ($list as $i => $it) {
+            if ((($it['type'] ?? '') === 'section') || ($it['id'] ?? '') !== $id) { continue; }
+            $end = $i + 1;
+            if ($kind === 'reminder') {
+                while ($end < count($list) && (($list[$end]['type'] ?? '') !== 'section')
+                       && (int) ($list[$end]['indent'] ?? 0) > (int) ($it['indent'] ?? 0)) { $end++; }
+            }
+            $copies = [];
+            foreach (array_slice($list, $i, $end - $i) as $row) {
+                $row['id']      = bin2hex(random_bytes(6));
+                $row['created'] = time();
+                if ($kind === 'note') { $row['updated'] = time(); }
+                $copies[] = $row;
+            }
+            array_splice($list, $end, 0, $copies);
+            save_json_list($file, $list);
+            break;
+        }
+        $stay = '&edit=1';   // duplicating is an edit-mode action; stay in it
     } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== ''
               && !empty($_POST['confirm'])) {   // only the confirmed second press
         $file = user_data_file($cfg['data_dir'], $spec['base']);
@@ -944,10 +1007,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     @keyframes rollflash { from { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
                            to   { background: transparent; box-shadow: none; } }
     .dp-item.rolled-flash { animation: rollflash 2s ease-out; }
-    .dp-item .dp-del { display: none; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.2rem 0.5rem; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 0.3rem; }
-    body.editing .dp-item .dp-del { display: inline-block; }
+    .dp-item .dp-del, .dp-item .dp-dup, .dp-item .dp-edit {
+      display: none; flex: 0 0 auto; align-items: center; justify-content: center;
+      width: 26px; height: 26px; padding: 0; background: none; border: 1px solid var(--line);
+      color: var(--muted); border-radius: 50%; font-size: 0.9rem; line-height: 1;
+      cursor: pointer; margin-left: 0.3rem; font-family: inherit;
+    }
+    .dp-item .dp-edit svg, .dp-item .dp-dup svg { display: block; }
+    body.editing .dp-item .dp-del, body.editing .dp-item .dp-dup, body.editing .dp-item .dp-edit { display: inline-flex; }
     .dp-item .dp-del:hover { border-color: #f66; color: #f66; }
+    .dp-item .dp-dup:hover, .dp-item .dp-edit:hover { border-color: var(--muted); color: var(--text-dim); }
     .dp-head .dp-add {
       background: var(--accent); color: var(--accent-ink); border: none; border-radius: 999px;
       padding: 0.35rem 0.9rem; font-size: 0.9rem; font-weight: 700; cursor: pointer;
@@ -1044,8 +1113,10 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     }
     /* One X for both rows: clearing the time looks like clearing the date. */
     .modal .cleardate {
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.45rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; flex: 0 0 auto;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; cursor: pointer; line-height: 1;
     }
     .modal .cleardate:hover { border-color: #f66; color: #f66; }
     .modal .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
@@ -1112,8 +1183,9 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .addrow { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
     .addrow input[type=text] { flex: 1; margin-bottom: 0; font-size: 16px; }
     .addrow .plus {
-      flex: 0 0 auto; width: 40px; background: var(--accent); color: var(--accent-ink); border: none;
-      border-radius: 6px; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
+      flex: 0 0 auto; width: 40px; height: 40px; align-self: center;
+      background: var(--accent); color: var(--accent-ink); border: none;
+      border-radius: 50%; font-size: 1.2rem; font-weight: 700; cursor: pointer; font-family: inherit;
       display: inline-flex; align-items: center; justify-content: center; padding: 0;
     }
     .addrow .plus:hover { filter: brightness(1.1); }
@@ -1126,7 +1198,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     .callist .chandle { color: var(--muted); cursor: grab; touch-action: none; user-select: none; font-size: 1rem; }
     .callist .cname { flex: 1; font-size: 0.95rem; word-break: break-word; }
     .callist .cswatch {
-      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line);
+      flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line);
       cursor: pointer; padding: 0;
     }
     /* A set's swatch is a pie of its members' colours, so it wants to be a circle. */
@@ -1138,15 +1210,18 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       border: 1px solid #3d3559; border-radius: 999px; padding: 0.05rem 0.4rem;
     }
     .callist .cdel {
-      flex: 0 0 auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.15rem 0.45rem; font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; padding: 0;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; line-height: 1; cursor: pointer; font-family: inherit;
     }
     .callist .cdel:hover { border-color: #f66; color: #f66; }
     /* Rename pencil + its in-place field, matching the folder manager's pair. */
     .callist .crename-edit {
       flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.2rem 0.4rem; cursor: pointer; font-family: inherit; line-height: 1;
+      width: 26px; height: 26px; padding: 0;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      cursor: pointer; font-family: inherit; line-height: 1;
     }
     .callist .crename-edit:hover { border-color: var(--muted); color: var(--text-dim); }
     .callist input.crename {
@@ -1195,7 +1270,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
       box-shadow: 0 8px 20px rgba(0,0,0,0.6);
     }
     .swatches[hidden] { display: none; }
-    .swatches button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
+    .swatches button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; padding: 0; }
 <?= tabbar_styles() ?>
 <?= kind_color_css() ?>
 <?= share_modal_styles() ?>
@@ -1593,6 +1668,16 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
   <input type="hidden" name="day" id="tgDay" value="">
 </form>
 
+<!-- Hidden form to duplicate an item from the day panel (Edit mode) -->
+<form id="dupItemForm" method="post" action="" style="display:none">
+  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+  <input type="hidden" name="action" value="duplicate_item">
+  <input type="hidden" name="kind" id="duKind" value="">
+  <input type="hidden" name="id" id="duId" value="">
+  <input type="hidden" name="ym" value="<?= e($ym) ?>">
+  <input type="hidden" name="day" id="duDay" value="">
+</form>
+
 <!-- Hidden form to quick-delete an item from the day panel (Edit mode) -->
 <form id="delItemForm" method="post" action="" style="display:none">
   <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -1700,6 +1785,7 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     mAction.value = 'add_event';           // finalized on submit from the kind choice
     mId.value = '';
     mDay.value = date || '';
+    document.querySelectorAll('#mKindRow label').forEach(l => { l.hidden = false; });
     mKindRow.hidden = false;
     mDelete.hidden = true;
     mOk.textContent = 'Add';
@@ -1714,14 +1800,24 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
     setTimeout(() => mText.focus(), 30);
   };
 
-  // EDIT mode — from tapping an item in the day panel.
+  // EDIT mode — from tapping an item in the day panel. The kind row comes back for
+  // an event or a reminder, cut down to [itself, Note]: either can become the title
+  // of a new note, and a note never converts out, so its own edits keep the row hidden.
+  const constrainKinds = (allowed, current) => {
+    document.querySelectorAll('#mKindRow label').forEach(l => {
+      const r = l.querySelector('input');
+      l.hidden = allowed.indexOf(r.value) === -1;
+      r.checked = r.value === current;
+    });
+  };
   const openEdit = (id, kind, text, date, time, cal, rep) => {
     mHeading.textContent = 'Edit ' + kind;
     mAction.value = 'edit_item';
     mId.value = id;
     mKind.value = kind;
     mDay.value = date || '';
-    mKindRow.hidden = true;                // kind is fixed when editing
+    if (kind === 'note') { mKindRow.hidden = true; }
+    else { constrainKinds([kind, 'note'], kind); mKindRow.hidden = false; }
     mDelete.hidden = false;
     mOk.textContent = 'Save';
     mText.value = text;
@@ -1971,11 +2067,31 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.classList.add('shared');
         chev.textContent = '';
       }
-      row.appendChild(chev);
       if (!it.owner) {
         // swipe-row: swiping it left reveals the × without turning edit mode on.
-        // The partner's items don't get one — there's nothing here to delete.
+        // The partner's items don't get controls — there's nothing here of mine.
         row.classList.add('swipe-row');
+        // Opening the edit window is the pencil's job now — the hold/double-click only
+        // reveals the row's icons (pencil, duplicate, ×), same cluster as a Reminders row.
+        const openRow = () => {
+          document.body.classList.add('editing');
+          // Editing any occurrence edits the series — there's only the one stored row.
+          openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
+        };
+        const pen = document.createElement('button');
+        pen.className = 'dp-edit'; pen.title = 'Edit'; pen.setAttribute('aria-label', 'Edit');
+        pen.innerHTML = <?= json_encode(pencil_icon_svg(12)) ?>;
+        pen.addEventListener('click', (ev) => { ev.stopPropagation(); openRow(); });
+        const dup = document.createElement('button');
+        dup.className = 'dp-dup'; dup.title = 'Duplicate'; dup.setAttribute('aria-label', 'Duplicate');
+        dup.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        dup.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          document.getElementById('duKind').value = it.kind;
+          document.getElementById('duId').value = it.id;
+          document.getElementById('duDay').value = date;
+          document.getElementById('dupItemForm').submit();
+        });
         const del = document.createElement('button');
         del.className = 'dp-del needs-confirm'; del.textContent = '×'; del.title = 'Delete';
         del.addEventListener('click', (ev) => {
@@ -1985,31 +2101,27 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
           document.getElementById('diDay').value = date;
           document.getElementById('delItemForm').submit();
         });
-        row.appendChild(del);
-        // Open a row for editing: notes go to the Notes tab, everything else to the modal.
-        // There's no Edit button any more — a long-press (touch) or double-click (desktop)
-        // turns edit mode on and opens the row straight away.
-        const openRow = () => {
-          if (it.kind === 'note') { location.href = '<?= suite_path() ?>/notes/?id=' + encodeURIComponent(it.id); return; }
-          document.body.classList.add('editing');
-          // Editing any occurrence edits the series — there's only the one stored row.
-          openEdit(it.id, it.kind, it.text, it.start || it.due || date, it.time || '', it.cal || '', it.rep || null);
-        };
+        row.append(pen, dup, del);
         row.addEventListener('click', () => {
           // A note opens on a single tap — that's just navigating to read it, the same as
-          // tapping it in the Notes list. Events and reminders only open on a tap while
-          // editing, since the panel is otherwise read-only and the checkboxes are the
-          // only thing you'd want to hit by accident.
-          if (it.kind === 'note') { openRow(); return; }
-          if (document.body.classList.contains('editing')) openRow();
+          // tapping it in the Notes list. Nothing else opens on a plain tap: the panel is
+          // read-only outside edit mode, and in it the icons say what each press does.
+          if (it.kind === 'note' && !document.body.classList.contains('editing')) {
+            location.href = '<?= suite_path() ?>/notes/?id=' + encodeURIComponent(it.id);
+          }
         });
-        row.addEventListener('dblclick', (e) => { e.preventDefault(); openRow(); });
+        // Hold or double-click reveals the icons rather than jumping into the window.
+        const reveal = () => {
+          document.body.classList.add('editing');
+          if (navigator.vibrate) navigator.vibrate(12);
+        };
+        row.addEventListener('dblclick', (e) => { e.preventDefault(); reveal(); });
         let lpT = null, lpX = 0, lpY = 0;
         row.addEventListener('pointerdown', (e) => {
           if (e.pointerType === 'mouse' || document.body.classList.contains('editing')) return;
-          if (e.target.closest('.dp-del, .dp-check, button, a, input')) return;
+          if (e.target.closest('.dp-del, .dp-dup, .dp-edit, .dp-check, button, a, input')) return;
           lpX = e.clientX; lpY = e.clientY;
-          lpT = setTimeout(() => { lpT = null; if (navigator.vibrate) navigator.vibrate(12); openRow(); }, 500);
+          lpT = setTimeout(() => { lpT = null; reveal(); }, 500);
         });
         const lpCancel = (e) => {
           if (!lpT) return;
@@ -2019,6 +2131,8 @@ $itemsJson = json_encode($byDay, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         row.addEventListener('pointermove', lpCancel);
         row.addEventListener('pointerup', lpCancel);
         row.addEventListener('pointercancel', lpCancel);
+      } else {
+        row.appendChild(chev);
       }
       groups[gkey(it)].appendChild(row);
     }

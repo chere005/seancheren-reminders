@@ -628,8 +628,9 @@ function folder_rename_styles(): string
     .foldermodal .frow-actions { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; }
     .foldermodal .frename-edit {
       display: inline-flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.2rem 0.4rem; cursor: pointer; font-family: inherit; line-height: 1;
+      width: 26px; height: 26px; padding: 0; flex: 0 0 auto;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      cursor: pointer; font-family: inherit; line-height: 1;
     }
     .foldermodal .frename-edit:hover { border-color: var(--muted); color: var(--text-dim); }
     CSS;

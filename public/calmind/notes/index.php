@@ -510,6 +510,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             header('Location: ' . _self_path() . $vq . '&id=' . $id);
             exit;
 
+        case 'duplicate':
+            // A copy of the note directly after it — title, body, folder, section and
+            // date all carried over, only the id and timestamps are fresh.
+            $id = (string) ($_POST['id'] ?? '');
+            foreach ($notes as $i => $n) {
+                if (is_section($n) || ($n['id'] ?? '') !== $id) { continue; }
+                $copy = $n;
+                $copy['id']      = bin2hex(random_bytes(6));
+                $copy['created'] = time();
+                $copy['updated'] = time();
+                array_splice($notes, $i + 1, 0, [$copy]);
+                save_notes($dataFile, $notes);
+                break;
+            }
+            header('Location: ' . _self_path() . $vq . '&edit=1');   // still editing
+            exit;
+
         case 'delete':
             $id    = (string) ($_POST['id'] ?? '');
             $notes = array_values(array_filter($notes, fn($n) => is_section($n) || $n['id'] !== $id));
@@ -846,6 +863,13 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
             <?php if ($date !== ''): ?><span class="ndate"><?= e($date) ?></span><?php endif; ?>
             <span class="nchev">&rsaquo;</span>
           </a>
+          <form method="post" action="" class="ndup">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="action" value="duplicate">
+            <input type="hidden" name="view" value="<?= e($view) ?>">
+            <input type="hidden" name="id" value="<?= e($n['id']) ?>">
+            <button class="dup" type="submit" title="Duplicate note" aria-label="Duplicate note"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          </form>
           <form method="post" action="" class="ndel">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
             <input type="hidden" name="action" value="delete">
@@ -977,8 +1001,9 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     }
     .sec-add:hover { border-color: var(--accent); color: var(--accent); }
     .section-del {
-      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 6px;
-      padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1; cursor: pointer;
+      align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); border-radius: 50%;
+      font-size: 0.95rem; line-height: 1; cursor: pointer;
       font-family: inherit;
     }
     .section-del:hover { border-color: #f66; color: #f66; }
@@ -991,14 +1016,18 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       text-decoration: none; color: var(--text);
     }
     .noteitem:hover { background: var(--surface); }
-    /* Edit mode: delete buttons hidden until "Edit" */
-    .ndel .del, .section-del { display: none; }
-    body.editing .ndel .del, body.editing .section-del { display: inline-block; }
-    .ndel .del {
-      background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer; margin-left: 0.5rem;
-      border-radius: 6px; padding: 0.3rem 0.55rem; font-size: 0.95rem; line-height: 1;
+    /* Edit mode: the duplicate and delete buttons hidden until "Edit" */
+    .ndel .del, .ndup .dup, .section-del { display: none; }
+    body.editing .section-del { display: inline-flex; }
+    body.editing .ndel .del, body.editing .ndup .dup { display: inline-flex; }
+    .ndel .del, .ndup .dup {
+      align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+      background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer;
+      margin-left: 0.5rem; border-radius: 50%; font-size: 0.95rem; line-height: 1; font-family: inherit;
     }
+    .ndup .dup svg { display: block; }
     .ndel .del:hover { border-color: #f66; color: #f66; }
+    .ndup .dup:hover { border-color: var(--muted); color: var(--text-dim); }
 
     /* Drag-to-reorder notes (edit mode). Hidden, not gone: taking the handle out of
        the flow would shift every title sideways the moment you started editing.
@@ -1095,8 +1124,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     .editor .datewrap { display: inline-flex; align-items: center; gap: 0.35rem; }
     .editor .datewrap[hidden] { display: none; }   /* make [hidden] win over inline-flex */
     .editor .cleardate {
-      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px;
-      padding: 0.55rem 0.6rem; font-size: 0.9rem; cursor: pointer; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; padding: 0; flex: 0 0 auto;
+      background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 50%;
+      font-size: 0.9rem; cursor: pointer; line-height: 1;
     }
     .editor .cleardate:hover { border-color: #f66; color: #f66; }
     .editor input:focus, .editor textarea:focus, .editor select:focus { outline: none; border-color: var(--muted); }
@@ -1355,7 +1386,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
   // ----- Enter/leave edit mode by gesture (no Edit button any more) -----
   // Long-press a note or section on touch, or double-click on the desktop.
   const editingNow = () => document.body.classList.contains('editing');
-  const gBlocked = (t) => t.closest('.ndel, .sec-add, .section-del, .sec-collapse, button, input, textarea, select');
+  const gBlocked = (t) => t.closest('.ndel, .ndup, .sec-add, .section-del, .sec-collapse, button, input, textarea, select');
   // Opening a section's name is the point of the gesture on a section head, so do it
   // here rather than making the user find the field afterwards.
   const focusSectionName = (head) => {
@@ -1522,7 +1553,7 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
         return;
       }
       const li = e.target.closest('li[data-id]'); if (!li || !root.contains(li)) return;
-      if (e.target.closest('.ndel')) return;            // let the delete button work
+      if (e.target.closest('.ndel, .ndup')) return;     // let the delete/duplicate buttons work
       if (e.target.closest('.drag-handle')) { e.preventDefault(); beginRow(li); }
       else { pressTimer = setTimeout(() => { pressTimer = null; beginRow(li); }, 280); }
     });
