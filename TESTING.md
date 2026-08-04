@@ -332,6 +332,22 @@ A repeat expanded across the month being drawn. Paging to another month. A remin
 switched to Off with `rf_mode` really leaving the calendar. Adding a reminder from the day
 panel into a chosen folder and group. A stale calendar id on an event falling back.
 
+### `calshow`
+The full showing matrix for one calendar day, in one place — this area exists because a
+partner's dated shared notes silently never reached the calendar (reminders and events
+each had their partner pass, notes didn't) and nothing was watching the whole table.
+**Every kind from both owners lands on the day**: my event, reminder and note, and the
+partner's event on a shared calendar, reminder in a shared folder and note in a shared
+note folder — each with the right kind, the right owner mark and a colour. **What must
+never show stays off**: the partner's event/reminder/note in things they never shared,
+and my own event while its calendar is hidden (coming back when it's shown). **The
+week-mode and swipe machinery ships wired**: the touch handlers on the grid, the
+`calWeekMode` persistence, the `wk-hide` fold, the cross-month `wk=first|last` links,
+the arrow interception, the sideways-paging threshold and the pointerdown/pointerup tap
+rule are all pinned. *(By eye: the gestures themselves — though they were also driven
+synthetically in a real browser against both local and production when this area was
+written: swipe up engages week mode, the arrows step a week, swipe down restores.)*
+
 ### `habits2`
 The month view's per-day count (never more done than there are habits), and each day's pie
 drawn in section colours rather than the accent. Week paging moving a whole week at a time.

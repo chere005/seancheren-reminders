@@ -3650,6 +3650,166 @@ t('a calendar with a stale id on an event falls back to a real one', function ()
 });
 
 // ---------------------------------------------------------------- 18. habits, in full
+area('calshow');
+
+// The full showing matrix for one calendar day: every kind, both owners, plus what must
+// never show. This area exists because a partner's dated shared notes silently never
+// reached the calendar — reminders and events each had their partner pass and notes
+// didn't, and nothing was watching the whole table at once.
+
+// The payload for one month, as one signed-in user sees it.
+function calshow_payload(array &$jar, string $ym): array
+{
+    $r = req('GET', '/calmind/calendar/?ym=' . $ym, [], $jar);
+    preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
+    return json_decode($m[1] ?? '{}', true);
+}
+
+// A folder's first real section, so a written fixture is already normalised — a blank
+// section would be re-homed and persisted on the next read, which the security and
+// edges fingerprints rightly flag as an unexpected write.
+function calshow_section(array $rows, string $folder): string
+{
+    foreach ($rows as $r) {
+        if (($r['type'] ?? '') === 'section' && ($r['folder'] ?? '') === $folder) {
+            return (string) $r['name'];
+        }
+    }
+    return SECTION_DEFAULT_NAME;
+}
+
+t('every kind from both owners lands on the day', function () {
+    $D  = date('Y-m-d', strtotime('+40 days'));
+    $ym = substr($D, 0, 7);
+    $dir = datadir();
+    // example's own three kinds, written the way the apps store them.
+    $ev = stored('events', 'example');
+    $myCal = array_values(array_filter(stored('calendars', 'example'), fn($c) => ($c['type'] ?? '') !== 'set'))[0]['id'];
+    $ev[] = ['id' => 'mxownev01', 'text' => 'mx own event', 'date' => $D, 'time' => '10:00',
+             'cal' => $myCal, 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'events', 'example'), $ev);
+    $rm = stored('reminders', 'example');
+    $rm[] = ['id' => 'mxownrem1', 'text' => 'mx own reminder', 'due' => $D, 'time' => null,
+             'done' => false, 'folder' => FOLDER_REMINDERS,
+             'section' => calshow_section($rm, FOLDER_REMINDERS), 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'reminders', 'example'), $rm);
+    $nt = stored('notes', 'example');
+    $nt[] = ['id' => 'mxownnote', 'title' => 'mx own note', 'body' => '', 'folder' => 'General',
+             'section' => calshow_section($nt, 'General'), 'date' => $D, 'time' => null,
+             'created' => time(), 'updated' => time()];
+    store_write(user_data_file($dir, 'notes', 'example'), $nt);
+    // buddy's three kinds, each in something buddy actually shares with example.
+    $bsh = stored('shares', 'buddy');
+    $sharedCal    = $bsh['calendars'][0];
+    $sharedFolder = $bsh['folders'][0];
+    $sharedNotes  = $bsh['notes'][0];
+    $ev = stored('events', 'buddy');
+    $ev[] = ['id' => 'mxtheirev', 'text' => 'mx their event', 'date' => $D, 'time' => '18:00',
+             'cal' => $sharedCal, 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'events', 'buddy'), $ev);
+    $rm = stored('reminders', 'buddy');
+    $rm[] = ['id' => 'mxtheirrm', 'text' => 'mx their reminder', 'due' => $D, 'time' => null,
+             'done' => false, 'folder' => $sharedFolder,
+             'section' => calshow_section($rm, $sharedFolder), 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'reminders', 'buddy'), $rm);
+    $nt = stored('notes', 'buddy');
+    $nt[] = ['id' => 'mxtheirnt', 'title' => 'mx their note', 'body' => '', 'folder' => $sharedNotes,
+             'section' => calshow_section($nt, $sharedNotes), 'date' => $D, 'time' => null,
+             'created' => time(), 'updated' => time()];
+    store_write(user_data_file($dir, 'notes', 'buddy'), $nt);
+
+    $jar = login('example', 'examplepassword');
+    $day = calshow_payload($jar, $ym)[$D] ?? [];
+    $want = [
+        'mx own event'      => ['event',    ''],
+        'mx own reminder'   => ['reminder', ''],
+        'mx own note'       => ['note',     ''],
+        'mx their event'    => ['event',    'buddy'],
+        'mx their reminder' => ['reminder', 'buddy'],
+        'mx their note'     => ['note',     'buddy'],
+    ];
+    foreach ($want as $text => [$kind, $owner]) {
+        $hit = null;
+        foreach ($day as $it) { if (($it['text'] ?? '') === $text) { $hit = $it; } }
+        ok($hit !== null, "\"$text\" shows on its day");
+        eq($kind, $hit['kind'] ?? null, "\"$text\" is a $kind");
+        eq($owner, (string) ($hit['owner'] ?? ''), $owner === '' ? "\"$text\" is mine" : "\"$text\" is marked theirs");
+        ok(!empty($hit['color']), "\"$text\" wears a colour");
+    }
+});
+
+t('what must never show: unshared and hidden things stay off', function () {
+    $D  = date('Y-m-d', strtotime('+40 days'));
+    $ym = substr($D, 0, 7);
+    $dir = datadir();
+    $bsh = stored('shares', 'buddy');
+    // buddy's three kinds again, each in something buddy does NOT share.
+    $unCal = null;
+    foreach (stored('calendars', 'buddy') as $c) {
+        if (($c['type'] ?? '') !== 'set' && !in_array($c['id'] ?? '', $bsh['calendars'], true)) { $unCal = $c['id']; }
+    }
+    ok($unCal !== null, 'buddy has an unshared calendar to test with');
+    $unFolder = null;
+    foreach (folders_load($dir, 'buddy')['reminders'] as $f) {
+        if ($f !== FOLDER_CALENDAR && !in_array($f, $bsh['folders'], true)) { $unFolder = $f; }
+    }
+    ok($unFolder !== null, 'buddy has an unshared reminder folder');
+    $unNotes = null;
+    foreach (folders_load($dir, 'buddy')['notes'] as $f) {
+        if (!in_array($f, $bsh['notes'], true)) { $unNotes = $f; }
+    }
+    ok($unNotes !== null, 'buddy has an unshared note folder');
+    $ev = stored('events', 'buddy');
+    $ev[] = ['id' => 'mxprivev1', 'text' => 'mx private event', 'date' => $D, 'time' => '09:00',
+             'cal' => $unCal, 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'events', 'buddy'), $ev);
+    $rm = stored('reminders', 'buddy');
+    $rm[] = ['id' => 'mxprivrm1', 'text' => 'mx private reminder', 'due' => $D, 'time' => null,
+             'done' => false, 'folder' => $unFolder,
+             'section' => calshow_section($rm, $unFolder), 'repeat' => null, 'created' => time()];
+    store_write(user_data_file($dir, 'reminders', 'buddy'), $rm);
+    $nt = stored('notes', 'buddy');
+    $nt[] = ['id' => 'mxprivnt1', 'title' => 'mx private note', 'body' => '', 'folder' => $unNotes,
+             'section' => calshow_section($nt, $unNotes), 'date' => $D, 'time' => null,
+             'created' => time(), 'updated' => time()];
+    store_write(user_data_file($dir, 'notes', 'buddy'), $nt);
+
+    $jar = login('example', 'examplepassword');
+    $all = json_encode(calshow_payload($jar, $ym));
+    foreach (['mx private event', 'mx private reminder', 'mx private note'] as $t) {
+        hasnt($t, $all, "\"$t\" never reaches example's calendar");
+    }
+    // And my own event on a calendar I've hidden goes dark until I show it again.
+    $myCal = null;
+    foreach (stored('events', 'example') as $e) { if (($e['id'] ?? '') === 'mxownev01') { $myCal = $e['cal']; } }
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+        'action' => 'cal_vis', 'name' => $myCal], $jar, true);
+    $hidden = json_encode(calshow_payload($jar, $ym));
+    hasnt('mx own event', $hidden, 'an event on a hidden calendar stays off');
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+        'action' => 'cal_vis_all', 'show' => '1'], $jar, true);
+    has('mx own event', json_encode(calshow_payload($jar, $ym)), 'and comes back when every calendar shows');
+});
+
+t('the week-mode and swipe machinery ships wired', function () {
+    // The harness runs no JS; these pin the handlers the gestures live in. The behaviour
+    // itself was driven in a real browser (2026-08-04, local and production): swipe up
+    // engages week mode, the arrows step a week, swipe down restores the month.
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/calendar/', [], $jar)['body'];
+    has("wrap.addEventListener('touchstart'", $b, 'the swipe start handler is attached');
+    has("wrap.addEventListener('touchend'", $b, 'and the swipe end handler');
+    has("localStorage.setItem('calWeekMode'", $b, 'week mode persists');
+    has("classList.toggle('wk-hide'", $b, 'week mode hides the other rows');
+    has('wk=last', $b, 'paging back crosses into the previous month');
+    has('wk=first', $b, 'paging forward crosses into the next');
+    has('.monthnav > a', $b, 'the arrows are intercepted in week mode');
+    has('Math.abs(dx) > 55', $b, 'the sideways-swipe paging threshold is deliberate');
+    has('data-week="', $b, 'every cell carries its week for the fold');
+    has("grid.addEventListener('pointerdown'", $b, 'day selection starts at pointerdown');
+    has("grid.addEventListener('pointerup'", $b, 'and needs the matching pointerup — a tap, never a swipe');
+});
+
 area('habits2');
 
 t('the month view counts a day against the habits ticked on it', function () {
