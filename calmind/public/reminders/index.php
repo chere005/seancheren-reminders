@@ -1491,11 +1491,14 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.25rem;
       border-bottom: 1px solid var(--line-soft);
     }
-    /* No divider under the last row of a section. When completed rows are hidden, the last
-       *open* row is the real last one, so drop its divider too — an open row with no open
-       row after it. (:has() degrades to just the last-child rule on older browsers.) */
-    ul.rlist > li:last-child { border-bottom: none; }
-    body:not(.show-done) ul.rlist > li:not(.done):not(:has(~ li:not(.done))) { border-bottom: none; }
+    /* No divider under the last row of a section — and most of its bottom padding goes
+       with it (0.15rem, the rows keep 0.5rem between themselves): the row's own 8px
+       stacked under the next heading's margin, which read as extra air exactly where the
+       list ends. When completed rows are hidden, the last *open* row is the real last
+       one, so both rules hit it too — an open row with no open row after it. (:has()
+       degrades to just the last-child rules on older browsers.) */
+    ul.rlist > li:last-child { border-bottom: none; padding-bottom: 0.15rem; }
+    body:not(.show-done) ul.rlist > li:not(.done):not(:has(~ li:not(.done))) { border-bottom: none; padding-bottom: 0.15rem; }
     li.done .text { color: var(--muted); text-decoration: line-through; }
     ul.rlist { display: flex; flex-direction: column; }
     li.done { order: 1; }   /* when shown, completed items sink below the open ones */
