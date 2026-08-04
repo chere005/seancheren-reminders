@@ -1355,9 +1355,12 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
-    /* margin-top 1rem, was 1.5 — same second pass; the 24px above every section title
-       was most of what made the phone list feel airy. */
-    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0 0.25rem; padding: 0 0.25rem; }
+    /* The divider ladder: rows 1px line-soft, sections 1.5px line, folders 2px line —
+       a section's lid sits between the two. The margin drops to 0.65rem so the name
+       stays where the compacting passes put it: margin + rule + 0.35rem of padding adds
+       back up to the same ~16px of air above the text. */
+    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 0.65rem 0 0.25rem;
+                    padding: 0.35rem 0.25rem 0; border-top: 1.5px solid var(--line); }
     /* The permanent groups' plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
     .section-title { font-weight: 600; font-size: 1.15rem; color: var(--gold); line-height: 1.2; align-self: center; }
