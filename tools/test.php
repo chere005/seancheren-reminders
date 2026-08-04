@@ -2249,6 +2249,43 @@ t('wiring: the share window carries the pencil, and works before any partner exi
     has('id="shareEditBtn"', $b, 'beside the pencil');
 });
 
+t("a partner's dated shared note shows on my calendar, an unshared one doesn't", function () {
+    // Buddy's recipe notes are dated to the shared dinners; they must reach example's
+    // calendar the way buddy's shared events already do — same day, marked as theirs.
+    $ragu = null;
+    foreach (stored('notes', 'buddy') as $n) {
+        if (($n['type'] ?? '') !== 'section' && ($n['folder'] ?? '') === 'Recipes'
+            && !empty($n['date'])) { $ragu = $n; break; }
+    }
+    ok($ragu !== null, 'the seed gives buddy a dated note in the shared Recipes folder');
+    // And one dated note in a folder buddy does NOT share, on the same day.
+    $bjar = login('buddy', 'buddypassword');
+    $before = array_column(stored('notes', 'buddy'), 'id');
+    req('POST', '/calmind/notes/', ['csrf' => csrf($bjar, '/calmind/notes/'), 'action' => 'add',
+        'view' => 'General', 'folder' => 'General', 'section' => ''], $bjar);
+    $pid = null;
+    foreach (stored('notes', 'buddy') as $n) {
+        if (($n['type'] ?? '') !== 'section' && !in_array($n['id'], $before, true)) { $pid = $n['id']; }
+    }
+    req('POST', '/calmind/notes/', ['csrf' => csrf($bjar, '/calmind/notes/'), 'action' => 'save',
+        'view' => 'All', 'id' => $pid, 'title' => 'private jam plan', 'date' => $ragu['date'],
+        'body' => '', 'folder' => 'General', 'section' => ''], $bjar);
+
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/calmind/calendar/?ym=' . substr($ragu['date'], 0, 7), [], $jar);
+    preg_match('/=\s*(\{"20\d\d-\d\d-\d\d".*?\})\s*;/s', $r['body'], $m);
+    $byDay = json_decode($m[1] ?? '{}', true);
+    $found = $leak = null;
+    foreach ($byDay[$ragu['date']] ?? [] as $it) {
+        if (($it['kind'] ?? '') === 'note' && ($it['text'] ?? '') === ($ragu['title'] ?? '')) { $found = $it; }
+        if (($it['text'] ?? '') === 'private jam plan') { $leak = $it; }
+    }
+    ok($found !== null, "buddy's dated recipe note reaches example's calendar");
+    eq('buddy', $found['owner'] ?? null, 'and is marked as theirs');
+    ok(!empty($found['color']), 'and wears a colour');
+    ok($leak === null, "a note from a folder buddy never shared stays off my calendar");
+});
+
 // ---------------------------------------------------------------- 11. widget / api
 area('widget');
 

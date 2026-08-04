@@ -120,6 +120,8 @@ $sharedIds   = array_column($sharedCals, 'id');
 $sharedFolders = $partner
     ? array_values(array_intersect(folders_load($cfg['data_dir'], $partner)['reminders'], $theirShares['folders']))
     : [];
+// And their shared note folders — a dated note in one shows on its day like mine do.
+$sharedNoteFolders = shared_note_folders($cfg['data_dir'], $partner);
 
 // --- Quick add / edit / delete from the calendar (POST -> redirect -> GET), CSRF protected ---
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action'])) {
@@ -606,12 +608,19 @@ $byDay = [];   // 'YYYY-MM-DD' => [ ['kind'=>'reminder'|'note', 'text'=>..., 'do
 $remFolderColor   = folder_colors($cfg['data_dir'], 'reminders');
 $noteFolderColor  = folder_colors($cfg['data_dir'], 'notes');
 $remFolderTheirs  = [];
+$noteFolderTheirs = [];
 if ($partner) {
     $theirOwn  = folder_colors($cfg['data_dir'], 'reminders', $partner);
     $overrides = folder_shared_colors($cfg['data_dir'], 'reminders');
     foreach (array_values($sharedFolders) as $i => $f) {
         $remFolderTheirs[$f] = folder_shared_color($overrides, $theirOwn, 'reminders',
                                                    '@' . $partner . ':' . $f, $f, $i);
+    }
+    $theirNotes = folder_colors($cfg['data_dir'], 'notes', $partner);
+    $nOverrides = folder_shared_colors($cfg['data_dir'], 'notes');
+    foreach (array_values($sharedNoteFolders) as $i => $f) {
+        $noteFolderTheirs[$f] = folder_shared_color($nOverrides, $theirNotes, 'notes',
+                                                    '@' . $partner . ':' . $f, $f, $i);
     }
 }
 
@@ -700,6 +709,20 @@ if ($partner) {
                                 'start' => $ev['date'] ?? '',
                                 'cal' => $ec, 'color' => $calColor[$ec] ?? CAL_COLORS[0],
                                 'owner' => $partner];
+            }
+        }
+    }
+    // Their shared note folders: a dated note shows on its day, marked as theirs. The
+    // same $onlyFolder gate as my own notes — picking a reminder folder shows only it.
+    if ($sharedNoteFolders && $onlyFolder === null) {
+        foreach (load_json_list(user_data_file($cfg['data_dir'], 'notes', $partner)) as $n) {
+            if (($n['type'] ?? '') === 'section') { continue; }
+            if (!in_array($n['folder'] ?? '', $sharedNoteFolders, true)) { continue; }
+            if (!empty($n['date']) && $n['date'] >= $monthFrom && $n['date'] <= $monthTo) {
+                $byDay[$n['date']][] = ['kind' => 'note', 'id' => $n['id'] ?? '',
+                    'text' => $n['title'] ?? 'Untitled note', 'done' => false,
+                    'folder' => $n['folder'] ?? '', 'owner' => $partner,
+                    'color' => $noteFolderTheirs[$n['folder'] ?? ''] ?? app_palette('notes', true)[0]];
             }
         }
     }
