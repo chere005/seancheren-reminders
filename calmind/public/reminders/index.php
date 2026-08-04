@@ -1318,7 +1318,9 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
        before it. Full-width because the block is; the folder-head keeps its own short
        trailing rule as the heading's flourish. The block's top margin+padding sit the
        heading just under the divider, so the heading's own top margin comes off. */
-    .folder-block { border-top: 2px solid var(--line); margin-top: 1.5rem; padding-top: 0.55rem; }
+    /* 1rem/0.35rem, was 1.5/0.55 — the second pass of the phone compacting: the gap
+       above a folder heading drops by a third. */
+    .folder-block { border-top: 2px solid var(--line); margin-top: 1rem; padding-top: 0.35rem; }
     .folder-head { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0 0.25rem; }
     /* The folder name is the top heading, sitting on a rounded, fairly transparent wash
        of the folder's own colour — 8-digit hex, inline, from folder_tint(). That wash is
@@ -1353,7 +1355,9 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 
     /* Section headers (bold), grouping reminders */
     /* Same side padding as a row, so the handle and the X line up with the rows'. */
-    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.25rem; padding: 0 0.25rem; }
+    /* margin-top 1rem, was 1.5 — same second pass; the 24px above every section title
+       was most of what made the phone list feel airy. */
+    .section-head { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0 0.25rem; padding: 0 0.25rem; }
     /* The permanent groups' plain-span title, matching the field version's metrics so
        both sit on the same centre line as the chevron and the "+". */
     .section-title { font-weight: 600; font-size: 1.15rem; color: var(--gold); line-height: 1.2; align-self: center; }
