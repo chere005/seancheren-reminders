@@ -20,7 +20,18 @@ function site_nav($active) {
     $cls = $slug === $active ? ' class="on"' : '';
     $out .= '<a href="' . $href . '"' . $cls . '>' . $label . '</a>';
   }
-  return $out . '</nav>';
+  $out .= '</nav>';
+  // The same nav as a dropdown for phone widths — a <details>, so no JS: the summary
+  // wears the current page's name and the open menu lists every page. CSS swaps which
+  // of the two shows; tapping a link navigates, which is also what closes it.
+  $current = $links[$active] ?? 'Home';
+  $out .= '<details class="sitenav-dd"><summary>' . $current . ' <span class="caret">&#9662;</span></summary><div class="menu">';
+  foreach ($links as $slug => $label) {
+    $href = $slug === '' ? '/' : '/' . $slug . '/';
+    $cls = $slug === $active ? ' class="on"' : '';
+    $out .= '<a href="' . $href . '"' . $cls . '>' . $label . '</a>';
+  }
+  return $out . '</div></details>';
 }
 
 function site_page($active, $title, $bodyHtml) {
@@ -60,7 +71,7 @@ function site_page($active, $title, $bodyHtml) {
   }
   .sitelogo:hover { opacity: 0.8; }
   .sitenav {
-    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;
     padding-bottom: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
   }
   .sitenav a {
@@ -69,6 +80,33 @@ function site_page($active, $title, $bodyHtml) {
   }
   .sitenav a:hover { background: var(--surface-2); color: var(--text); }
   .sitenav a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  /* Phone widths swap the pill row for the dropdown; same rule under either. */
+  .sitenav-dd { display: none; }
+  @media (max-width: 480px) {
+    .sitenav { display: none; }
+    .sitenav-dd {
+      display: flex; justify-content: center; position: relative;
+      padding-bottom: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
+    }
+    .sitenav-dd summary {
+      list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;
+      background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 0.95rem;
+      border: 1px solid var(--accent); border-radius: 999px; padding: 0.3rem 1rem;
+    }
+    .sitenav-dd summary::-webkit-details-marker { display: none; }
+    .sitenav-dd .caret { font-size: 0.7em; line-height: 1; }
+    .sitenav-dd .menu {
+      position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 10;
+      min-width: 11rem; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 12px; padding: 0.35rem; display: flex; flex-direction: column;
+    }
+    .sitenav-dd .menu a {
+      text-decoration: none; color: var(--text-dim); border-radius: 8px;
+      padding: 0.5rem 0.9rem; font-size: 0.95rem; text-align: center;
+    }
+    .sitenav-dd .menu a:hover { background: var(--surface-2); color: var(--text); }
+    .sitenav-dd .menu a.on { color: var(--accent); font-weight: 700; }
+  }
   /* One luminance ramp rather than three unrelated colours: the page title is the
      brightest thing on the page, section headings carry the accent, and subheadings sit
      a step dimmer — so the hierarchy reads without any of the three competing with the

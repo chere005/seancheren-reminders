@@ -445,7 +445,9 @@ previews with the current one marked; picking one sets the `sitetheme` cookie
 (POST→redirect) and re-dresses the public pages — a bad name sets nothing — and the
 cookie never reaches the apps, which keep their own per-user theme. Every public page
 wears the centred cursive SC mark and links the site's own favicon/touch icons (real
-PNGs), which never leak into the apps — they keep their own. Projects nests Theme
+PNGs), which never leak into the apps — they keep their own. The pill nav is centred, and
+phone widths swap it for a no-JS `<details>` dropdown whose summary names the current
+page (the swap and both page lists are pinned; how it opens is by eye). Projects nests Theme
 Picker and CalMind as subsections (h4) under Vibe Coding Apps — the shell must style that
 level — and lists the Private categories (Work, Music, Games, Languages).
 

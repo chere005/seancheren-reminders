@@ -4939,6 +4939,7 @@ t('the site wears the cursive SC mark and its icons', function () use ($root) {
     foreach (['/', '/projects/'] as $p) {
         $b = req('GET', $p)['body'];
         has('class="sitelogo"', $b, "$p carries the centred mark");
+        has('justify-content: center', $b, "$p centres the pill nav under it");
         has('href="/favicon-32.png"', $b, "$p links the favicon");
         has('href="/apple-touch-icon.png"', $b, "$p links the touch icon");
     }
@@ -4950,6 +4951,15 @@ t('the site wears the cursive SC mark and its icons', function () use ($root) {
     $jar = login('example', 'examplepassword');
     hasnt('favicon-32.png', req('GET', '/calmind/reminders/', [], $jar)['body'],
           'an app page does not pick up the site favicon');
+});
+
+t('phone widths swap the pill nav for a dropdown', function () {
+    $b = req('GET', '/projects/')['body'];
+    has('<details class="sitenav-dd">', $b, 'the dropdown ships');
+    has('<summary>Projects <span class="caret">', $b, 'its summary wears the current page');
+    ok(preg_match('/@media \(max-width: 480px\) \{\s*\.sitenav \{ display: none/', $b) === 1,
+       'and the pill row hides at phone widths');
+    eq(2, substr_count($b, '>Themes</a>'), 'the dropdown lists the same pages the pills do');
 });
 
 t('the theme picker shows all four themes, read-only, current marked', function () {
