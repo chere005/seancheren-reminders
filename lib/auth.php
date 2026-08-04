@@ -633,6 +633,8 @@ function render_login(string $area, string $error = '', string $stage = 'login',
       border-radius: 4px; font-size: 1rem; cursor: pointer;
     }
     .modalbox .cancel { background: none; border: 1px solid var(--line); color: var(--text-dim); margin-top: 0.6rem; }
+    /* Amber, not the error red: it's a caution to read before submitting, not a refusal. */
+    .modalbox .warn { color: #fbbf24; font-size: 0.78rem; margin: -0.35rem 0 1rem; text-align: center; }
     /* Four characters wide and no wider — a full-width box with half an em of
        letter-spacing pushed the last digit past the edge on a phone. */
     /* Full width like the button under it; the text-indent balances the trailing
@@ -677,6 +679,7 @@ function render_login(string $area, string $error = '', string $stage = 'login',
       <input id="email" type="email" name="email" autocomplete="email" required>
       <label for="newpass">Password</label>
       <input id="newpass" type="password" name="newpass" autocomplete="new-password" minlength="6" required>
+      <p class="warn">Passwords are not encrypted at this time during development &mdash; don't use a real password.</p>
       <button type="submit">Send verification code</button>
       <button type="button" class="cancel" data-close>Cancel</button>
     </form>

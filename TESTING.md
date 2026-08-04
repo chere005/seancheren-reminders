@@ -367,6 +367,8 @@ case that catches a page whose preamble was forgotten, which would otherwise ren
 and quietly link back into production.
 
 ### `signup`
+The create-account window carries the development warning that passwords aren't encrypted
+and a real one shouldn't be used — it stays until sign-up storage hashes them.
 A short username, a bad email, a short password and a taken name are all refused and none
 of them creates an account. A good sign-up **parks** the account in `signups.json` and it
 cannot sign in while it's pending. Five wrong codes end it, and the right code afterwards

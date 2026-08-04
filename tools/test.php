@@ -4203,6 +4203,15 @@ t('the sandbox writes nowhere near the outer run, let alone data/', function () 
 // half-made account must not be an account, and five wrong codes must end it.
 area('signup');
 
+t('the create-account window warns that passwords are not encrypted yet', function () {
+    // Until sign-up storage hashes passwords, the window has to say so before anyone
+    // types a password they use elsewhere.
+    $b = req('GET', '/calmind/reminders/')['body'];
+    has('class="warn"', $b, 'the warning line is there');
+    has('not encrypted at this time', $b, 'and says what it needs to');
+    has("don't use a real password", $b, 'with the instruction that follows from it');
+});
+
 t('a sign-up is refused unless the username, email and password are all right', function () use ($scratch) {
     $bad = [
         ['x',        'a@b.com',   'longenough', 'username too short'],
