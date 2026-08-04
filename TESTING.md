@@ -112,7 +112,15 @@ A shared view answers `edit_full` with a 403 and renders no pencil, and no conve
 window. **The inline edit field carries `min-width: 0`** (wiring) — without it a flex
 input refuses to shrink below ~185px, and on a phone the subtask + and delete × were
 shoved off the right edge the moment a row's edit opened; the on-screen check itself was
-done in a real browser at phone width. **`duplicate`** copies the whole block — parent and subtask, fresh ids — directly
+done in a real browser at phone width. **The three-second grace on a tick** (wiring): a
+ticked row stays visible, struck through, in place — `li.done.grace` must override both
+the hide and `order: 1` — while the toggle posts immediately with `keepalive`; the timing
+itself was watched in a browser (visible at 1.5s, gone at 3.5s, untick inside the window
+cancels, a repeat still rolls with its flash). **The swiped delete pins to the screen's
+right edge** (wiring): the reveal rule counter-translates by `--swipe-x`, which the
+gesture script sets from its own LIMIT, so the CSS and the JS can't drift apart; where
+the × actually lands was measured in a browser (20px from the edge — the page's own
+padding — where it used to sit 104px in). **`duplicate`** copies the whole block — parent and subtask, fresh ids — directly
 under the original and stays in edit mode. *(By eye: the
 collapse-all toggle actually folds/expands, the toolbar↔first-divider gap matches the gap
 above the toolbar, and the folder-head rename field in edit mode. The row pencil opens the

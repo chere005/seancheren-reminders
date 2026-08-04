@@ -983,6 +983,39 @@ t('wiring: rows carry the pencil and the page ships the conversion window', func
 });
 
 // ---------------------------------------------------------------- 5. folders
+t('a tick keeps its row on screen for three seconds before hiding it', function () {
+    // Wiring — the grace is client-side. The page must carry: the CSS override that
+    // keeps a just-done row visible AND in place (li.done's order:1 would fling it to
+    // the bottom of the list the moment it was ticked), and the interceptor that posts
+    // the toggle immediately (keepalive, so leaving the page can't cancel the save) and
+    // only delays the hiding. Repeats bypass it — their tick rolls the date and needs
+    // the reload; that behaviour is covered in `reminders`.
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    has('li.done.grace { display: flex; }', preg_replace('/\s+/', ' ', $b) ? $b : $b, 'the grace rule ships');
+    ok(preg_match('/li\.done\.grace \{ order: 0/', $b) === 1, 'and holds the row in place');
+    ok(preg_match('/setTimeout\(function \(\) \{\s*li\.classList\.remove\(.grace.\)/s', $b) === 1,
+       'the hide waits on a timer');
+    has("fetch('', { method: 'POST', body: fd, keepalive: true });", $b,
+        'while the tick itself posts at once and survives leaving the page');
+    // The smaller check keeps its old tap target through the ::after halo.
+    ok(preg_match('/\.check \{ width: 24px; height: 24px;[^}]*\}/', $b) === 1, 'the check is 24px');
+    has(".check::after { content: ''; position: absolute; inset: -5px;", $b,
+        'with the tap halo that keeps the old target size');
+});
+
+t('the swiped delete is pinned at the right edge of the screen', function () {
+    // Wiring. The row slides left to open the gap and the revealed x used to ride along
+    // with it, landing a quarter-screen in. The reveal rule counter-translates by the
+    // same distance the gesture script slides (--swipe-x, set by the script from its own
+    // LIMIT), so the two cannot drift apart without this failing.
+    $jar = login('example', 'examplepassword');
+    $b = req('GET', '/calmind/reminders/?folder=All', [], $jar)['body'];
+    has('transform: translateX(var(--swipe-x, 0px));', $b, 'the reveal counter-translates');
+    has("r.style.setProperty('--swipe-x', LIMIT + 'px')", $b, 'by exactly the slide distance');
+    has("r.style.removeProperty('--swipe-x')", $b, 'and closing clears it');
+});
+
 t('the inline edit field gives way so the row buttons stay on screen', function () {
     // Wiring. A flex item's default min-width is its content size, and a text input's
     // content size is ~185px — so on a phone, the moment a row's inline edit opened

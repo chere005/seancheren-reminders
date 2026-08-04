@@ -815,6 +815,11 @@ function swipe_delete_styles(): string
     .swipe-row.swiped .needs-confirm {
       display: inline-flex; align-items: center; justify-content: center;
       background: #b3261e; border-color: #f66; color: #fff; font-weight: 700;
+      /* The row slides left to open the gap, and the button used to ride along with it —
+         landing a quarter-screen in from the edge. Counter-translating by the same
+         distance (the script sets --swipe-x to its LIMIT) pins the × at the right edge
+         of the screen, in the space the swipe just opened. */
+      transform: translateX(var(--swipe-x, 0px));
     }
     CSS;
 }
@@ -831,7 +836,7 @@ function swipe_delete_script(): string
   function close(r) {
     if (!r) { return; }
     r.classList.remove('swiped');
-    r.style.transition = ''; r.style.transform = '';
+    r.style.transition = ''; r.style.transform = ''; r.style.removeProperty('--swipe-x');
     if (open === r) { open = null; }
   }
   document.addEventListener('pointerdown', function (e) {
@@ -857,7 +862,11 @@ function swipe_delete_script(): string
     if (!row) { return; }
     var r = row; row = null;
     r.style.transition = '';
-    if (dx <= -TRIGGER) { r.classList.add('swiped'); r.style.transform = 'translateX(-' + LIMIT + 'px)'; open = r; }
+    if (dx <= -TRIGGER) {
+      r.classList.add('swiped'); r.style.transform = 'translateX(-' + LIMIT + 'px)';
+      r.style.setProperty('--swipe-x', LIMIT + 'px');   // the reveal rule pins the × back at the screen edge
+      open = r;
+    }
     else { close(r); }
   }
   document.addEventListener('pointerup', end);

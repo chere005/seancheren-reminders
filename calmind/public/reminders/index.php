@@ -1249,6 +1249,12 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     }
     /* Completed reminders + the clear button stay hidden until "Completed" is on */
     body:not(.show-done) li.done { display: none; }
+    /* The three-second grace after a tick: the row stays visible, struck through, right
+       where it was — .done alone would hide it instantly and also re-order it to the
+       bottom (li.done { order: 1 }), which reads as vanishing. Unticking within the
+       window cancels the hide; the tick itself was saved the moment it was made. */
+    body:not(.show-done) li.done.grace { display: flex; }
+    li.done.grace { order: 0; opacity: 0.55; transition: opacity 0.3s ease; }
     body:not(.show-done) footer { display: none; }
 
     /* New-item window, the same one the Calendar uses. */
@@ -1477,7 +1483,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
 
     ul { list-style: none; }
     li {
-      display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.25rem;
+      /* 0.5rem vertical, was 0.75 — a phone screen's worth of list gains two rows. */
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.25rem;
       border-bottom: 1px solid var(--line-soft);
     }
     /* No divider under the last row of a section. When completed rows are hidden, the last
@@ -1526,7 +1533,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       background: none; border: 1px solid var(--line); color: var(--text-dim); cursor: pointer;
       border-radius: 50%; font-size: 0.95rem; line-height: 1;
     }
-    /* The delete × joins the 26px edit cluster; the tick keeps its 30px tap target. */
+    /* The delete × joins the 26px edit cluster. The tick draws at 24px — the row reads
+       lighter — but a transparent ::after keeps the full 30px+ tap target, same trick as
+       the habit section dots. */
+    .check { width: 24px; height: 24px; font-size: 0.85rem; position: relative; }
+    .check::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
     .del { width: 26px; height: 26px; }
     .check:hover { border-color: var(--accent); color: var(--accent); }
     .del:hover { border-color: #f66; color: #f66; }
@@ -2440,6 +2451,41 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     li.scrollIntoView({ block: 'center', behavior: 'auto' });
     li.classList.add('rolled-flash');
     setTimeout(() => li.classList.remove('rolled-flash'), 2200);
+  })();
+
+  // Ticking something off keeps the row on screen, struck through, for three seconds
+  // before it hides — an instant vanish read as the list eating the row. The tick is
+  // SAVED immediately (the POST goes out at once, keepalive so leaving the page can't
+  // cancel it); only the hiding waits. Unticking inside the window cancels the hide and
+  // untoggles server-side. Each row times independently. Repeats keep the full submit:
+  // they never hide — they roll to the next date, and that redirect + flash already works.
+  (function () {
+    document.addEventListener('click', function (e) {
+      const b = e.target.closest && e.target.closest('.check');
+      if (!b || !b.form) { return; }
+      const li = b.closest('li[data-id]');
+      if (!li) { return; }
+      const isRepeat = parseInt(li.dataset.repN || '0', 10) > 0 && (li.dataset.due || '') !== ''
+                       && li.dataset.done !== '1';
+      if (isRepeat) { return; }                       // the roll needs the reload
+      e.preventDefault();
+      const fd = new FormData(b.form);
+      fetch('', { method: 'POST', body: fd, keepalive: true });
+      if (li._graceT) { clearTimeout(li._graceT); li._graceT = null; }
+      const nowDone = li.dataset.done !== '1';
+      li.dataset.done = nowDone ? '1' : '0';
+      li.classList.toggle('done', nowDone);
+      b.innerHTML = nowDone ? '✓' : '&nbsp;&nbsp;';
+      if (nowDone) {
+        li.classList.add('grace');
+        li._graceT = setTimeout(function () {
+          li.classList.remove('grace');            // CSS hides it now (unless Completed is shown)
+          li._graceT = null;
+        }, 3000);
+      } else {
+        li.classList.remove('grace');
+      }
+    }, true);
   })();
 </script>
 <?= folder_modal_script() ?>
