@@ -432,7 +432,10 @@ and the one thing a test run may never actually perform. It parses; no `rsync` l
 `--delete`; every `lib` push excludes `config.php`; nothing names a live data directory; a
 bare deploy is the test instance and production needs saying out loud. Also
 `tools/seed-http.php`: the committed copy carries no key, compares in constant time, has
-no default data directory, and is never deployed.
+no default data directory, and is never deployed. The `calmind/` repo split is guarded
+here too: `public/calmind` and the four CalMind-only lib files must be symlinks into the
+top-level `calmind/` area, and both deploy scripts must rsync with `-L` so the server
+always receives real files in the pre-split layout.
 
 ## What only eyes can check
 

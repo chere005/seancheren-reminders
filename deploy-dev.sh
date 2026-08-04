@@ -107,7 +107,7 @@ while IFS= read -r f; do
     echo "    SYNTAX ERROR in $f"; php -l "$f" 2>&1 | tail -1
     errors=1
   fi
-done < <(find "$SRC/public" "$SRC/lib" -name '*.php')
+done < <(find "$SRC/public" "$SRC/calmind" "$SRC/lib" -name '*.php')
 if [ "$errors" -ne 0 ]; then
   echo "Aborting — fix the syntax errors above and try again."
   exit 1
@@ -175,11 +175,13 @@ ensure_dev_config
 
 # config.php is never sent (the instance keeps its own), the data dir is not in these
 # paths, and --delete is never used. openrsync on macOS has no --chmod, so anything left
-# at 0600 is made web-readable on the server afterwards.
+# at 0600 is made web-readable on the server afterwards. -L dereferences the symlinks
+# that stitch the top-level calmind/ area into public/ and lib/, so the server gets real
+# files and its layout is unchanged by the repo split.
 echo "==> [DEV] public/ -> $PUB/"
-rsync -rlptz $DRY -e "$SSH" --exclude='.DS_Store' --exclude='*.swp' "$SRC/public/" "$HOST:$PUB/"
+rsync -rLptz $DRY -e "$SSH" --exclude='.DS_Store' --exclude='*.swp' "$SRC/public/" "$HOST:$PUB/"
 echo "==> [DEV] lib/    -> $LIB/   (config.php protected)"
-rsync -rlptz $DRY -e "$SSH" --exclude='config.php' --exclude='.DS_Store' --exclude='*.swp' "$SRC/lib/" "$HOST:$LIB/"
+rsync -rLptz $DRY -e "$SSH" --exclude='config.php' --exclude='.DS_Store' --exclude='*.swp' "$SRC/lib/" "$HOST:$LIB/"
 if [ -z "$DRY" ]; then
   echo "==> [DEV] ensuring web-readable perms…"
   $SSH "$HOST" "

@@ -3887,9 +3887,11 @@ function instance_boot(): array
 
     $box = $scratch . '/box';
     @mkdir($box, 0700, true);
-    // public/ and public/test/ are the same tree, exactly as deploy.sh pushes them.
+    // public/ and public/test/ are the same tree, exactly as deploy.sh pushes them —
+    // -L dereferences the symlinks stitching calmind/ in, like the deploy's rsync -L,
+    // so the box holds real files the way the server does.
     foreach ([['lib', 'lib'], ['lib', 'lib-test'], ['public', 'public'], ['public', 'public/test']] as [$from, $to]) {
-        exec('cp -R ' . escapeshellarg($root . '/' . $from) . ' ' . escapeshellarg($box . '/' . $to), $o, $rc);
+        exec('cp -RL ' . escapeshellarg($root . '/' . $from) . ' ' . escapeshellarg($box . '/' . $to), $o, $rc);
         if ($rc !== 0) { throw new RuntimeException("could not lay out $to"); }
     }
     // A data dir each, both starting from the same seeded account set — so a difference
@@ -4969,6 +4971,22 @@ t('a bare deploy is the test instance, never production', function () use ($root
     // never be one keystroke away from touching the live site. These are text checks.
     ok(preg_match('/\bprod\)\s*$/m', $s) === 1, 'prod is its own explicit mode');
     ok(strpos($s, 'promote') !== false, 'and promote exists to move test into prod');
+});
+
+t('the calmind/ split is stitched in by symlinks and dereferenced on deploy', function () use ($root) {
+    // CalMind lives in its own top-level calmind/ area; symlinks keep the served layout
+    // (public/calmind, lib/*.php) unchanged locally, and both deploy scripts must -L
+    // them into real files so the server never sees the split.
+    eq('../calmind/public', readlink($root . '/public/calmind'), 'public/calmind points into calmind/');
+    foreach (['tabbar', 'folders', 'sharing', 'palette'] as $f) {
+        eq('../calmind/lib/' . $f . '.php', readlink($root . '/lib/' . $f . '.php'), "lib/$f.php points into calmind/");
+    }
+    foreach (['deploy.sh', 'deploy-dev.sh'] as $s) {
+        $b = (string) file_get_contents($root . '/' . $s);
+        has('-rLptz', $b, "$s dereferences the symlinks");
+        hasnt('rsync -rlptz', $b, "$s must not ship symlinks as symlinks");
+        has('calmind', $b, "$s lints the calmind/ area");
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════ run

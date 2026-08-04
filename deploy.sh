@@ -68,7 +68,7 @@ while IFS= read -r f; do
     echo "    SYNTAX ERROR in $f"; php -l "$f" 2>&1 | tail -1
     errors=1
   fi
-done < <(find public lib -name '*.php')
+done < <(find public calmind lib -name '*.php')
 if [[ $errors -ne 0 ]]; then
   echo "Aborting — fix the syntax errors above and try again."
   exit 1
@@ -80,14 +80,17 @@ echo "    all PHP OK."
 # these paths, and --delete is never used — so a plain deploy can only ever add/update
 # code. openrsync on macOS has no --chmod, so a file left at 0600 is fixed on the server
 # (add-only: a+rX never grants write or strips anything, and config.php is skipped).
+# -L dereferences the symlinks that stitch the top-level calmind/ area into public/ and
+# lib/ (public/calmind, lib/tabbar.php, …), so the server always gets real files and its
+# layout is unchanged by the repo split.
 push_instance() {   # $1 = public dest   $2 = lib dest   $3 = human label
   local pub="$1" lib="$2" label="$3"
   echo "==> [$label] public/ -> $pub/"
-  rsync -rlptzv $DRY -e "$SSH" \
+  rsync -rLptzv $DRY -e "$SSH" \
     --exclude='.DS_Store' --exclude='*.swp' \
     public/ "$HOST:$pub/"
   echo "==> [$label] lib/    -> $lib/   (config.php protected)"
-  rsync -rlptzv $DRY -e "$SSH" \
+  rsync -rLptzv $DRY -e "$SSH" \
     --exclude='config.php' --exclude='.DS_Store' --exclude='*.swp' \
     lib/ "$HOST:$lib/"
   if [[ -z "$DRY" ]]; then

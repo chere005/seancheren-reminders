@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 php -S 127.0.0.1:8787 -t public          # local server; apps at /calmind/reminders/, /calmind/calendar/, …
 php tools/test.php                       # the test run — see TESTING.md
-find public lib tools -name '*.php' -exec php -l {} \;   # lint everything
+find public calmind lib tools -name '*.php' -exec php -l {} \;   # lint everything
 ./deploy.sh --dry-run                    # preview the (test) deploy, touch nothing
 ./deploy.sh                              # lint, then rsync to the TEST instance (/test/)
 ./deploy.sh both                         # …to TEST *and* production in one go
@@ -35,6 +35,20 @@ Local login: users come from `lib/config.php` (gitignored; copy `lib/config.samp
 - `public/` → server `/home/public/`. Anything here is URL-reachable.
 - `lib/` → server `/home/protected/lib/`. Shared code, never served.
 - `data/` → server `/home/protected/data/`. JSON storage, never served, gitignored.
+- `calmind/` → **CalMind's own top-level area in the repo, invisible to the server.**
+  `calmind/public/` holds the five suite apps + `api/` (served at `/calmind/…` as ever)
+  and `calmind/lib/` the lib files only CalMind uses (`tabbar`, `folders`, `sharing`,
+  `palette`). Symlinks stitch it back into the served layout — `public/calmind` →
+  `../calmind/public`, `lib/tabbar.php` → `../calmind/lib/tabbar.php`, … — so local
+  serving, the preambles and the tests are unchanged, and both deploy scripts rsync
+  with `-L` so the **server gets real files in the exact same layout as before the
+  split**. Genuinely shared infrastructure (`auth`, `store`, `util`, `chrome`,
+  `richtext`, `mail`, `usagelog`, `site`) stays in `lib/`, because chat, the bookshelf,
+  akisthemes, userpalettes and the marketing pages use it too — a full duplicate lib
+  was deliberately rejected: two copies of auth/store must keep session and encryption
+  behaviour identical forever or logins/data quietly break. A new CalMind-only lib file
+  goes in `calmind/lib/` with a symlink from `lib/`; a new shared one goes in `lib/`.
+  The `deploy` test area guards the symlinks and the `-L`.
 
 **The suite lives under `/calmind/`** — the five CalMind apps plus `api/` sit in `public/calmind/`, so production serves them at `seancheren.com/calmind/reminders/` and the mirrors at `/test/calmind/…`, `/dev/calmind/…`. Cross-app links build through `suite_path()` (`lib/auth.php`) = `suite_base() . '/calmind'`; the session cookie path and the apps outside the suite (chat, the bookshelf, the palettes pages) keep `suite_base()` alone, so one prod cookie still covers everything. The old roots (`public/reminders/` …) hold tiny 301 stubs that forward with the instance prefix and query intact, because installed home-screen icons and widget scripts still point there.
 
