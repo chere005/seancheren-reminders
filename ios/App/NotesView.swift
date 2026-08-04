@@ -45,9 +45,17 @@ struct NotesView: View {
     private func section(_ group: UUID?, title: String, model: ListGroup? = nil) -> some View {
         let rows = store.notesShown(folder: nil, group: group)
         Section {
-            ForEach(rows) { row($0) }
-                .onMove { store.moveNotes(rows, from: $0, to: $1) }
-                .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
+            ForEach(rows) { n in
+                row(n)
+                    // The web note row's two-squares button: a plain copy under the original.
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button { store.duplicate(n) } label: {
+                            Label("Duplicate", systemImage: "square.on.square")
+                        }.tint(.gray)
+                    }
+            }
+            .onMove { store.moveNotes(rows, from: $0, to: $1) }
+            .onDelete { idx in idx.forEach { store.delete(rows[$0]) } }
         } header: {
             HStack(spacing: 12) {
                 Button { newNote(group: group) } label: { Image(systemName: "plus") }

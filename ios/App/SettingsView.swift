@@ -19,6 +19,38 @@ struct SettingsView: View {
                     row("Habits", store.data.habits.count)
                 }
 
+                // The web settings window's theme picker: one swatch per theme — the
+                // page colour with the accent as a dot — the chosen one ringed.
+                Section("Theme") {
+                    HStack(spacing: 18) {
+                        ForEach(Theme.suite) { t in
+                            Button { store.setTheme(t.name) } label: {
+                                VStack(spacing: 5) {
+                                    ZStack {
+                                        Circle().fill(t.bg)
+                                            .overlay(Circle().strokeBorder(.quaternary, lineWidth: 1))
+                                        Circle().fill(t.accent).frame(width: 13, height: 13)
+                                    }
+                                    .frame(width: 34, height: 34)
+                                    .overlay {
+                                        if store.data.theme == t.name {
+                                            Circle().strokeBorder(t.accent, lineWidth: 2)
+                                                .frame(width: 42, height: 42)
+                                        }
+                                    }
+                                    Text(t.label)
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(store.data.theme == t.name ? .primary : .secondary)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+
                 Section {
                     // Two presses, like the erase below — this replaces everything.
                     Button {

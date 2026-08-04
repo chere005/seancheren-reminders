@@ -93,12 +93,6 @@ struct CalendarView: View {
                     Text(c.name)
                 }
             }
-            if !store.calSets.isEmpty {
-                Divider()
-                ForEach(store.calSets) { s in
-                    Button(s.name) { store.showOnlyCalendars(s.members ?? []) }
-                }
-            }
             Divider()
             Button("Calendars…", systemImage: "calendar") { managing = true }
         } label: {
@@ -290,6 +284,10 @@ struct CalendarView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { editingEvent = e }
+        .contextMenu {
+            Button("Duplicate", systemImage: "square.on.square") { store.duplicate(e) }
+            Button("Edit", systemImage: "pencil") { editingEvent = e }
+        }
     }
 
     private func reminderRow(_ r: Reminder) -> some View {
@@ -313,6 +311,7 @@ struct CalendarView: View {
             if r.due != nil {
                 Button("Remove from this day", systemImage: "calendar.badge.minus") { store.unschedule(r) }
             }
+            Button("Duplicate", systemImage: "square.on.square") { store.duplicate(r) }
             Button("Edit", systemImage: "pencil") { editingReminder = r }
         }
     }
@@ -327,6 +326,7 @@ struct CalendarView: View {
         .onTapGesture { editingNote = n }
         .contextMenu {
             Button("Remove from this day", systemImage: "calendar.badge.minus") { store.unschedule(n) }
+            Button("Duplicate", systemImage: "square.on.square") { store.duplicate(n) }
             Button("Edit", systemImage: "pencil") { editingNote = n }
         }
     }
@@ -415,6 +415,15 @@ struct EventDetail: View {
     @State private var armed = false
     private let isNew: Bool
 
+    /// The web calendar modal's kind row, cut down to [itself, Note]: picking Note makes
+    /// this row the title of a new note and the event moves out entirely.
+    enum SaveKind: String, CaseIterable, Identifiable {
+        case event = "Event", note = "Note"
+        var id: String { rawValue }
+    }
+    @State private var kind: SaveKind = .event
+    @State private var noteFolder: UUID?
+
     init(event: Event) {
         _draft = State(initialValue: event)
         _hasTime = State(initialValue: event.minutes != nil)
@@ -425,6 +434,15 @@ struct EventDetail: View {
         NavigationStack {
             Form {
                 TextField("Event", text: $draft.text, axis: .vertical)
+
+                if !isNew {
+                    Section {
+                        Picker("Type", selection: $kind) {
+                            ForEach(SaveKind.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
 
                 Section {
                     DatePicker("On", selection: $draft.date, displayedComponents: .date)
@@ -443,14 +461,22 @@ struct EventDetail: View {
                     }
                 }
 
-                Section {
-                    Picker("Calendar", selection: $draft.cal) {
-                        ForEach(store.calendarsOnly) { c in
-                            Text(c.name).tag(UUID?.some(c.id))
+                if kind == .event {
+                    Section {
+                        Picker("Calendar", selection: $draft.cal) {
+                            ForEach(store.calendarsOnly) { c in
+                                Text(c.name).tag(UUID?.some(c.id))
+                            }
+                        }
+                    }
+                    Section { RepeatPicker(rule: $draft.recurrence) }   // a note never repeats
+                } else {
+                    Section {
+                        Picker("Folder", selection: $noteFolder) {
+                            ForEach(store.data.folderList(.note)) { f in Text(f.name).tag(UUID?.some(f.id)) }
                         }
                     }
                 }
-                Section { RepeatPicker(rule: $draft.recurrence) }
 
                 if !isNew {
                     Section {
@@ -473,6 +499,7 @@ struct EventDetail: View {
                     Button("Save") { save() }.disabled(draft.text.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .onAppear { noteFolder = store.target(.note, viewing: nil) }
         }
     }
 
@@ -482,6 +509,7 @@ struct EventDetail: View {
         draft.date = draft.date.day
         if !hasTime { draft.minutes = nil }
         if isNew { store.add(draft) } else { store.update(draft) }
+        if kind == .note { store.convertToNote(draft, folder: noteFolder) }
         dismiss()
     }
 }
@@ -533,33 +561,6 @@ struct CalendarManager: View {
                     Text("Tap a calendar to make it where new events land. Deleting one takes "
                          + "its events with it.")
                 }
-
-                // Sets: saved views over several calendars at once.
-                Section("Sets") {
-                    ForEach(store.calSets) { s in
-                        HStack {
-                            Circle().fill(Theme.color(s.color, .calendar)).frame(width: 18, height: 18)
-                            Text(s.name)
-                            Spacer()
-                            Text("\(s.members?.count ?? 0)").font(.caption2).foregroundStyle(.secondary)
-                            Button {
-                                if arming == s.id { store.deleteCalendar(s); arming = nil }
-                                else { arming = s.id }
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .foregroundStyle(arming == s.id ? Color.white : Color.secondary)
-                                    .padding(4)
-                                    .background(arming == s.id ? Color.red : .clear, in: Circle())
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                    if store.calendarsOnly.count >= 2 {
-                        NavigationLink { SetEditor() } label: {
-                            Label("New set", systemImage: "plus")
-                        }
-                    }
-                }
             }
             .navigationTitle("Calendars")
             .navigationBarTitleDisplayMode(.inline)
@@ -573,45 +574,5 @@ struct CalendarManager: View {
         guard let i = store.data.calendars.firstIndex(where: { $0.id == c.id }) else { return }
         store.data.calendars[i].color = index
         store.touch()
-    }
-}
-
-// MARK: - Making a calendar set
-
-/// Name a set and tick the calendars it gathers.
-struct SetEditor: View {
-    @EnvironmentObject private var store: Store
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var members: Set<UUID> = []
-
-    var body: some View {
-        Form {
-            Section { TextField("Set name", text: $name) }
-            Section("Calendars") {
-                ForEach(store.calendarsOnly) { c in
-                    Button {
-                        if members.contains(c.id) { members.remove(c.id) } else { members.insert(c.id) }
-                    } label: {
-                        HStack {
-                            Circle().fill(Theme.color(c.color, .calendar)).frame(width: 16, height: 16)
-                            Text(c.name).foregroundStyle(.primary)
-                            Spacer()
-                            if members.contains(c.id) {
-                                Image(systemName: "checkmark").foregroundStyle(Theme.event)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("New Set")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { store.addSet(name, members: Array(members)); dismiss() }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || members.isEmpty)
-            }
-        }
     }
 }

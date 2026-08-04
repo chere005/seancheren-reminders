@@ -157,24 +157,20 @@ final class CoreTests: XCTestCase {
 
     // MARK: - Calendars
 
-    func testCalendarAddSetScopeAndDelete() {
+    func testCalendarAddScopeAndDelete() {
         let store = freshStore()
         store.addCalendar("Work")
         store.addCalendar("Home")
         let work = store.calendarsOnly.first { $0.name == "Work" }!
-        let home = store.calendarsOnly.first { $0.name == "Home" }!
-        store.addSet("Both", members: [work.id, home.id])
-        let set = store.calSets.first { $0.name == "Both" }!
 
         XCTAssertNil(store.calScope(nil), "no selection means every calendar")
         XCTAssertEqual(store.calScope(work.id), [work.id])
-        XCTAssertEqual(store.calScope(set.id), Set([work.id, home.id]), "a set expands to its members")
 
         store.add(Event(text: "meeting", date: day(2026, 5, 1), cal: work.id))
         store.deleteCalendar(work)
         XCTAssertNil(store.calendarsOnly.first { $0.id == work.id }, "calendar gone")
         XCTAssertTrue(store.data.events.isEmpty, "its events went with it")
-        XCTAssertFalse(store.calScope(set.id)?.contains(work.id) ?? false, "and it's scrubbed from the set")
+        XCTAssertNil(store.calScope(work.id), "a stale selection means every calendar again")
     }
 
     // MARK: - Events on a day
@@ -326,6 +322,105 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(names.contains("Calendar") && names.contains("Reminders"))
         let inbox = list.sections.first { $0.name == "Reminders" }!
         XCTAssertEqual(inbox.items.map(\.text), ["call bank"], "open items only, done dropped")
+    }
+
+    // MARK: - Duplicate
+
+    func testDuplicateCopiesTheBlockWithFreshIdsDirectlyUnderTheOriginal() {
+        let store = freshStore()
+        store.add(Reminder(text: "parent", group: .inbox))
+        let parent = store.data.reminders.last!
+        store.addSubtask(under: parent)
+        var sub = store.data.reminders.last!
+        sub.text = "child"; store.update(sub)
+        store.add(Reminder(text: "after", group: .inbox))
+
+        store.duplicate(parent)
+        let texts = store.reminders(folder: nil, group: .inbox).map(\.text)
+        XCTAssertEqual(texts, ["parent", "child", "parent", "child", "after"],
+                       "the copy lands directly under the original block, subtasks along")
+        let ids = store.data.reminders.map(\.id)
+        XCTAssertEqual(Set(ids).count, ids.count, "every copy has a fresh id")
+    }
+
+    func testDuplicateANoteAndAnEvent() {
+        let store = freshStore()
+        store.add(Note(title: "recipe"))
+        store.add(Event(text: "dinner", date: Date().day))
+        store.duplicate(store.data.notes[0])
+        store.duplicate(store.data.events[0])
+        XCTAssertEqual(store.data.notes.map(\.title), ["recipe", "recipe"])
+        XCTAssertEqual(store.data.events.map(\.text), ["dinner", "dinner"])
+        XCTAssertNotEqual(store.data.notes[0].id, store.data.notes[1].id)
+        XCTAssertNotEqual(store.data.events[0].id, store.data.events[1].id)
+    }
+
+    // MARK: - Kind conversion
+
+    func testConvertReminderToEventAndBack() {
+        let store = freshStore()
+        let day = Date().day
+        store.add(Reminder(text: "vet 2pm", due: day, minutes: 14 * 60, group: .inbox,
+                           recurrence: Recurrence(n: 1, unit: .week)))
+        store.convertToEvent(store.data.reminders[0])
+        XCTAssertTrue(store.data.reminders.isEmpty, "the reminder moved out")
+        let e = store.data.events[0]
+        XCTAssertEqual([e.text, "\(e.minutes ?? -1)"], ["vet 2pm", "\(14 * 60)"])
+        XCTAssertEqual(e.cal, store.data.defaultCal, "a stray calendar falls back to the default")
+        XCTAssertNotNil(e.recurrence, "the repeat carries over")
+
+        store.convertToReminder(e)
+        XCTAssertTrue(store.data.events.isEmpty, "the event moved out")
+        XCTAssertEqual(store.data.reminders[0].due, day, "the date carries back")
+    }
+
+    func testConvertingAParentWithSubtasksLeavesItBehindAsTheirHome() {
+        let store = freshStore()
+        store.add(Reminder(text: "pack", group: .inbox))
+        store.addSubtask(under: store.data.reminders[0])
+        store.convertToNote(store.data.reminders[0])
+        XCTAssertEqual(store.data.notes.map(\.title), ["pack"], "the note is made")
+        XCTAssertEqual(store.data.reminders.count, 2, "the parent stays as the subtask's home")
+    }
+
+    func testConvertToNoteIsOneWayAndAnUndatedReminderConvertsOntoToday() {
+        let store = freshStore()
+        store.add(Reminder(text: "loose thought", group: .inbox))
+        store.convertToEvent(store.data.reminders[0])
+        XCTAssertEqual(store.data.events[0].date.day, Date().day,
+                       "an undated reminder converts onto today")
+        // One-way into notes: the Store simply has no note→anything conversion.
+        store.add(Note(title: "stays a note"))
+        XCTAssertEqual(store.data.notes.count, 1)
+    }
+
+    // MARK: - Theme
+
+    func testThemeIsValidatedPersistsAndDefaultsToMidnight() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suitecore-theme-\(UUID().uuidString).json")
+        let a = Store(file: url)
+        XCTAssertEqual(a.data.theme, "midnight", "the untouched default")
+        a.setTheme("plaid")
+        XCTAssertEqual(a.data.theme, "midnight", "an unknown name is refused")
+        a.setTheme("sage")
+        a.save()
+        XCTAssertEqual(Store(file: url).data.theme, "sage", "the choice survives a reload")
+    }
+
+    // MARK: - Calendar sets are gone (the web deleted them)
+
+    func testLeftoverCalendarSetRowsAreDroppedOnRead() {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suitecore-sets-\(UUID().uuidString).json")
+        let a = Store(file: url)
+        let real = a.calendarsOnly[0].id
+        a.data.calendars.append(Cal(name: "Old set", color: 0, members: [real]))
+        a.save()
+        let b = Store(file: url)
+        XCTAssertFalse(b.data.calendars.contains { $0.isSet },
+                       "a set row from an old document is dropped on read")
+        XCTAssertTrue(b.data.calendars.contains { $0.id == real }, "real calendars survive")
     }
 
     func testWatchDaysAreAWeekInDayPanelOrderWithKinds() {

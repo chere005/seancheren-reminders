@@ -6,7 +6,10 @@ import SwiftUI
 /// the gear in the Reminders menu, the way the site keeps them in the user menu. Every
 /// screen reads and writes the one local `Store`; no web view, no network.
 struct RootView: View {
+    @EnvironmentObject private var store: Store
+
     var body: some View {
+        let theme = Theme.suiteTheme(store.data.theme)
         TabView {
             RemindersView()
                 .tabItem { Label("Reminders", systemImage: "checklist") }
@@ -19,7 +22,10 @@ struct RootView: View {
             HabitsView()
                 .tabItem { Label("Habits", systemImage: "repeat") }
         }
-        .tint(Theme.reminder)
+        // The suite theme: the accent tints every control, and a cream theme flips the
+        // colour scheme so native surfaces follow — the web's THEMES_LIGHT.
+        .tint(theme.accent)
+        .preferredColorScheme(theme.light ? .light : .dark)
     }
 }
 

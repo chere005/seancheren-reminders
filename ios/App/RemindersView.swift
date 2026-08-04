@@ -90,6 +90,11 @@ struct RemindersView: View {
                             Button { editing = store.addSubtask(under: r) } label: {
                                 Label("Subtask", systemImage: "arrow.turn.down.right")
                             }.tint(Theme.reminder)
+                            // The web row's two-squares button: copy the whole block,
+                            // subtasks along, directly under the original.
+                            Button { store.duplicate(r) } label: {
+                                Label("Duplicate", systemImage: "square.on.square")
+                            }.tint(.gray)
                         } else {
                             Button { store.setIndent(r, to: 0) } label: {
                                 Label("Promote", systemImage: "arrow.turn.up.left")
@@ -215,6 +220,17 @@ struct ReminderDetail: View {
     @State private var draft: Reminder
     @State private var armed = false
 
+    /// The web edit window's kind row — Event / Reminder / Note. Saving as another kind
+    /// converts (one-way into notes); a reminder with subtasks stays behind as their home.
+    enum SaveKind: String, CaseIterable, Identifiable {
+        case event = "Event", reminder = "Reminder", note = "Note"
+        var id: String { rawValue }
+    }
+    @State private var kind: SaveKind = .reminder
+    @State private var eventCal: UUID?
+    @State private var noteFolder: UUID?
+    @State private var noteGroup: UUID?
+
     init(reminder: Reminder) { _draft = State(initialValue: reminder) }
 
     var body: some View {
@@ -222,23 +238,23 @@ struct ReminderDetail: View {
             Form {
                 TextField("Reminder", text: $draft.text, axis: .vertical)
 
-                Section { WhenPicker(date: $draft.due, minutes: $draft.minutes) }
-                Section { RepeatPicker(rule: $draft.recurrence) }
-
                 Section {
-                    Picker("Folder", selection: $draft.folder) {
-                        ForEach(store.data.folderList(.reminder)) { folder in
-                            Text(folder.name).tag(UUID?.some(folder.id))
-                        }
+                    Picker("Type", selection: $kind) {
+                        ForEach(SaveKind.allCases) { Text($0.rawValue).tag($0) }
                     }
-                    Picker("Group", selection: $draft.group) {
-                        Text("Reminders").tag(GroupRef.inbox)
-                        Text("Calendar").tag(GroupRef.calendar)
-                        ForEach(store.data.groupList(.reminder)) { group in
-                            Text(group.name).tag(GroupRef.group(group.id))
-                        }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    if kind != .reminder && store.hasSubtasks(draft) {
+                        Text("Its subtasks can't ride along — the reminder stays behind as their home.")
                     }
                 }
+
+                Section { WhenPicker(date: $draft.due, minutes: $draft.minutes) }
+                if kind != .note {   // notes don't repeat, so the row folds away
+                    Section { RepeatPicker(rule: $draft.recurrence) }
+                }
+
+                destination
 
                 Section {
                     Button(role: .destructive) {
@@ -256,9 +272,62 @@ struct ReminderDetail: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { store.update(draft); dismiss() }
+                    Button("Save", action: save)
+                }
+            }
+            .onAppear {
+                eventCal = store.data.defaultCal
+                noteFolder = store.target(.note, viewing: nil)
+            }
+        }
+    }
+
+    /// "Goes in" follows the chosen kind, like the web's modal: a reminder keeps its
+    /// folder/group pickers, an event picks a calendar, a note a note folder/group.
+    @ViewBuilder
+    private var destination: some View {
+        switch kind {
+        case .reminder:
+            Section {
+                Picker("Folder", selection: $draft.folder) {
+                    ForEach(store.data.folderList(.reminder)) { folder in
+                        Text(folder.name).tag(UUID?.some(folder.id))
+                    }
+                }
+                Picker("Group", selection: $draft.group) {
+                    Text("Reminders").tag(GroupRef.inbox)
+                    Text("Calendar").tag(GroupRef.calendar)
+                    ForEach(store.data.groupList(.reminder)) { group in
+                        Text(group.name).tag(GroupRef.group(group.id))
+                    }
+                }
+            }
+        case .event:
+            Section {
+                Picker("Calendar", selection: $eventCal) {
+                    ForEach(store.calendarsOnly) { c in Text(c.name).tag(UUID?.some(c.id)) }
+                }
+            }
+        case .note:
+            Section {
+                Picker("Folder", selection: $noteFolder) {
+                    ForEach(store.data.folderList(.note)) { f in Text(f.name).tag(UUID?.some(f.id)) }
+                }
+                Picker("Group", selection: $noteGroup) {
+                    Text("Notes").tag(UUID?.none)
+                    ForEach(store.data.groupList(.note)) { g in Text(g.name).tag(UUID?.some(g.id)) }
                 }
             }
         }
+    }
+
+    private func save() {
+        store.update(draft)
+        switch kind {
+        case .reminder: break
+        case .event:    store.convertToEvent(draft, cal: eventCal)
+        case .note:     store.convertToNote(draft, folder: noteFolder, group: noteGroup)
+        }
+        dismiss()
     }
 }

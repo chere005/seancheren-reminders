@@ -27,6 +27,10 @@ final class Store: ObservableObject {
         } else {
             data = .starter
         }
+        // Calendar sets are gone, as on the web — they paid for themselves nowhere. The
+        // `members` field survives only so an old document decodes; leftover set rows are
+        // dropped on the next read, exactly like the web's `load_calendars()`.
+        data.calendars.removeAll { $0.isSet }
     }
 
     static var defaultFile: URL {
@@ -360,6 +364,134 @@ final class Store: ObservableObject {
         touch()
     }
 
+    /// Copy a reminder's whole outline block — the row and, for a top-level row, the
+    /// subtasks under it — with fresh ids, directly under the original block. The web's
+    /// duplicate button, glyph for glyph.
+    func duplicate(_ reminder: Reminder) {
+        guard let anchor = data.reminders.first(where: { $0.id == reminder.id }) else { return }
+        let inList = data.reminders
+            .filter { $0.group == anchor.group && $0.folder == anchor.folder }
+            .sorted { $0.order < $1.order }
+        guard let i = inList.firstIndex(where: { $0.id == anchor.id }) else { return }
+        var block = [inList[i]]
+        if inList[i].indent == 0 {
+            var j = i + 1
+            while j < inList.count && inList[j].indent > 0 { block.append(inList[j]); j += 1 }
+        }
+        let copies = block.map { r in var c = r; c.id = UUID(); return c }
+        var all = data.reminders.sorted { $0.order < $1.order }
+        guard let at = all.firstIndex(where: { $0.id == block.last!.id }) else { return }
+        all.insert(contentsOf: copies, at: at + 1)
+        for n in all.indices { all[n].order = n }
+        data.reminders = all
+        touch()
+    }
+
+    /// A plain copy of a note, fresh id, directly under the original.
+    func duplicate(_ note: Note) {
+        guard let i = data.notes.firstIndex(where: { $0.id == note.id }) else { return }
+        var copy = data.notes[i]
+        copy.id = UUID()
+        var all = data.notes.sorted { $0.order < $1.order }
+        guard let at = all.firstIndex(where: { $0.id == note.id }) else { return }
+        all.insert(copy, at: at + 1)
+        for n in all.indices { all[n].order = n }
+        data.notes = all
+        touch()
+    }
+
+    /// A plain copy of an event, fresh id.
+    func duplicate(_ event: Event) {
+        guard let i = data.events.firstIndex(where: { $0.id == event.id }) else { return }
+        var copy = data.events[i]
+        copy.id = UUID()
+        data.events.insert(copy, at: i + 1)
+        touch()
+    }
+
+    // MARK: - Theme
+
+    /// The suite theme, validated by name — an unknown name is refused, like the web's
+    /// `theme_set()`.
+    func setTheme(_ name: String) {
+        guard suiteThemes.contains(name) else { return }
+        data.theme = name
+        touch()
+    }
+
+    // MARK: - Kind conversion (the edit window's Event / Reminder / Note row)
+    //
+    // The web's rules, exactly: conversion is one-way into notes (a note never converts
+    // out); converting a reminder that has subtasks leaves it behind as their home.
+
+    /// Whether a top-level reminder has subtasks under it (they can't ride along on a
+    /// conversion, so their parent stays).
+    func hasSubtasks(_ reminder: Reminder) -> Bool {
+        guard reminder.indent == 0 else { return false }
+        let inList = data.reminders
+            .filter { $0.group == reminder.group && $0.folder == reminder.folder }
+            .sorted { $0.order < $1.order }
+        guard let i = inList.firstIndex(where: { $0.id == reminder.id }) else { return false }
+        return i + 1 < inList.count && inList[i + 1].indent > 0
+    }
+
+    /// Reminder → Event: the calendar is re-validated (a stray id falls back to the
+    /// default), an undated reminder converts onto today. The reminder is removed —
+    /// unless it has subtasks, which stay behind with it.
+    func convertToEvent(_ reminder: Reminder, cal: UUID? = nil) {
+        guard let r = data.reminders.first(where: { $0.id == reminder.id }) else { return }
+        let calId = cal.flatMap { id in calendarsOnly.contains { $0.id == id } ? id : nil }
+                    ?? data.defaultCal
+        data.events.append(Event(text: r.text, date: r.due ?? Date().day,
+                                 minutes: r.minutes, cal: calId, recurrence: r.recurrence))
+        if !hasSubtasks(r) { data.reminders.removeAll { $0.id == r.id } }
+        touch()
+    }
+
+    /// Reminder → Note: the text becomes a new note's title in the picked folder/group
+    /// (validated, falling back to the notes default); the repeat drops away — notes
+    /// don't repeat. Same subtask rule as above.
+    func convertToNote(_ reminder: Reminder, folder: UUID? = nil, group: UUID? = nil) {
+        guard let r = data.reminders.first(where: { $0.id == reminder.id }) else { return }
+        add(Note(title: r.text, date: r.due,
+                 folder: validNoteFolder(folder), group: validNoteGroup(group)))
+        if !hasSubtasks(r) { data.reminders.removeAll { $0.id == r.id } }
+        touch()
+    }
+
+    /// Event → Reminder: text, date, time and repeat carry over into the picked
+    /// folder/group; the event moves out entirely.
+    func convertToReminder(_ event: Event, folder: UUID? = nil, group: GroupRef = .inbox) {
+        guard let e = data.events.first(where: { $0.id == event.id }) else { return }
+        add(Reminder(text: e.text, due: e.date, minutes: e.minutes,
+                     folder: validReminderFolder(folder), group: group, recurrence: e.recurrence))
+        data.events.removeAll { $0.id == e.id }
+        touch()
+    }
+
+    /// Event → Note: the text becomes a note's title, dated the event's day; the event
+    /// moves out entirely.
+    func convertToNote(_ event: Event, folder: UUID? = nil, group: UUID? = nil) {
+        guard let e = data.events.first(where: { $0.id == event.id }) else { return }
+        add(Note(title: e.text, date: e.date,
+                 folder: validNoteFolder(folder), group: validNoteGroup(group)))
+        data.events.removeAll { $0.id == e.id }
+        touch()
+    }
+
+    private func validNoteFolder(_ id: UUID?) -> UUID? {
+        if let id, data.folderList(.note).contains(where: { $0.id == id }) { return id }
+        return data.defaultFolder[ItemKind.note.rawValue] ?? data.folderList(.note).first?.id
+    }
+    private func validNoteGroup(_ id: UUID?) -> UUID? {
+        if let id, data.groupList(.note).contains(where: { $0.id == id }) { return id }
+        return nil
+    }
+    private func validReminderFolder(_ id: UUID?) -> UUID? {
+        if let id, data.folderList(.reminder).contains(where: { $0.id == id }) { return id }
+        return data.defaultFolder[ItemKind.reminder.rawValue] ?? data.folderList(.reminder).first?.id
+    }
+
     /// Take a reminder off the calendar without deleting it — the web's "delete from the
     /// calendar" for a dated reminder: the date comes off, the row stays in its own list.
     func unschedule(_ reminder: Reminder) {
@@ -516,9 +648,9 @@ final class Store: ObservableObject {
     }
     func delete(_ event: Event) { data.events.removeAll { $0.id == event.id }; touch() }
 
-    /// Real calendars (not sets) and calendar sets, from the one stored list.
+    /// The calendars themselves. (`isSet` rows can't reach here — they're dropped on read,
+    /// the way the web's `load_calendars()` drops leftover set rows.)
     var calendarsOnly: [Cal] { data.calendars.filter { !$0.isSet } }
-    var calSets: [Cal]       { data.calendars.filter { $0.isSet } }
 
     func addCalendar(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -529,37 +661,19 @@ final class Store: ObservableObject {
         touch()
     }
 
-    /// A set is a saved view over several calendars' ids.
-    func addSet(_ name: String, members: [UUID]) {
-        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, !members.isEmpty else { return }
-        data.calendars.append(Cal(name: clean, color: data.calendars.count % 10, members: members))
-        touch()
-    }
-
     /// A deleted calendar takes its events with it — unlike a folder, there's nowhere
-    /// sensible for them to land, and an event with no calendar has no colour. A deleted
-    /// set is just dropped, and any calendar removed is scrubbed from the sets too.
+    /// sensible for them to land, and an event with no calendar has no colour.
     func deleteCalendar(_ cal: Cal) {
-        if cal.isSet {
-            data.calendars.removeAll { $0.id == cal.id }
-            touch(); return
-        }
         guard calendarsOnly.count > 1 else { return }
         data.events.removeAll { $0.cal == cal.id }
-        for i in data.calendars.indices {
-            if var m = data.calendars[i].members { m.removeAll { $0 == cal.id }; data.calendars[i].members = m }
-        }
         data.calendars.removeAll { $0.id == cal.id }
         if data.defaultCal == cal.id { data.defaultCal = calendarsOnly.first?.id }
         touch()
     }
 
-    /// Which calendar ids a selection covers: nil (show all), a single calendar, or a
-    /// set's members (validated against calendars that still exist).
+    /// Which calendar ids a selection covers: nil (show all) or a single calendar.
     func calScope(_ selection: UUID?) -> Set<UUID>? {
-        guard let selection, let c = data.cal(selection) else { return nil }
-        if let m = c.members { return Set(m).intersection(Set(calendarsOnly.map(\.id))) }
+        guard let selection, data.cal(selection) != nil else { return nil }
         return [selection]
     }
 

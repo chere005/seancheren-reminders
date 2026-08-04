@@ -46,6 +46,48 @@ enum Theme {
     static let overdue  = Color(hex: 0xff7755)
 }
 
+/// One of the suite's four page themes — a row of the web's `THEMES` table, frozen:
+/// the page colour, a card colour, the ink, and the accent pair. `light` is the web's
+/// `THEMES_LIGHT`, flipping the colour scheme so native controls follow.
+struct SuiteTheme: Identifiable {
+    let name: String      // the stored key — "midnight" …
+    let label: String
+    let bg: Color
+    let surface: Color
+    let text: Color
+    let accent: Color
+    let accentInk: Color
+    let light: Bool
+    var id: String { name }
+}
+
+extension Theme {
+    /// The four suite themes in the picker's order; midnight is the untouched default.
+    static let suite: [SuiteTheme] = [
+        SuiteTheme(name: "midnight", label: "Midnight",
+                   bg: Color(hex: 0x111111), surface: Color(hex: 0x1a1a1a),
+                   text: Color(hex: 0xeeeeee), accent: Color(hex: 0x34d399),
+                   accentInk: Color(hex: 0x06251b), light: false),
+        SuiteTheme(name: "sage", label: "Sage & Cream",
+                   bg: Color(hex: 0xfefae0), surface: Color(hex: 0xfaedcd),
+                   text: Color(hex: 0x3f3a2e), accent: Color(hex: 0x96632f),
+                   accentInk: Color(hex: 0xfefae0), light: true),
+        SuiteTheme(name: "forest", label: "Forest",
+                   bg: Color(hex: 0x040303), surface: Color(hex: 0x16201d),
+                   text: Color(hex: 0xe4ddd6), accent: Color(hex: 0x8b9d83),
+                   accentInk: Color(hex: 0x0a0f0d), light: false),
+        SuiteTheme(name: "olive", label: "Olive & Slate",
+                   bg: Color(hex: 0x241e2d), surface: Color(hex: 0x332a3e),
+                   text: Color(hex: 0xeaf0ce), accent: Color(hex: 0xbbbe64),
+                   accentInk: Color(hex: 0x241e2d), light: false),
+    ]
+
+    /// The theme a stored name means — an unknown name falls back to midnight, like the web.
+    static func suiteTheme(_ name: String) -> SuiteTheme {
+        suite.first { $0.name == name } ?? suite[0]
+    }
+}
+
 extension Color {
     init(hex: UInt32) {
         self.init(.sRGB,

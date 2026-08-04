@@ -299,6 +299,9 @@ struct AppData: Codable {
     /// The ungrouped "Habits" bucket has no section row to hang a colour on, so its palette
     /// index lives here — every habits section then carries a colour, dot and pie alike.
     var habitUngroupedColor = 3
+    /// The suite theme, by the web's name — midnight / sage / forest / olive. The picker
+    /// in Settings mirrors the website's swatches; midnight is the untouched default.
+    var theme = "midnight"
 
     /// A first run: one General folder each, one calendar, nothing in them.
     static var starter: AppData {
@@ -349,8 +352,13 @@ extension AppData {
         habitHideUngrouped = try c.decodeIfPresent(Bool.self,        forKey: .habitHideUngrouped) ?? false
         habitsMonth       = try c.decodeIfPresent(Bool.self,         forKey: .habitsMonth) ?? false
         habitUngroupedColor = try c.decodeIfPresent(Int.self,        forKey: .habitUngroupedColor) ?? 3
+        theme             = try c.decodeIfPresent(String.self,       forKey: .theme) ?? "midnight"
     }
 }
+
+/// The four suite themes, by name — the columns of the web's `THEMES` table. The order
+/// is the picker's order; an unknown stored name falls back to midnight, like the web.
+public let suiteThemes = ["midnight", "sage", "forest", "olive"]
 
 // MARK: - Core helpers
 //
