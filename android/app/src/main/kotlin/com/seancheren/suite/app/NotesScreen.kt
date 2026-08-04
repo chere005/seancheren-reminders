@@ -1,7 +1,9 @@
 package com.seancheren.suite.app
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +38,7 @@ import com.seancheren.suite.core.Note
 import java.util.UUID
 
 /** Notes (plain text, like the iOS app) — the cousin of ios/App/NotesView.swift. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotesScreen(vm: SuiteViewModel) {
     val store = vm.store
@@ -85,15 +88,22 @@ fun NotesScreen(vm: SuiteViewModel) {
                 Text("No notes yet.", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(16.dp))
             }
             for (n in notes) {
+                var rowMenu by remember(n.id) { mutableStateOf(false) }
                 SwipeToDelete(onDelete = { store.delete(n) }) {
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .background(Bg)
-                            .clickable { editing = n.id }
+                            .combinedClickable(onClick = { editing = n.id },
+                                               onLongClick = { rowMenu = true })
                             .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // The web note row's two-squares button: a plain copy under the original.
+                        DropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
+                            DropdownMenuItem(text = { Text("Duplicate") },
+                                             onClick = { rowMenu = false; store.duplicate(n) })
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(n.title.ifBlank { "Untitled" }, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                             val snippet = n.body.replace("\n", " ").trim()

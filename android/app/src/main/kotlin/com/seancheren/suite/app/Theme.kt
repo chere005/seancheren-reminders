@@ -3,21 +3,65 @@ package com.seancheren.suite.app
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.seancheren.suite.core.ItemKind
 
-// The suite's dark theme, matching the web and iOS: #111 background, #eee text,
-// #34d399 accent, a real blue (never a cyan) for events. Everything reads from here.
+// The suite's page colours, matching the web and iOS. Every screen reads the vals below;
+// since the four themes arrived they resolve through the current SuitePageTheme, so
+// picking a theme in Settings repaints the whole app on the next recomposition.
 
-val Bg = Color(0xFF111111)
-val Surface = Color(0xFF1B1B1B)
-val TextColor = Color(0xFFEEEEEE)
-val Muted = Color(0xFF9AA0A6)
-val Hairline = Color(0xFF2A2A2A)
-val Accent = Color(0xFF34D399)
-val OnAccent = Color(0xFF06251B)
-val Gold = Color(0xFFD9A441)   // section headings, echoing the web's gold titles
+/**
+ * One of the suite's four page themes — a row of the web's `THEMES` table, frozen.
+ * `light` is the web's `THEMES_LIGHT`, flipping the colour scheme so native surfaces
+ * follow. The iOS twin is Theme.swift's `SuiteTheme`.
+ */
+data class SuitePageTheme(
+    val name: String,      // the stored key — "midnight" …
+    val label: String,
+    val bg: Color,
+    val surface: Color,
+    val text: Color,
+    val muted: Color,
+    val hairline: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val gold: Color,
+    val light: Boolean,
+)
+
+/** The four suite themes in the picker's order; midnight is the untouched default. */
+val suitePageThemes = listOf(
+    SuitePageTheme("midnight", "Midnight",
+        Color(0xFF111111), Color(0xFF1B1B1B), Color(0xFFEEEEEE), Color(0xFF9AA0A6),
+        Color(0xFF2A2A2A), Color(0xFF34D399), Color(0xFF06251B), Color(0xFFD9A441), light = false),
+    SuitePageTheme("sage", "Sage & Cream",
+        Color(0xFFFEFAE0), Color(0xFFFAEDCD), Color(0xFF3F3A2E), Color(0xFF776E56),
+        Color(0xFFCCD5AE), Color(0xFF96632F), Color(0xFFFEFAE0), Color(0xFF8A5A12), light = true),
+    SuitePageTheme("forest", "Forest",
+        Color(0xFF040303), Color(0xFF16201D), Color(0xFFE4DDD6), Color(0xFF6A7B76),
+        Color(0xFF3A4E48), Color(0xFF8B9D83), Color(0xFF0A0F0D), Color(0xFFC9A227), light = false),
+    SuitePageTheme("olive", "Olive & Slate",
+        Color(0xFF241E2D), Color(0xFF332A3E), Color(0xFFEAF0CE), Color(0xFF848B98),
+        Color(0xFF564A62), Color(0xFFBBBE64), Color(0xFF241E2D), Color(0xFFD8C46A), light = false),
+)
+
+/** The theme a stored name means — an unknown name falls back to midnight, like the web. */
+fun suitePageTheme(name: String): SuitePageTheme =
+    suitePageThemes.firstOrNull { it.name == name } ?: suitePageThemes[0]
+
+/** The theme currently worn, set by SuiteTheme() before anything reads the vals below. */
+private var currentTheme: SuitePageTheme = suitePageThemes[0]
+
+val Bg: Color get() = currentTheme.bg
+val Surface: Color get() = currentTheme.surface
+val TextColor: Color get() = currentTheme.text
+val Muted: Color get() = currentTheme.muted
+val Hairline: Color get() = currentTheme.hairline
+val Accent: Color get() = currentTheme.accent
+val OnAccent: Color get() = currentTheme.onAccent
+val Gold: Color get() = currentTheme.gold   // section headings, echoing the web's gold titles
 
 // One palette suite-wide for reminders/events/notes.
 val KReminder = Color(0xFF34D399)
@@ -67,23 +111,21 @@ fun paletteColor(index: Int, tier: Tier): Color {
     return p[((index % p.size) + p.size) % p.size]
 }
 
-private val DarkColors = darkColorScheme(
-    primary = Accent,
-    onPrimary = OnAccent,
-    secondary = KEvent,
-    background = Bg,
-    onBackground = TextColor,
-    surface = Surface,
-    onSurface = TextColor,
-    surfaceVariant = Surface,
-    onSurfaceVariant = Muted,
-    outline = Hairline,
-)
-
 @Composable
-fun SuiteTheme(content: @Composable () -> Unit) {
+fun SuiteTheme(themeName: String = "midnight", content: @Composable () -> Unit) {
+    val t = suitePageTheme(themeName)
+    currentTheme = t
+    val scheme = (if (t.light) lightColorScheme(
+        primary = t.accent, onPrimary = t.onAccent, secondary = KEvent,
+        background = t.bg, onBackground = t.text, surface = t.surface, onSurface = t.text,
+        surfaceVariant = t.surface, onSurfaceVariant = t.muted, outline = t.hairline,
+    ) else darkColorScheme(
+        primary = t.accent, onPrimary = t.onAccent, secondary = KEvent,
+        background = t.bg, onBackground = t.text, surface = t.surface, onSurface = t.text,
+        surfaceVariant = t.surface, onSurfaceVariant = t.muted, outline = t.hairline,
+    ))
     MaterialTheme(
-        colorScheme = DarkColors,
+        colorScheme = scheme,
         typography = Typography(),
         content = content,
     )

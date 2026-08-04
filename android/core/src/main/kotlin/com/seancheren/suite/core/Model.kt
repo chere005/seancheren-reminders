@@ -311,6 +311,9 @@ data class AppData(
     var habitHideUngrouped: Boolean = false,
     /** Habits opens on the view you left it on: the tick grid (false) or the month (true). */
     var habitsMonth: Boolean = false,
+    /** The suite theme, by the web's name — midnight / sage / forest / olive. The picker
+     *  in Settings mirrors the website's swatches; midnight is the untouched default. */
+    var theme: String = "midnight",
 ) {
     fun folderList(kind: ItemKind): List<Folder> = folders.filter { it.kind == kind }
     fun groupList(kind: ItemKind): List<ListGroup> = groups.filter { it.kind == kind }.sortedBy { it.order }
@@ -358,6 +361,10 @@ fun <T> MutableList<T>.reorder(from: Set<Int>, to: Int) {
  * "today", "tomorrow", "Aug 3" — a short date, because it sits under the row's text.
  * In the core because the watch list and the Calendar summaries build it too.
  */
+/** The four suite themes, by name — the columns of the web's `THEMES` table. The order
+ *  is the picker's order; an unknown stored name falls back to midnight, like the web. */
+val suiteThemes = listOf("midnight", "sage", "forest", "olive")
+
 fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
     today -> "today"
     today.plusDays(1) -> "tomorrow"

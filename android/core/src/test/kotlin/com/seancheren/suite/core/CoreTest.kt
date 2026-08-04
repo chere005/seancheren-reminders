@@ -154,24 +154,115 @@ class CoreTest {
 
     // MARK: - Calendars
 
-    @Test fun testCalendarAddSetScopeAndDelete() {
+    @Test fun testCalendarAddScopeAndDelete() {
         val store = freshStore()
         store.addCalendar("Work")
         store.addCalendar("Home")
         val work = store.calendarsOnly.first { it.name == "Work" }
-        val home = store.calendarsOnly.first { it.name == "Home" }
-        store.addSet("Both", listOf(work.id, home.id))
-        val set = store.calSets.first { it.name == "Both" }
 
         assertNull(store.calScope(null))                                   // no selection = all
         assertEquals(setOf(work.id), store.calScope(work.id))
-        assertEquals(setOf(work.id, home.id), store.calScope(set.id))      // a set expands
 
         store.add(Event(text = "meeting", date = day(2026, 5, 1), cal = work.id))
         store.deleteCalendar(work)
         assertNull(store.calendarsOnly.firstOrNull { it.id == work.id })   // calendar gone
         assertTrue(store.data.events.isEmpty())                            // its events went with it
-        assertFalse(store.calScope(set.id)?.contains(work.id) ?: false)    // scrubbed from the set
+        assertNull(store.calScope(work.id))                                // a stale selection = all again
+    }
+
+    @Test fun testLeftoverCalendarSetRowsAreDroppedOnRead() {
+        val f = File.createTempFile("suitecore-sets-", ".json")
+        f.delete()
+        val a = Store(f)
+        val real = a.calendarsOnly.first().id
+        a.data.calendars.add(Cal(name = "Old set", color = 0, members = listOf(real)))
+        a.save()
+        val b = Store(f)
+        assertFalse(b.data.calendars.any { it.isSet })                     // set rows dropped on read
+        assertTrue(b.data.calendars.any { it.id == real })                 // real calendars survive
+    }
+
+    // MARK: - Duplicate
+
+    @Test fun testDuplicateCopiesTheBlockWithFreshIdsDirectlyUnderTheOriginal() {
+        val store = freshStore()
+        store.add(Reminder(text = "parent", group = GroupRef.Inbox))
+        val parent = store.data.reminders.last()
+        store.addSubtask(parent)
+        val sub = store.data.reminders.last()
+        store.update(sub.copy(text = "child"))
+        store.add(Reminder(text = "after", group = GroupRef.Inbox))
+
+        store.duplicate(parent)
+        val texts = store.reminders(folder = null, group = GroupRef.Inbox).map { it.text }
+        assertEquals(listOf("parent", "child", "parent", "child", "after"), texts)
+        val ids = store.data.reminders.map { it.id }
+        assertEquals(ids.size, ids.toSet().size)                           // every copy a fresh id
+    }
+
+    @Test fun testDuplicateANoteAndAnEvent() {
+        val store = freshStore()
+        store.add(Note(title = "recipe"))
+        store.add(Event(text = "dinner", date = LocalDate.now()))
+        store.duplicate(store.data.notes[0])
+        store.duplicate(store.data.events[0])
+        assertEquals(listOf("recipe", "recipe"), store.data.notes.map { it.title })
+        assertEquals(listOf("dinner", "dinner"), store.data.events.map { it.text })
+        assertTrue(store.data.notes[0].id != store.data.notes[1].id)
+        assertTrue(store.data.events[0].id != store.data.events[1].id)
+    }
+
+    // MARK: - Kind conversion
+
+    @Test fun testConvertReminderToEventAndBack() {
+        val store = freshStore()
+        val day = LocalDate.now()
+        store.add(Reminder(text = "vet 2pm", due = day, minutes = 14 * 60, group = GroupRef.Inbox,
+                           recurrence = Recurrence(n = 1, unit = RepeatUnit.week)))
+        store.convertToEvent(store.data.reminders[0])
+        assertTrue(store.data.reminders.isEmpty())                         // the reminder moved out
+        val e = store.data.events[0]
+        assertEquals("vet 2pm", e.text)
+        assertEquals(14 * 60, e.minutes)
+        assertEquals(store.data.defaultCal, e.cal)                         // stray cal → default
+        assertTrue(e.recurrence != null)                                   // the repeat carries over
+
+        store.convertToReminder(e)
+        assertTrue(store.data.events.isEmpty())                            // the event moved out
+        assertEquals(day, store.data.reminders[0].due)                     // the date carries back
+    }
+
+    @Test fun testConvertingAParentWithSubtasksLeavesItBehindAsTheirHome() {
+        val store = freshStore()
+        store.add(Reminder(text = "pack", group = GroupRef.Inbox))
+        store.addSubtask(store.data.reminders[0])
+        store.convertToNote(store.data.reminders[0])
+        assertEquals(listOf("pack"), store.data.notes.map { it.title })    // the note is made
+        assertEquals(2, store.data.reminders.size)                         // the parent stays
+    }
+
+    @Test fun testConvertToNoteIsOneWayAndAnUndatedReminderConvertsOntoToday() {
+        val store = freshStore()
+        store.add(Reminder(text = "loose thought", group = GroupRef.Inbox))
+        store.convertToEvent(store.data.reminders[0])
+        assertEquals(LocalDate.now(), store.data.events[0].date)           // undated → today
+        // One-way into notes: the Store simply has no note→anything conversion.
+        store.add(Note(title = "stays a note"))
+        assertEquals(1, store.data.notes.size)
+    }
+
+    // MARK: - Theme
+
+    @Test fun testThemeIsValidatedPersistsAndDefaultsToMidnight() {
+        val f = File.createTempFile("suitecore-theme-", ".json")
+        f.delete()
+        val a = Store(f)
+        assertEquals("midnight", a.data.theme)                             // the untouched default
+        a.setTheme("plaid")
+        assertEquals("midnight", a.data.theme)                             // an unknown name refused
+        a.setTheme("sage")
+        a.save()
+        assertEquals("sage", Store(f).data.theme)                          // survives a reload
     }
 
     // MARK: - Events on a day

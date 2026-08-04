@@ -33,6 +33,10 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     init {
         val loaded = file?.let { read(it) }
         data = loaded ?: if (firstRunSample) sampleData() else AppData.starter
+        // Calendar sets are gone, as on the web — the `members` field survives only so an
+        // old document decodes; leftover set rows are dropped on the next read, exactly
+        // like the web's `load_calendars()`.
+        data.calendars.removeAll { it.isSet }
     }
 
     private fun read(f: File): AppData? =
@@ -263,6 +267,134 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
     }
 
     /**
+     * Copy a reminder's whole outline block — the row and, for a top-level row, the
+     * subtasks under it — with fresh ids, directly under the original block. The web's
+     * duplicate button, glyph for glyph. Twin of Store.duplicate (Swift).
+     */
+    fun duplicate(reminder: Reminder) {
+        val anchor = data.reminders.firstOrNull { it.id == reminder.id } ?: return
+        val inList = data.reminders
+            .filter { it.group == anchor.group && it.folder == anchor.folder }
+            .sortedBy { it.order }
+        val i = inList.indexOfFirst { it.id == anchor.id }
+        if (i < 0) return
+        val block = mutableListOf(inList[i])
+        if (inList[i].indent == 0) {
+            var j = i + 1
+            while (j < inList.size && inList[j].indent > 0) { block.add(inList[j]); j++ }
+        }
+        val copies = block.map { it.copy(id = UUID.randomUUID()) }
+        val all = data.reminders.sortedBy { it.order }.toMutableList()
+        val at = all.indexOfFirst { it.id == block.last().id }
+        if (at < 0) return
+        all.addAll(at + 1, copies)
+        all.forEachIndexed { n, r -> r.order = n }
+        data.reminders = all
+        touch()
+    }
+
+    /** A plain copy of a note, fresh id, directly under the original. */
+    fun duplicate(note: Note) {
+        data.notes.firstOrNull { it.id == note.id } ?: return
+        val all = data.notes.sortedBy { it.order }.toMutableList()
+        val at = all.indexOfFirst { it.id == note.id }
+        if (at < 0) return
+        all.add(at + 1, all[at].copy(id = UUID.randomUUID()))
+        all.forEachIndexed { n, x -> x.order = n }
+        data.notes = all
+        touch()
+    }
+
+    /** A plain copy of an event, fresh id. */
+    fun duplicate(event: Event) {
+        val i = data.events.indexOfFirst { it.id == event.id }
+        if (i < 0) return
+        data.events.add(i + 1, data.events[i].copy(id = UUID.randomUUID()))
+        touch()
+    }
+
+    // MARK: - Theme
+
+    /** The suite theme, validated by name — an unknown name is refused, like the web's
+     *  `theme_set()`. */
+    fun setTheme(name: String) {
+        if (name !in suiteThemes) return
+        data.theme = name
+        touch()
+    }
+
+    // MARK: - Kind conversion (the edit window's Event / Reminder / Note row)
+    //
+    // The web's rules, exactly: conversion is one-way into notes (a note never converts
+    // out); converting a reminder that has subtasks leaves it behind as their home.
+
+    /** Whether a top-level reminder has subtasks under it (they can't ride along on a
+     *  conversion, so their parent stays). */
+    fun hasSubtasks(reminder: Reminder): Boolean {
+        if (reminder.indent != 0) return false
+        val inList = data.reminders
+            .filter { it.group == reminder.group && it.folder == reminder.folder }
+            .sortedBy { it.order }
+        val i = inList.indexOfFirst { it.id == reminder.id }
+        if (i < 0) return false
+        return i + 1 < inList.size && inList[i + 1].indent > 0
+    }
+
+    /** Reminder → Event: the calendar is re-validated (a stray id falls back to the
+     *  default), an undated reminder converts onto today. The reminder is removed —
+     *  unless it has subtasks, which stay behind with it. */
+    fun convertToEvent(reminder: Reminder, cal: UUID? = null) {
+        val r = data.reminders.firstOrNull { it.id == reminder.id } ?: return
+        val calId = cal?.takeIf { id -> calendarsOnly.any { it.id == id } } ?: data.defaultCal
+        data.events.add(Event(text = r.text, date = r.due ?: LocalDate.now(),
+                              minutes = r.minutes, cal = calId, recurrence = r.recurrence))
+        if (!hasSubtasks(r)) data.reminders.removeAll { it.id == r.id }
+        touch()
+    }
+
+    /** Reminder → Note: the text becomes a new note's title in the picked folder/group
+     *  (validated, falling back to the notes default); the repeat drops away — notes
+     *  don't repeat. Same subtask rule as above. */
+    fun convertToNote(reminder: Reminder, folder: UUID? = null, group: UUID? = null) {
+        val r = data.reminders.firstOrNull { it.id == reminder.id } ?: return
+        add(Note(title = r.text, date = r.due,
+                 folder = validNoteFolder(folder), group = validNoteGroup(group)))
+        if (!hasSubtasks(r)) data.reminders.removeAll { it.id == r.id }
+        touch()
+    }
+
+    /** Event → Reminder: text, date, time and repeat carry over into the picked
+     *  folder/group; the event moves out entirely. */
+    fun convertToReminder(event: Event, folder: UUID? = null, group: GroupRef = GroupRef.Inbox) {
+        val e = data.events.firstOrNull { it.id == event.id } ?: return
+        add(Reminder(text = e.text, due = e.date, minutes = e.minutes,
+                     folder = validReminderFolder(folder), group = group, recurrence = e.recurrence))
+        data.events.removeAll { it.id == e.id }
+        touch()
+    }
+
+    /** Event → Note: the text becomes a note's title, dated the event's day; the event
+     *  moves out entirely. */
+    fun convertToNote(event: Event, folder: UUID? = null, group: UUID? = null) {
+        val e = data.events.firstOrNull { it.id == event.id } ?: return
+        add(Note(title = e.text, date = e.date,
+                 folder = validNoteFolder(folder), group = validNoteGroup(group)))
+        data.events.removeAll { it.id == e.id }
+        touch()
+    }
+
+    private fun validNoteFolder(id: UUID?): UUID? {
+        if (id != null && data.folderList(ItemKind.note).any { it.id == id }) return id
+        return data.defaultFolder[ItemKind.note.name] ?: data.folderList(ItemKind.note).firstOrNull()?.id
+    }
+    private fun validNoteGroup(id: UUID?): UUID? =
+        if (id != null && data.groupList(ItemKind.note).any { it.id == id }) id else null
+    private fun validReminderFolder(id: UUID?): UUID? {
+        if (id != null && data.folderList(ItemKind.reminder).any { it.id == id }) return id
+        return data.defaultFolder[ItemKind.reminder.name] ?: data.folderList(ItemKind.reminder).firstOrNull()?.id
+    }
+
+    /**
      * Take a reminder off the calendar without deleting it — the web's "delete from the
      * calendar" for a dated reminder: the date comes off, the row stays in its own list.
      */
@@ -451,9 +583,9 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
 
     fun delete(event: Event) { data.events.removeAll { it.id == event.id }; touch() }
 
-    /** Real calendars (not sets) and calendar sets, from the one stored list. */
+    /** The calendars themselves. (`isSet` rows can't reach here — they're dropped on read,
+     *  the way the web's `load_calendars()` drops leftover set rows.) */
     val calendarsOnly: List<Cal> get() = data.calendars.filter { !it.isSet }
-    val calSets: List<Cal> get() = data.calendars.filter { it.isSet }
 
     fun addCalendar(name: String) {
         val clean = name.trim()
@@ -464,29 +596,13 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         touch()
     }
 
-    /** A set is a saved view over several calendars' ids. */
-    fun addSet(name: String, members: List<UUID>) {
-        val clean = name.trim()
-        if (clean.isEmpty() || members.isEmpty()) return
-        data.calendars.add(Cal(name = clean, color = data.calendars.size % 10, members = members))
-        touch()
-    }
-
     /**
      * A deleted calendar takes its events with it — there's nowhere sensible for them to
-     * land. A deleted set is just dropped, and any calendar removed is scrubbed from sets.
+     * land, and an event with no calendar has no colour.
      */
     fun deleteCalendar(cal: Cal) {
-        if (cal.isSet) {
-            data.calendars.removeAll { it.id == cal.id }
-            touch(); return
-        }
         if (calendarsOnly.size <= 1) return
         data.events.removeAll { it.cal == cal.id }
-        data.calendars.forEach { c ->
-            val m = c.members
-            if (m != null) c.members = m.filter { it != cal.id }
-        }
         data.calendars.removeAll { it.id == cal.id }
         if (data.defaultCal == cal.id) data.defaultCal = calendarsOnly.firstOrNull()?.id
         touch()
@@ -549,15 +665,11 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         touch()
     }
 
-    /**
-     * Which calendar ids a selection covers: null (show all), a single calendar, or a
-     * set's members (validated against calendars that still exist).
-     */
+    /** Which calendar ids a selection covers: null (show all) or a single calendar. */
     fun calScope(selection: UUID?): Set<UUID>? {
         val sel = selection ?: return null
-        val c = data.cal(sel) ?: return null
-        val members = c.members ?: return setOf(sel)
-        return members.toSet().intersect(calendarsOnly.map { it.id }.toSet())
+        data.cal(sel) ?: return null
+        return setOf(sel)
     }
 
     /**

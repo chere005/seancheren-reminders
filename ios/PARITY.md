@@ -144,5 +144,28 @@ Deep, deliberate model differences (not gaps to "fix"): permanent Calendar/Remin
 - **Calendar cells wear the legend's kind icons**, at most one of each (event, reminder,
   note), coloured by their item — the first event's calendar, the worst reminder's folder
   (overdue beats open), the first note's folder — on all three platforms.
-- ⚠️ **Calendar Sets survive natively** — the web deleted them as paying for themselves
-  nowhere; the native pickers still carry them. Worth deciding whether they follow.
+- ~~Calendar Sets survive natively~~ — **resolved**: both native apps followed the web.
+  Set rows are dropped on read (`testLeftoverCalendarSetRowsAreDroppedOnRead`, twin in
+  Kotlin), and the picker/manager UI went with them; `Cal.members` survives only so an
+  old document decodes.
+- **Duplicate** (the web's two-squares button) exists on all three platforms:
+  `store.duplicate` block-copies a reminder with its subtasks under the original
+  (`testDuplicateCopiesTheBlockWithFreshIdsDirectlyUnderTheOriginal`), notes and events
+  copy plainly (`testDuplicateANoteAndAnEvent`); twins in Kotlin.
+- **Kind conversion** (the edit window's Event / Reminder / Note row): `convertToEvent`
+  / `convertToNote` / `convertToReminder`, one-way into notes, a parent with subtasks
+  staying behind (`testConvertReminderToEventAndBack`,
+  `testConvertingAParentWithSubtasksLeavesItBehindAsTheirHome`,
+  `testConvertToNoteIsOneWayAndAnUndatedReminderConvertsOntoToday`); twins in Kotlin.
+  The calendar's editor constrains to [itself, Note], like the web.
+- **The four suite themes** (midnight/sage/forest/olive) are in both native Settings
+  with the web's swatch picker, stored as `AppData.theme`, validated by `setTheme`
+  (`testThemeIsValidatedPersistsAndDefaultsToMidnight`, twin in Kotlin). The shells
+  apply the accent and flip the colour scheme for the cream theme (Android repaints its
+  page colours fully; iOS keeps system surfaces under the themed accent).
+- **The watch** carries four pages — Today (default) · Reminders · Events · All — over a
+  seven-day `WatchDay` window in the day panel's order
+  (`testWatchDaysAreAWeekInDayPanelOrderWithKinds`), decoding old payloads tolerantly
+  (`testWatchListDecodesAPayloadWithoutDaysOrKinds`), plus a WidgetKit Today
+  complication for the Modular face; the Kotlin core carries the twin
+  `WatchDay`/`watchDays` for a future Wear OS shell.

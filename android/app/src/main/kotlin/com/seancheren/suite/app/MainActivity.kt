@@ -15,8 +15,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            SuiteTheme {
-                val vm: SuiteViewModel = viewModel()
+            val vm: SuiteViewModel = viewModel()
+            vm.rev   // subscribe, so picking a theme in Settings repaints from here down
+            SuiteTheme(vm.store.data.theme) {
                 RootScreen(vm)
             }
         }

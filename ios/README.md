@@ -5,7 +5,8 @@ Two targets in one Xcode project, `CalMind.xcodeproj`:
 | Target | Platform | What it is |
 | --- | --- | --- |
 | `CalMind` | iOS 17+ | Reminders · Calendar · Notes · Habits · Settings, as native tabs |
-| `CalMindWatch` | watchOS 10+ | Your reminder list on the wrist, read-only |
+| `CalMindWatch` | watchOS 10+ | Today · Reminders · Events · All on the wrist, read-only |
+| `CalMindWatchWidgets` | watchOS 10+ | The Today complication (Modular face), embedded in the watch app |
 
 Open `ios/CalMind.xcodeproj`, pick your team under **Signing & Capabilities** for
 both targets, and run. The watch app is embedded in the phone app, so building and
@@ -76,10 +77,22 @@ defaults) rather than resetting the whole document to empty over one missing key
 
 ## The watch app
 
+**Four pages, swiped sideways: Today · Reminders · Events · All, Today first and
+default.** Today is the phone day panel for today — events, reminders (overdue and the
+undated Calendar riders collect here) and notes, in that order; the other three walk a
+**seven-day window** (a section per day, empty days dropped), narrowed to their kind,
+"All" keeping everything. A **Today complication** (`WatchWidgets/Complications.swift`,
+the `CalMindWatchWidgets` extension) draws the same day in the Modular face's
+accessory slots — rectangular (up to three rows, kind-glyphed), circular (a count) and
+inline — reading the list the watch app mirrors into the shared app group
+(`group.com.seancheren.suite`; provisioned automatically with your team, and the app
+degrades gracefully without it).
+
 A watch can't hold the database, so the phone hands it a ready-made list. Whenever the
 store changes, `PhoneConnectivity` (`App/PhoneConnectivity.swift`) builds a `WatchList`
-(`Store.watchList()`) — the same groups in the same order as the Reminders screen, open
-items only, dates already turned into short strings — and ships it as the
+(`Store.watchList()`) — the grouped reminder list plus the `days` week window
+(`Store.watchDays`), open items only, dates already turned into short strings — and
+ships it as the
 WatchConnectivity *application context*, plus a queued `transferUserInfo` backstop —
 application-context delivery is unreliable in the simulator (the classic "application
 context is nil" on the watch), so a user-info transfer is sent alongside it and stale ones

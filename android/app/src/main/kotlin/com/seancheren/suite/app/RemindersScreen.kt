@@ -165,10 +165,15 @@ fun RemindersScreen(vm: SuiteViewModel) {
                         editing = editingId == row.id,
                         editText = editText,
                         onToggle = { store.toggle(row) },
-                        onLongPress = { editingId = row.id; editText = row.text },
+                        onEdit = { editingId = row.id; editText = row.text },
                         onEditChange = { editText = it },
                         onCommit = { commitEdit() },
                         onDelete = { store.delete(row) },
+                        onDuplicate = { store.duplicate(row) },
+                        onSubtask = { store.addSubtask(row) },
+                        onPromote = { store.setIndent(row, 0) },
+                        onMakeEvent = { store.convertToEvent(row) },
+                        onMakeNote = { store.convertToNote(row) },
                     )
                 }
             }
@@ -209,13 +214,21 @@ private fun ReminderRow(
     editing: Boolean,
     editText: String,
     onToggle: () -> Unit,
-    onLongPress: () -> Unit,
+    onEdit: () -> Unit,
     onEditChange: (String) -> Unit,
     onCommit: () -> Unit,
     onDelete: () -> Unit,
+    onDuplicate: () -> Unit,
+    onSubtask: () -> Unit,
+    onPromote: () -> Unit,
+    onMakeEvent: () -> Unit,
+    onMakeNote: () -> Unit,
 ) {
     val today = LocalDate.now()
-    // Swipe left to delete; long-press the text to edit it inline (Enter commits).
+    // The web row's edit-mode cluster, behind a long-press menu: edit, subtask + / lift
+    // out ‹, duplicate, and the kind conversions (one-way into notes).
+    var menu by remember { mutableStateOf(false) }
+    // Swipe left to delete; long-press the text for the row menu.
     SwipeToDelete(onDelete = onDelete) {
         Row(
             Modifier
@@ -255,8 +268,19 @@ private fun ReminderRow(
                 Column(
                     Modifier
                         .weight(1f)
-                        .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                        .combinedClickable(onClick = {}, onLongClick = { menu = true }),
                 ) {
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onEdit() })
+                        if (row.indent == 0) {
+                            DropdownMenuItem(text = { Text("Subtask") }, onClick = { menu = false; onSubtask() })
+                            DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; onDuplicate() })
+                            DropdownMenuItem(text = { Text("Make Event") }, onClick = { menu = false; onMakeEvent() })
+                            DropdownMenuItem(text = { Text("Make Note") }, onClick = { menu = false; onMakeNote() })
+                        } else {
+                            DropdownMenuItem(text = { Text("Promote") }, onClick = { menu = false; onPromote() })
+                        }
+                    }
                     Text(
                         row.text.ifBlank { "—" },
                         color = if (row.done) Muted else TextColor,
