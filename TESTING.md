@@ -443,7 +443,9 @@ login, leak nothing, and carry the site nav — never the app tab bar. Projects 
 CalMind repo with its git icon. The theme picker shows all four suite themes as inert
 previews with the current one marked; picking one sets the `sitetheme` cookie
 (POST→redirect) and re-dresses the public pages — a bad name sets nothing — and the
-cookie never reaches the apps, which keep their own per-user theme. Projects nests Theme
+cookie never reaches the apps, which keep their own per-user theme. Every public page
+wears the centred cursive SC mark and links the site's own favicon/touch icons (real
+PNGs), which never leak into the apps — they keep their own. Projects nests Theme
 Picker and CalMind as subsections (h4) under Vibe Coding Apps — the shell must style that
 level — and lists the Private categories (Work, Music, Games, Languages).
 

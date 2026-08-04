@@ -4935,6 +4935,23 @@ t('projects carries the Private categories', function () {
     has('microtonal banana', $b, 'Music carries its second paragraph');
 });
 
+t('the site wears the cursive SC mark and its icons', function () use ($root) {
+    foreach (['/', '/projects/'] as $p) {
+        $b = req('GET', $p)['body'];
+        has('class="sitelogo"', $b, "$p carries the centred mark");
+        has('href="/favicon-32.png"', $b, "$p links the favicon");
+        has('href="/apple-touch-icon.png"', $b, "$p links the touch icon");
+    }
+    foreach (['favicon-32.png', 'apple-touch-icon.png'] as $f) {
+        $png = (string) file_get_contents($root . '/public/' . $f);
+        ok(substr($png, 1, 3) === 'PNG', "$f is a real PNG");
+    }
+    // The apps keep their own icons — the site favicon must not leak into them.
+    $jar = login('example', 'examplepassword');
+    hasnt('favicon-32.png', req('GET', '/calmind/reminders/', [], $jar)['body'],
+          'an app page does not pick up the site favicon');
+});
+
 t('the theme picker shows all four themes, read-only, current marked', function () {
     $b = req('GET', '/themepicker/')['body'];
     foreach (THEMES as $key => $row) {

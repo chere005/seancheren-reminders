@@ -38,6 +38,8 @@ function site_page($active, $title, $bodyHtml) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="$bg">
+<link rel="icon" type="image/png" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>$title &middot; seancheren.com</title>
 <style>
   :root { {$vars}color-scheme: $scheme; }
@@ -49,6 +51,14 @@ function site_page($active, $title, $bodyHtml) {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   .wrap { max-width: 640px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  /* The site's mark: a cursive SC, centred above the nav. Apple's script faces with a
+     generic-cursive fallback elsewhere; the favicon bakes the same mark into pixels. */
+  .sitelogo {
+    display: block; text-align: center; font-family: "Savoye LET", "Snell Roundhand", cursive;
+    font-size: 3.4rem; line-height: 1; color: var(--accent); text-decoration: none;
+    margin: 0.2rem 0 0.5rem;
+  }
+  .sitelogo:hover { opacity: 0.8; }
   .sitenav {
     display: flex; flex-wrap: wrap; gap: 0.5rem;
     padding-bottom: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--line-soft);
@@ -87,6 +97,7 @@ function site_page($active, $title, $bodyHtml) {
 </head>
 <body>
 <div class="wrap">
+<a class="sitelogo" href="/" aria-label="Home">SC</a>
 $nav
 $bodyHtml
 </div>
