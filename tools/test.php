@@ -4903,14 +4903,26 @@ t('the public pages are the same shell', function () {
 
 t('projects lists the theme picker and CalMind with their links', function () {
     $b = req('GET', '/projects/')['body'];
-    has('>Theme Picker</h3>', $b, 'the theme picker entry');
+    // Both apps sit one level UNDER "Vibe Coding Apps", so they're h4 to its h3 —
+    // and the shell has to style that level or the demotion reads as plain text.
+    has('>Vibe Coding Apps</h3>', $b, 'the parent section');
+    has('>Theme Picker</h4>', $b, 'the theme picker entry, a subsection of it');
     has('href="/themepicker/"', $b, 'its T-icon link to the page');
     has('https://github.com/chere005/CalMind/tree/main/public/themepicker', $b, 'and to its folder in the repo');
-    has('>CalMind</h3>', $b, 'the CalMind entry');
+    has('>CalMind</h4>', $b, 'the CalMind entry, a subsection of it');
     has('href="https://github.com/chere005/CalMind"', $b, 'its repo link');
     has('seancheren.com/calmind', $b, 'and the link to the app');
     has('/calmind/reminders/icon-180.png', $b, 'wearing CalMind\'s own icon');
     has('class="giticon"', $b, 'the icon links wear their icons');
+    has('h4 {', $b, 'the shell styles the subsection level');
+});
+
+t('projects carries the Private categories', function () {
+    $b = req('GET', '/projects/')['body'];
+    foreach (['Work', 'Music', 'Games', 'Languages'] as $h) {
+        has('>' . $h . '</h3>', $b, "$h is a Private category");
+    }
+    has('writing systems', $b, 'Languages carries its text');
 });
 
 t('the theme picker shows all four themes, read-only, current marked', function () {
@@ -5135,6 +5147,32 @@ t('a bare deploy is the test instance, never production', function () use ($root
     // never be one keystroke away from touching the live site. These are text checks.
     ok(preg_match('/\bprod\)\s*$/m', $s) === 1, 'prod is its own explicit mode');
     ok(strpos($s, 'promote') !== false, 'and promote exists to move test into prod');
+});
+
+t('deploy-dev.sh parses and keeps the same safety rules', function () use ($root) {
+    exec('bash -n ' . escapeshellarg($root . '/deploy-dev.sh') . ' 2>&1', $o, $rc);
+    eq(0, $rc, 'bash -n: ' . implode("\n", $o));
+    $s = (string) file_get_contents($root . '/deploy-dev.sh');
+    foreach (preg_split('/\R/', $s) as $n => $line) {
+        $bare = preg_replace('/#.*$/', '', $line);
+        if (strpos($bare, 'rsync') !== false) {
+            ok(strpos($bare, '--delete') === false, 'line ' . ($n + 1) . ' uses --delete');
+        }
+        if (strpos($bare, 'rsync') !== false || preg_match('/\brm\s/', $bare)) {
+            ok(strpos($bare, '/home/protected/data') === false,
+               'line ' . ($n + 1) . ' names a live data directory');
+        }
+    }
+    ok(substr_count($s, "--exclude='config.php'") >= 1, 'the lib rsync excludes config.php');
+});
+
+t('deploy-dev.sh can only aim at /dev', function () use ($root) {
+    // The script's whole reason to exist is that it cannot reach production or /test/:
+    // the destinations are constants, and refusal guards back them up.
+    $s = (string) file_get_contents($root . '/deploy-dev.sh');
+    has('PUB=/home/public/dev', $s, 'the public destination is a constant');
+    has('LIB=/home/protected/lib-dev', $s, 'so is the lib destination');
+    ok(substr_count($s, 'Refusing:') >= 3, 'the refusal guards are still standing');
 });
 
 t('the calmind/ split is stitched in by symlinks and dereferenced on deploy', function () use ($root) {

@@ -441,7 +441,9 @@ login, leak nothing, and carry the site nav — never the app tab bar. Projects 
 CalMind repo with its git icon. The theme picker shows all four suite themes as inert
 previews with the current one marked; picking one sets the `sitetheme` cookie
 (POST→redirect) and re-dresses the public pages — a bad name sets nothing — and the
-cookie never reaches the apps, which keep their own per-user theme.
+cookie never reaches the apps, which keep their own per-user theme. Projects nests Theme
+Picker and CalMind as subsections (h4) under Vibe Coding Apps — the shell must style that
+level — and lists the Private categories (Work, Music, Games, Languages).
 
 ### `quick`
 `quick.php` is the one page the widget can reach that writes. A quick add lands on today
@@ -458,9 +460,11 @@ bare deploy is the test instance and production needs saying out loud. Also
 no default data directory, and is never deployed. The `calmind/` repo split is guarded
 here too: `public/calmind` and the four CalMind-only lib files must be symlinks into the
 top-level `calmind/` area, and both deploy scripts must rsync with `-L` so the server
-always receives real files in the pre-split layout. `deploy-dev.sh` is covered only by
-that split case — its /dev-only guards live in the script itself and nothing here asserts
-them yet.
+always receives real files in the pre-split layout. `deploy-dev.sh` gets the same static
+treatment: it parses, no rsync line uses `--delete`, its lib rsync excludes `config.php`,
+no rsync/rm line names a live data directory, and its destinations stay the /dev
+constants with the refusal guards standing — the script's whole reason to exist is that
+it cannot reach production or `/test/`.
 
 ## What only eyes can check
 

@@ -21,14 +21,14 @@ $gitIcon = '<svg class="giticon" viewBox="0 0 16 16" width="20" height="20" aria
 $tIcon = '<svg class="giticon" viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path fill="currentColor" d="M4.4 4.4h7.2v1.9H8.9v5.9H7.1V6.3H4.4z"/></svg>';
 ?>
 
-<h3>Theme Picker</h3>
+<h4>Theme Picker</h4>
 <p>Apparently getting a functioning user experience often means choosing the right colors (for text readability, disambiguation, etc).. I was trying to visualize palettes, and my good friend claudio went ahead and made this interactive page, which I thought was useful.. Now it's used in a few of my projects, so I thought I'd list it here.</p>
 <p class="plinks">
   <a class="gitlink" href="/themepicker/" title="Open the theme picker" aria-label="Open the theme picker"><?= $tIcon ?></a>
   <a class="gitlink" href="https://github.com/chere005/CalMind/tree/main/public/themepicker" title="Theme picker source on GitHub" aria-label="Theme picker source on GitHub"><?= $gitIcon ?></a>
 </p>
 
-<h3>CalMind</h3>
+<h4>CalMind</h4>
 <p>Sometimes when I forget to check off a reminder from yesterday, I wish it would still show up on my calendar today.. I also wanted my notes more integrated with my calendar and reminders, as well as a habit tracker that doesn't limit me to 5 days (for the low cost of several dollars per month to upgrade?!).. So my good friend claudio built a web app that is working pretty nicely for me. I've moved my entire calendar and reminders system over, and I am quite happy. It's more important to me that it's custom than that it's generally usable, but since everything is open source, including the start of an iOS and Android app, anybody is free to modify or distribute it however they please.</p>
 <p class="plinks">
   <a class="gitlink" href="https://seancheren.com/calmind/" title="Open CalMind" aria-label="Open CalMind"><img class="giticon appicon" src="/calmind/reminders/icon-180.png" alt="" width="20" height="20"></a>
@@ -49,5 +49,7 @@ $tIcon = '<svg class="giticon" viewBox="0 0 16 16" width="20" height="20" aria-h
 <p>I probably wish this were my focused project, and something I did more publicly, but for now I'm just trying to practice some drums, studio work, composition, etc. Maybe some day I'll finish a real project.</p>
 <h3>Games</h3>
 <p>I hope to play Tears of the Kingdom soon. Haven't played MTG much since Phyrexia, but I hope to get back into that and venture into commander some day.. I'm also hoping to spend a bit more time doing part of the making of games; all of the art and storytelling is authored by my best friend and partner. We've also been working through catching the first 150 pokemon in Red and Blue.</p>
+<h3>Languages</h3>
+<p>Well.. sort of. I'm really interested in writing systems, and have spent more time in the last couple years studying alphabets and glyphs from multiple languages. I have a basic understanding of the modern Latin script (lol), Cyrillic, Farsi, Hiragana and Katakana. I should probably pick a language and become more immersed in its vocabulary.</p>
 <?php
 site_page('projects', 'Projects', ob_get_clean());

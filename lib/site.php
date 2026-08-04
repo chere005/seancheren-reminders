@@ -72,6 +72,7 @@ function site_page($active, $title, $bodyHtml) {
     letter-spacing: -0.01em;
   }
   h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; color: var(--text-dim); font-weight: 600; }
+  h4 { font-size: 0.95rem; margin: 1.1rem 0 0.3rem; color: var(--muted); font-weight: 600; }
   p { margin: 0.75rem 0; color: var(--text-dim); }
   /* Underlined, so a link inside a section never reads as another heading. */
   a { color: var(--accent); text-underline-offset: 2px; }
