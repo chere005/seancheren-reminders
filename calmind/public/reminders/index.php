@@ -808,11 +808,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 $section = $firstSec[$folder] ?? SECTION_DEFAULT_NAME;
             }
 
-            // A dated field from the window wins; otherwise read the date and time
-            // out of what was typed ("Vet 8/3 2pm").
-            $time = null;
+            // A dated field from the window wins over a typed one for the value, but the
+            // typed tokens always leave the title ("Vet 8/3 2pm" is titled "Vet"), and a
+            // typed time is kept even when the date came from the field.
+            [$text, $parsedDate, $time] = parse_when_from_text($text);
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $due)) {
-                [$text, $parsedDate, $time] = parse_when_from_text($text);
                 $due = $parsedDate ?? '';
             }
             if ($text !== '') {
@@ -911,11 +911,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 if (!is_section($it) && ($it['id'] ?? '') === $id) { $at = $i; break; }
             }
             if ($id === '' || $text === '' || $at === null) { break; }
-            // Same reading as adding one: a typed "Vet 8/3 2pm" counts, and the window's
-            // own date/time fields win over it (the text then stays exactly as typed).
+            // Same reading as adding one: a typed "Vet 8/3 2pm" counts, the window's own
+            // date/time fields win over it for the values, and the parsed tokens always
+            // leave the title — they were instructions, not part of the name.
             [$parsed, $pdate, $ptime] = parse_when_from_text($text);
-            $byHand  = $dueOk || $timeOk;
-            $ptext   = mb_substr($byHand ? $text : $parsed, 0, 500);
+            $ptext   = mb_substr($parsed, 0, 500);
             $effDue  = $dueOk ? $due : ($pdate ?? '');
             $effTime = $timeOk ? $time : ($ptime ?? '');
 

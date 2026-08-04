@@ -285,7 +285,10 @@ One case per bug that reached a phone. Picker row taps stop the click reaching t
 link interceptor. A partner's folder view still shows the checkmarks. The edit gesture
 opens a section name (and renaming works in Notes as well as Reminders, with the rows
 following the rename). Editing reads the date out of the text; a rename with no date in
-it leaves the date alone; a date picked by hand wins and leaves the text verbatim. Habits
+it leaves the date alone; a date picked by hand wins the *value* while the typed tokens
+still leave the title — held across the calendar's add and edit windows, Reminders' add
+with an explicit due (which used to skip parsing and lose the typed time), and the
+full-edit pencil. Habits
 reorder, and a reorder that never mentions a habit keeps it. The Calendar remembers the
 day and the tab bar is what forgets it. The tab bar `+` uses a symmetric margin. Every
 chrome page ships the revive machinery: reload on return after five clear seconds away

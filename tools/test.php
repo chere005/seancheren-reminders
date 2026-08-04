@@ -2644,7 +2644,9 @@ t('renaming a dated reminder with no date in the line leaves its date alone', fu
     eq($was, rowBy('example', 'Regress edit target renamed')['due'], 'the date must survive a rename');
 });
 
-t('a date picked by hand wins, and leaves the typed text exactly as typed', function () {
+t('a date picked by hand wins the value, and the typed date still leaves the title', function () {
+    // A parsed date or time is an instruction, not part of the name: it is used (unless
+    // the picker overrode it) and never appears in the stored text.
     $jar = login('example', 'examplepassword');
     $ev = null;
     foreach (stored('events', 'example') as $e) { if (($e['text'] ?? '') === 'Design review') { $ev = $e; } }
@@ -2654,9 +2656,41 @@ t('a date picked by hand wins, and leaves the typed text exactly as typed', func
         'date' => '2026-08-10', 'ym' => date('Y-m')], $jar);
     foreach (stored('events', 'example') as $e) {
         if (($e['id'] ?? '') !== $ev['id']) { continue; }
-        eq('Design review 8/3 with Sam', $e['text'], 'the text is left alone when the date came from the picker');
+        eq('Design review with Sam', $e['text'], 'the typed date is cut out of the title even when the picker wins');
         eq('2026-08-10', $e['date'], 'and the picked date is what is used');
     }
+    // Put the title back for the case below, which finds it by prefix.
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'edit_item',
+        'kind' => 'event', 'id' => $ev['id'], 'text' => 'Design review', 'ym' => date('Y-m')], $jar);
+});
+
+t('the typed date/time never stays in the title: adding and full-editing too', function () {
+    $jar = login('example', 'examplepassword');
+    showAll($jar);
+    // Calendar add window: picker date wins, typed tokens go, typed time is kept.
+    req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'), 'action' => 'add_event',
+        'text' => 'Strip add 8/3 2pm', 'date' => '2026-12-30', 'ym' => date('Y-m')], $jar);
+    $hit = null;
+    foreach (stored('events', 'example') as $e) { if (strpos((string) ($e['text'] ?? ''), 'Strip add') === 0) { $hit = $e; } }
+    eq('Strip add', $hit['text'] ?? null, 'add_event: the tokens leave the title');
+    eq('2026-12-30', $hit['date'] ?? null, 'add_event: the picker date wins');
+    eq('14:00', $hit['time'] ?? null, 'add_event: the typed time is still used');
+    // Reminders add with an explicit due posted: it used to skip parsing entirely, so
+    // the tokens stayed in the title and the typed time was lost.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'add', 'view' => 'Reminders',
+        'text' => 'Strip radd 12/26 6pm', 'due' => '2026-12-30', 'folder' => 'Reminders', 'section' => ''], $jar);
+    $row = rowBy('example', 'Strip radd');
+    ok($row !== null, 'add: the tokens leave the title');
+    eq('2026-12-30', $row['due'], 'add: the explicit due wins over the typed date');
+    eq('18:00', $row['time'], 'add: the typed time is still used');
+    // The full-edit pencil with a by-hand due: same rule.
+    req('POST', '/calmind/reminders/', ['csrf' => csrf($jar), 'action' => 'edit_full', 'view' => 'All',
+        'id' => $row['id'], 'kind' => 'reminder', 'text' => 'Strip radd again 4/4 9am',
+        'due' => '2027-01-05', 'fs' => "Reminders\x1F"], $jar);
+    $row = rowBy('example', 'Strip radd again');
+    ok($row !== null, 'edit_full: the tokens leave the title');
+    eq('2027-01-05', $row['due'], 'edit_full: the by-hand due wins');
+    eq('09:00', $row['time'], 'edit_full: the typed time is still used');
 });
 
 t('with no date picked, the calendar still reads one out of the text', function () {
