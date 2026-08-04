@@ -751,7 +751,44 @@ class Store(private val file: File? = null, firstRunSample: Boolean = false) {
         sections.add(WatchSection("Calendar", items(GroupRef.Calendar)))
         sections.add(WatchSection("Reminders", items(GroupRef.Inbox)))
         for (g in data.groupList(ItemKind.reminder)) sections.add(WatchSection(g.name, items(GroupRef.Group(g.id))))
-        return WatchList(folder = "", sections = sections.filter { it.items.isNotEmpty() })
+        return WatchList(folder = "",
+                         sections = sections.filter { it.items.isNotEmpty() },
+                         days = watchDays(today))
+    }
+
+    /**
+     * The watch's week window: seven days starting today, each holding what the phone's
+     * day panel would show — events (by time), then reminders (undated riders and overdue
+     * collect on today, undated-first then date then time), then notes — so the wrist and
+     * the phone can never disagree about a day. Twin of Store.watchDays (Swift).
+     */
+    fun watchDays(today: LocalDate): List<WatchDay> {
+        val scope = shownCalScope
+        val days = ArrayList<WatchDay>()
+        for (offset in 0 until 7) {
+            val d = today.plusDays(offset.toLong())
+            val items = ArrayList<WatchItem>()
+            for (e in events(on = d, scope = scope)) {
+                items.add(WatchItem(id = e.id.toString(), text = e.text,
+                                    due = e.minutes?.let { timeLabel(it) } ?: "",
+                                    overdue = false, kind = "event"))
+            }
+            for (r in reminders(on = d, today = today)) {
+                val bits = ArrayList<String>()
+                val due = r.due
+                if (due != null && due < today) bits.add(dayLabel(due, today))
+                r.minutes?.let { bits.add(timeLabel(it)) }
+                items.add(WatchItem(id = r.id.toString(), text = r.text,
+                                    due = bits.joinToString(" "),
+                                    overdue = r.overdue(today), kind = "reminder"))
+            }
+            for (n in notes(on = d)) {
+                items.add(WatchItem(id = n.id.toString(), text = n.title,
+                                    due = "", overdue = false, kind = "note"))
+            }
+            days.add(WatchDay(id = d.toString(), name = watchDayName(d, today), items = items))
+        }
+        return days
     }
 
     companion object {

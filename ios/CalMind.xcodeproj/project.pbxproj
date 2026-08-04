@@ -28,6 +28,9 @@
 		5E4C00000000000000000158 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000035 /* Store.swift */; };
 		5E4C00000000000000000159 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000036 /* WatchPayload.swift */; };
 		5E4C00000000000000000160 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000036 /* WatchPayload.swift */; };
+		5E4C00000000000000000170 /* Complications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000050 /* Complications.swift */; };
+		5E4C00000000000000000171 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000036 /* WatchPayload.swift */; };
+		5E4C00000000000000000172 /* CalMindWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5E4C00000000000000000012 /* CalMindWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +40,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 5E4C00000000000000000301;
 			remoteInfo = CalMindWatch;
+		};
+		5E4C00000000000000000313 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E4C00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E4C00000000000000000302;
+			remoteInfo = CalMindWatchWidgets;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -50,6 +60,17 @@
 				5E4C00000000000000000140 /* CalMindWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E4C00000000000000000213 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5E4C00000000000000000172 /* CalMindWatchWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -77,6 +98,11 @@
 		5E4C00000000000000000041 /* RemindersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersView.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000042 /* WatchConnectivityReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityReceiver.swift; sourceTree = "<group>"; };
 		5E4C00000000000000000043 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5E4C00000000000000000044 /* CalMindWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CalMindWatch.entitlements; sourceTree = "<group>"; };
+		5E4C00000000000000000012 /* CalMindWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CalMindWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E4C00000000000000000050 /* Complications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Complications.swift; sourceTree = "<group>"; };
+		5E4C00000000000000000051 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5E4C00000000000000000052 /* WatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WatchWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +120,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E4C00000000000000000221 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +136,7 @@
 				5E4C00000000000000000007 /* README.md */,
 				5E4C00000000000000000004 /* App */,
 				5E4C00000000000000000006 /* Watch */,
+				5E4C00000000000000000008 /* WatchWidgets */,
 				5E4C00000000000000000005 /* Shared */,
 				5E4C00000000000000000003 /* Products */,
 			);
@@ -113,6 +147,7 @@
 			children = (
 				5E4C00000000000000000010 /* CalMind.app */,
 				5E4C00000000000000000011 /* CalMindWatch.app */,
+				5E4C00000000000000000012 /* CalMindWatchWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,8 +188,19 @@
 				5E4C00000000000000000041 /* RemindersView.swift */,
 				5E4C00000000000000000042 /* WatchConnectivityReceiver.swift */,
 				5E4C00000000000000000043 /* Assets.xcassets */,
+				5E4C00000000000000000044 /* CalMindWatch.entitlements */,
 			);
 			path = Watch;
+			sourceTree = "<group>";
+		};
+		5E4C00000000000000000008 /* WatchWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				5E4C00000000000000000050 /* Complications.swift */,
+				5E4C00000000000000000051 /* Info.plist */,
+				5E4C00000000000000000052 /* WatchWidgets.entitlements */,
+			);
+			path = WatchWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -186,15 +232,33 @@
 				5E4C00000000000000000210 /* Sources */,
 				5E4C00000000000000000211 /* Frameworks */,
 				5E4C00000000000000000212 /* Resources */,
+				5E4C00000000000000000213 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5E4C00000000000000000312 /* PBXTargetDependency */,
 			);
 			name = CalMindWatch;
 			productName = CalMindWatch;
 			productReference = 5E4C00000000000000000011 /* CalMindWatch.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5E4C00000000000000000302 /* CalMindWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E4C00000000000000000433 /* Build configuration list for PBXNativeTarget "CalMindWatchWidgets" */;
+			buildPhases = (
+				5E4C00000000000000000220 /* Sources */,
+				5E4C00000000000000000221 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CalMindWatchWidgets;
+			productName = CalMindWatchWidgets;
+			productReference = 5E4C00000000000000000012 /* CalMindWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -210,6 +274,9 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					5E4C00000000000000000301 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					5E4C00000000000000000302 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -229,6 +296,7 @@
 			targets = (
 				5E4C00000000000000000300 /* CalMind */,
 				5E4C00000000000000000301 /* CalMindWatch */,
+				5E4C00000000000000000302 /* CalMindWatchWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -285,6 +353,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E4C00000000000000000220 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E4C00000000000000000170 /* Complications.swift in Sources */,
+				5E4C00000000000000000171 /* WatchPayload.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -292,6 +369,11 @@
 			isa = PBXTargetDependency;
 			target = 5E4C00000000000000000301 /* CalMindWatch */;
 			targetProxy = 5E4C00000000000000000311 /* PBXContainerItemProxy */;
+		};
+		5E4C00000000000000000312 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E4C00000000000000000302 /* CalMindWatchWidgets */;
+			targetProxy = 5E4C00000000000000000313 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -455,6 +537,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Watch/CalMindWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -480,6 +563,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Watch/CalMindWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -489,6 +573,50 @@
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.seancheren.suite;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seancheren.suite.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		5E4C00000000000000000422 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WatchWidgets/WatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CalMind;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seancheren.suite.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		5E4C00000000000000000423 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WatchWidgets/WatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CalMind;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seancheren.suite.watchkitapp.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -526,6 +654,15 @@
 			buildConfigurations = (
 				5E4C00000000000000000420 /* Debug */,
 				5E4C00000000000000000421 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E4C00000000000000000433 /* Build configuration list for PBXNativeTarget "CalMindWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E4C00000000000000000422 /* Debug */,
+				5E4C00000000000000000423 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -328,6 +328,48 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(inbox.items.map(\.text), ["call bank"], "open items only, done dropped")
     }
 
+    func testWatchDaysAreAWeekInDayPanelOrderWithKinds() {
+        let store = freshStore()
+        let today = Date().day
+        let cal = Calendar.current
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+        let farOut   = cal.date(byAdding: .day, value: 10, to: today)!
+        let overdue  = cal.date(byAdding: .day, value: -2, to: today)!
+        store.add(Event(text: "standup", date: today, minutes: 9 * 60))
+        store.add(Reminder(text: "late one", due: overdue, group: .inbox))
+        store.add(Reminder(text: "rider", due: nil, group: .calendar))
+        store.add(Note(title: "packing list", date: today))
+        store.add(Reminder(text: "next day", due: tomorrow, group: .inbox))
+        store.add(Event(text: "too far", date: farOut))
+
+        let days = store.watchDays(today: today)
+        XCTAssertEqual(days.count, 7, "the window is exactly one week")
+        XCTAssertTrue(days[0].name.hasPrefix("Today"), "today leads and is named so")
+
+        // Today: the event first, then reminders (overdue collects here, riders ride),
+        // then the note — the phone day panel's kind order.
+        XCTAssertEqual(days[0].items.map(\.kind), ["event", "reminder", "reminder", "note"])
+        XCTAssertEqual(days[0].items.map(\.text), ["standup", "rider", "late one", "packing list"])
+        XCTAssertTrue(days[0].items.first { $0.text == "late one" }!.overdue)
+
+        XCTAssertEqual(days[1].items.map(\.text), ["next day"], "tomorrow holds its own")
+        XCTAssertFalse(days.flatMap(\.items).contains { $0.text == "too far" },
+                       "nothing past the week reaches the wrist")
+    }
+
+    func testWatchListDecodesAPayloadWithoutDaysOrKinds() throws {
+        // An old phone's payload — no `days`, items without `kind` — must still decode
+        // on a new watch rather than failing the whole list.
+        let old = """
+        {"folder":"","sections":[{"name":"Reminders","items":[
+            {"id":"x","text":"old row","due":"today","overdue":false}]}]}
+        """.data(using: .utf8)!
+        let list = try JSONDecoder().decode(WatchList.self, from: old)
+        XCTAssertEqual(list.days, [], "missing days defaults empty")
+        XCTAssertEqual(list.sections.first?.items.first?.kind, "reminder",
+                       "a kindless item reads as a reminder")
+    }
+
     // MARK: - Persistence
 
     func testSaveAndReadRoundTrip() {

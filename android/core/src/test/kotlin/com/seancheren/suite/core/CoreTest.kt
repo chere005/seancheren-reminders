@@ -272,6 +272,41 @@ class CoreTest {
         assertEquals(listOf("call bank"), inbox.items.map { it.text })   // open items only
     }
 
+    @Test fun testWatchDaysAreAWeekInDayPanelOrderWithKinds() {
+        val store = freshStore()
+        val today = LocalDate.now()
+        store.add(Event(text = "standup", date = today, minutes = 9 * 60))
+        store.add(Reminder(text = "late one", due = today.minusDays(2), group = GroupRef.Inbox))
+        store.add(Reminder(text = "rider", due = null, group = GroupRef.Calendar))
+        store.add(Note(title = "packing list", date = today))
+        store.add(Reminder(text = "next day", due = today.plusDays(1), group = GroupRef.Inbox))
+        store.add(Event(text = "too far", date = today.plusDays(10)))
+
+        val days = store.watchDays(today)
+        assertEquals(7, days.size)                                       // the window is one week
+        assertTrue(days[0].name.startsWith("Today"))
+
+        // Today: the event first, then reminders (overdue collects here, riders ride),
+        // then the note — the phone day panel's kind order.
+        assertEquals(listOf("event", "reminder", "reminder", "note"), days[0].items.map { it.kind })
+        assertEquals(listOf("standup", "rider", "late one", "packing list"), days[0].items.map { it.text })
+        assertTrue(days[0].items.first { it.text == "late one" }.overdue)
+
+        assertEquals(listOf("next day"), days[1].items.map { it.text })  // tomorrow holds its own
+        assertTrue(days.flatMap { it.items }.none { it.text == "too far" })  // nothing past the week
+    }
+
+    @Test fun testWatchListDecodesAPayloadWithoutDaysOrKinds() {
+        // An old phone's payload — no `days`, items without `kind` — must still decode.
+        val old = """
+        {"folder":"","sections":[{"name":"Reminders","items":[
+            {"id":"x","text":"old row","due":"today","overdue":false}]}]}
+        """
+        val list = Store.json.decodeFromString(WatchList.serializer(), old)
+        assertEquals(emptyList<WatchDay>(), list.days)                   // missing days defaults empty
+        assertEquals("reminder", list.sections.first().items.first().kind)
+    }
+
     // MARK: - Persistence
 
     @Test fun testSaveAndReadRoundTrip() {

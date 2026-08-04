@@ -829,6 +829,40 @@ final class Store: ObservableObject {
         for group in data.groupList(.reminder) {
             sections.append(WatchSection(name: group.name, items: items(.group(group.id))))
         }
-        return WatchList(folder: "", sections: sections.filter { !$0.items.isEmpty })
+        return WatchList(folder: "",
+                         sections: sections.filter { !$0.items.isEmpty },
+                         days: watchDays(today: today))
+    }
+
+    /// The watch's week window: seven days starting today, each holding what the phone's
+    /// day panel would show — events (by time), then reminders (undated riders and
+    /// overdue collect on today, undated-first then date then time), then notes — so the
+    /// wrist and the phone can never disagree about a day.
+    func watchDays(today: Date) -> [WatchDay] {
+        let scope = shownCalScope
+        var days: [WatchDay] = []
+        for offset in 0..<7 {
+            guard let d = Calendar.current.date(byAdding: .day, value: offset, to: today) else { continue }
+            var items: [WatchItem] = []
+            for e in events(on: d, scope: scope) {
+                items.append(WatchItem(id: e.id.uuidString, text: e.text,
+                                       due: e.minutes.map(timeLabel) ?? "",
+                                       overdue: false, kind: "event"))
+            }
+            for r in reminders(on: d, today: today) {
+                var bits: [String] = []
+                if let due = r.due, due.day < today { bits.append(dayLabel(due, today: today)) }
+                if let m = r.minutes { bits.append(timeLabel(m)) }
+                items.append(WatchItem(id: r.id.uuidString, text: r.text,
+                                       due: bits.joined(separator: " "),
+                                       overdue: r.overdue(today: today), kind: "reminder"))
+            }
+            for n in notes(on: d) {
+                items.append(WatchItem(id: n.id.uuidString, text: n.title,
+                                       due: "", overdue: false, kind: "note"))
+            }
+            days.append(WatchDay(id: d.day.key, name: watchDayName(d, today: today), items: items))
+        }
+        return days
     }
 }

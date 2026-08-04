@@ -4,7 +4,7 @@ import SwiftUI
 struct CalMindWatchApp: App {
     var body: some Scene {
         WindowGroup {
-            RemindersView()
+            WatchRootView()
         }
     }
 }

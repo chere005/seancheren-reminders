@@ -1,5 +1,6 @@
 import Foundation
 import WatchConnectivity
+import WidgetKit
 
 /// The watch end of the hand-off. Whatever list the phone last sent is decoded and
 /// kept in `UserDefaults`, so the watch still shows it after a restart and doesn't
@@ -28,6 +29,14 @@ final class WatchLinkReceiver: NSObject, ObservableObject, WCSessionDelegate {
         return try? JSONDecoder().decode(WatchList.self, from: bytes)
     }
 
+    /// Mirror the list into the shared app-group defaults and wake the complication —
+    /// the widget extension is a separate process, so `UserDefaults.standard` can't
+    /// reach it. Skipped silently when the app group isn't provisioned.
+    private static func shareWithComplication(_ bytes: Data) {
+        UserDefaults(suiteName: WatchLink.appGroup)?.set(bytes, forKey: WatchLink.cacheKey)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     /// Decode a pushed list (from either delivery path), cache it, and show it. A payload
     /// without our key — an empty context before the phone has sent anything — is ignored.
     private func absorb(_ payload: [String: Any]) {
@@ -35,6 +44,7 @@ final class WatchLinkReceiver: NSObject, ObservableObject, WCSessionDelegate {
               let incoming = try? JSONDecoder().decode(WatchList.self, from: bytes) else { return }
         Task { @MainActor in
             UserDefaults.standard.set(bytes, forKey: Self.key)
+            Self.shareWithComplication(bytes)
             self.list = incoming
             self.synced = true
         }
