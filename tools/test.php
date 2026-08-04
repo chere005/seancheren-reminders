@@ -981,6 +981,18 @@ t('wiring: rows carry the pencil and the page ships the conversion window', func
 });
 
 // ---------------------------------------------------------------- 5. folders
+t('the inline edit field gives way so the row buttons stay on screen', function () {
+    // Wiring. A flex item's default min-width is its content size, and a text input's
+    // content size is ~185px — so on a phone, the moment a row's inline edit opened
+    // (which is what the enter-edit-mode gesture does on a reminder), the subtask + and
+    // the delete × were shoved off the right edge. The harness measures no pixels; what
+    // it can hold is the rule that lets the field shrink instead of the buttons leaving.
+    $jar = login('example', 'examplepassword');
+    $r = req('GET', '/calmind/reminders/?folder=All', [], $jar);
+    ok(preg_match('/\.textedit\s*\{[^}]*min-width:\s*0/s', $r['body']) === 1,
+       'the .textedit rule carries min-width: 0');
+});
+
 area('folders');
 
 t('adding and deleting a folder, with its items falling back', function () {

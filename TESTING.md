@@ -109,7 +109,10 @@ conversion lands on today — and switching to **Note** writes a note titled wit
 into the picked note folder/section (junk destinations fall back). Either conversion
 removes the reminder *unless it has subtasks*, which keep it here as a deliberate copy.
 A shared view answers `edit_full` with a 403 and renders no pencil, and no conversion
-window. **`duplicate`** copies the whole block — parent and subtask, fresh ids — directly
+window. **The inline edit field carries `min-width: 0`** (wiring) — without it a flex
+input refuses to shrink below ~185px, and on a phone the subtask + and delete × were
+shoved off the right edge the moment a row's edit opened; the on-screen check itself was
+done in a real browser at phone width. **`duplicate`** copies the whole block — parent and subtask, fresh ids — directly
 under the original and stays in edit mode. *(By eye: the
 collapse-all toggle actually folds/expands, the toolbar↔first-divider gap matches the gap
 above the toolbar, and the folder-head rename field in edit mode. The row pencil opens the

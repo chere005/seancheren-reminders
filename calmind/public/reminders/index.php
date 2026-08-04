@@ -1494,6 +1494,11 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
     .textedit {
       flex: 1; font-size: 1rem; padding: 0.25rem 0.5rem; background: var(--surface-2); border: 1px solid var(--line);
       border-radius: 4px; color: var(--text); -webkit-user-select: text; user-select: text;
+      /* A flex item's default min-width is its content size, and an input's content size
+         is ~185px — on a phone that shoved the subtask + and delete × clean off the right
+         edge of the row the moment its inline edit opened. 0 lets the field give way, so
+         the whole button cluster stays on screen; the field is still the widest thing left. */
+      min-width: 0;
     }
     .textedit:focus { outline: none; border-color: var(--muted); }
     .due {
