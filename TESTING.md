@@ -135,7 +135,13 @@ renameable `General`, "Notes" is an ordinary name now, the last section is undel
 the Default-for-new-items picker. **Folder rename** works from the list heading (edit mode)
 *and* the Manage-folders window; `folders_rename()` carries colour/hidden/order/default
 across and refuses a fixed/duplicate/empty name. **`duplicate`** copies a note in place —
-body, folder, section and date carried over, fresh id, directly under the original. *(By eye: both rename fields commit on
+body, folder, section and date carried over, fresh id, directly under the original. **The
+editor's date buttons** are pinned at the wiring level: "+ Add date" and the clearing ×
+set the field from JS, which fires no event, so both must dispatch the autosave handoff
+(`change`) themselves and the autosave fetch must carry `keepalive` — before that, adding
+a date read Saved while the file held none. The harness can't click, so the dispatch is
+asserted in the served page; the click-through was verified in a real browser when fixed.
+*(By eye: both rename fields commit on
 Enter/blur; the collapse-all button above the top folder.)*
 
 ### `usage`

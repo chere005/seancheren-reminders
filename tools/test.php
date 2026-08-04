@@ -1107,6 +1107,31 @@ t('adding a note opens it in the editor', function () {
     ok(strpos((string) $r['location'], 'id=') !== false, 'redirects into the note');
 });
 
+t('the date buttons hand off to autosave, which survives leaving the page', function () {
+    // "+ Add date" and the clearing × set the field's value from JS, and a programmatic
+    // set fires no input/change event — so the autosave (which listens for exactly those)
+    // never ran: the page said Saved while the file held no date. The harness can't click,
+    // so this pins the served wiring: both handlers must dispatch the handoff event, and
+    // the autosave fetch must carry keepalive so a save flushed while tapping "← All
+    // notes" isn't cancelled mid-flight. Server-side date persistence is covered elsewhere.
+    $jar = login('example', 'examplepassword');
+    $r = req('POST', '/calmind/notes/', ['csrf' => csrf($jar, '/calmind/notes/'), 'action' => 'add',
+        'view' => 'All', 'folder' => 'General', 'section' => ''], $jar);
+    preg_match('/id=([a-f0-9]+)/', (string) $r['location'], $m);
+    $r = req('GET', '/calmind/notes/?view=All&id=' . $m[1], [], $jar);
+    eq(200, $r['status'], 'the editor renders');
+    has('id="dateInput"', $r['body'], 'with the optional date field');
+    // The handoff, once per button: split on the two click handlers and check each half.
+    $js = substr($r['body'], strpos($r['body'], "addBtn.addEventListener('click'"));
+    $clear = strpos($js, "clearDateBtn').addEventListener('click'");
+    ok($clear !== false, 'both date buttons are wired');
+    $addH = substr($js, 0, $clear);
+    $clrH = substr($js, $clear, 400);
+    has("dispatchEvent(new Event('change'", $addH, 'adding a date hands off to autosave');
+    has("dispatchEvent(new Event('change'", $clrH, 'and so does clearing one');
+    has('keepalive: true', $r['body'], 'the autosave request survives the page being left');
+});
+
 t('a note folder\'s sections nest indented under its heading', function () {
     // Every section — named or the catch-all — is a .section-group now (so it can drag as
     // one unit), and the single indent rule covers them all.

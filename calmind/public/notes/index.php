@@ -1334,11 +1334,16 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
     addBtn.addEventListener('click', () => {
       wrap.hidden = false; addBtn.hidden = true;
       if (!input.value) input.value = TODAY;
+      // A programmatic set fires no event, so hand off to autosave ourselves (the same
+      // handoff the rich-text body does) — accepting the offered "today" otherwise read
+      // Saved while the file still held no date.
+      input.dispatchEvent(new Event('change', { bubbles: true }));
       input.focus();
       if (input.showPicker) { try { input.showPicker(); } catch (_) {} }
     });
     document.getElementById('clearDateBtn').addEventListener('click', () => {
       input.value = ''; wrap.hidden = true; addBtn.hidden = false;
+      input.dispatchEvent(new Event('change', { bubbles: true }));   // clearing must save too
     });
   }
 
@@ -1359,7 +1364,10 @@ function render_note_rows(array $rows, string $view, string $csrf, string $secti
       if (status) status.textContent = 'Saving…';
       const fd = new FormData(noteForm);
       fd.set('action', 'save'); fd.set('ajax', '1');
-      fetch('', { method: 'POST', body: fd })
+      // keepalive: the visibilitychange flush below fires while the page is being torn
+      // down (tab switch, tapping "← All notes" inside the debounce window), and without
+      // it that request is cancelled mid-flight — the other way a just-picked date went.
+      fetch('', { method: 'POST', body: fd, keepalive: true })
         .then(r => r.json())
         .then(d => {
           if (status) status.textContent = 'Saved';
