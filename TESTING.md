@@ -1,7 +1,7 @@
 # Testing
 
 ```sh
-php tools/test.php              # everything — 132 cases, about 30 seconds
+php tools/test.php              # everything — about 15 seconds; --list for the current counts
 php tools/test.php reminders    # one area, by name
 php tools/test.php --list       # the area names and their case counts
 php tools/test.php --keep       # keep the scratch data dir and the server log
@@ -221,6 +221,20 @@ must exist), not a nameless catch-all. The line is parsed for a date and time. *
 section dropdowns list real sections and open on the stored default; the **+ Repeat** control
 reveals its aligned count/unit and is hidden for notes.)*
 
+### `editmode`
+**No action originates edit mode — the server only echoes it.** Edit mode has exactly two
+doors, long-press and double-click, so every redirecting handler is run twice: a bare POST
+must come back *without* `edit=1` in its Location, and one posted with the flag must carry
+it back. Covered per app on the actions that used to append it unconditionally — delete
+(confirmed and the unconfirmed bounce), duplicate, add_subtask, add_section and
+rename_section in Reminders; delete, duplicate and add_section in Notes; the day panel's
+delete_item and duplicate_item in the Calendar; the delete_habit bounce in Habits. Plus
+one wiring pin: every page with edit mode must patch
+`HTMLFormElement.prototype.submit`, because the rename fields commit programmatically
+(no submit event) and without the patch the echo rule would kick you out on every rename.
+*(By eye: swiping a row away, deleting and duplicating all leave the page out of edit
+mode; a rename mid-edit stays in it.)*
+
 ### `sharing`
 `SHARE_PAIRS` seeds are right and a stranger has no partner. A partner's shared folder
 shows and an unshared one doesn't. Writing into a shared folder writes to *their* file,
@@ -266,15 +280,6 @@ Every page renders for two seeded users with no fatal, warning or notice. The pu
 pages need no login. **An empty brand-new account is a working empty suite, not a crash** —
 the case that catches "works for me, my account has data".
 
-### `security`
-Data-driven over `ALL_ACTIONS()` — **every mutating action in the suite**, including
-`quick.php`'s. Each must refuse a POST with a missing or a wrong CSRF token, and a
-signed-out POST must change nothing anywhere, proved with a fingerprint over every one of
-a user's files. Folder names can't carry a control character or the `\x1F` the pickers
-join keys with, and nothing is ever written outside the data dir. One user can't reach
-another's file by naming a folder they never shared. The destructive actions all need the
-confirmed second press.
-
 ### `regress`
 One case per bug that reached a phone. Picker row taps stop the click reaching the PWA
 link interceptor. A partner's folder view still shows the checkmarks. The edit gesture
@@ -302,9 +307,10 @@ they were never shared, and the destructive actions all need the confirmed secon
 
 ### `notes2`
 What the first pass skimmed: a note's folder, section and date through a full add → save →
-delete, with delete needing the second press; sections added, renamed and deleted per
-folder; the reserved "Notes" catch-all name; a note folder colour refusing another app's
-palette.
+delete, with delete needing the second press; sections added, renamed and deleted per folder; a fresh
+folder getting a real renameable `General` ("Notes" is an ordinary section name now, not
+a reserved catch-all); a note folder colour refusing another app's palette; and the drag
+payloads — section reorder, cross-folder re-files with the duplicate-name refusal.
 
 ### `drag`
 The payload half of every drag, replayed exactly as the JS posts it — the gesture itself
@@ -452,7 +458,9 @@ bare deploy is the test instance and production needs saying out loud. Also
 no default data directory, and is never deployed. The `calmind/` repo split is guarded
 here too: `public/calmind` and the four CalMind-only lib files must be symlinks into the
 top-level `calmind/` area, and both deploy scripts must rsync with `-L` so the server
-always receives real files in the pre-split layout.
+always receives real files in the pre-split layout. `deploy-dev.sh` is covered only by
+that split case — its /dev-only guards live in the script itself and nothing here asserts
+them yet.
 
 ## What only eyes can check
 
@@ -472,7 +480,7 @@ failures only exist in standalone mode.
 - [ ] Nothing is clipped by the notch or the home indicator (`env(safe-area-inset-*)`).
 - [ ] Tapping a link doesn't kick you out to Safari with browser chrome.
 
-**The `/test/` sandbox mirror** (after touching the deploy or any cross-app link)
+**The `/test/` and `/dev/` sandboxes** (after touching a deploy script or any cross-app link)
 
 - [ ] `./deploy.sh test` publishes to `seancheren.com/test/`; the app opens there and the
       tab bar, login and widget links all stay inside `/test/` (never jump to the root).
@@ -480,6 +488,8 @@ failures only exist in standalone mode.
       **not** appear in production (and vice versa) — `data-test/` is separate.
 - [ ] `./deploy.sh promote` leaves prod running what test ran; production's data and both
       `config.php` files are untouched.
+- [ ] `./deploy-dev.sh` publishes to `/dev/` only; its own login (not production's) signs
+      in there, and neither production nor `/test/` changed.
 
 **Gestures** — one pass per app
 
@@ -494,8 +504,12 @@ failures only exist in standalone mode.
       edit mode, and adding from there doesn't flip edit mode on.
 - [ ] Tapping empty space leaves edit mode; Escape leaves edit mode.
 - [ ] The back button is a black × while editing, and it leaves edit mode.
-- [ ] Swipe a row left: the delete appears and deletes on one tap.
+- [ ] Swipe a row left: the delete appears pinned at the screen's right edge and deletes
+      on one tap — and neither the swipe nor the delete turns edit mode on.
 - [ ] Two-press delete fills red on the first press and only deletes on the second.
+- [ ] Tick a reminder with Completed off: it stays in place, struck through, for three
+      seconds before hiding; unticking inside the window keeps it; a repeat still rolls
+      to its next date with the flash.
 - [ ] Drag: a reminder between sections; a whole section as a block; a note; a habit;
       a habit section; a folder in the manager; a calendar in the manager.
 - [ ] Drag **across folders** (Reminders and Notes, All view): a row into another folder's
@@ -511,11 +525,22 @@ failures only exist in standalone mode.
       modal clear-×s, habit grid cells — and the tab bar's active highlight is one fixed
       circle that never nudges the icons' spacing.
 - [ ] A drop line never appears over a partner's shared block, for rows or for sections.
+- [ ] Nothing moves until the drop, and the drop line says where it will land.
+- [ ] Collapse a section and a folder; both survive a reload.
+
+**Lists**
+
+- [ ] Reminders/Notes, All view: each folder's name wears its colour wash, and the divider
+      ladder reads right — heaviest above a folder, middleweight above a section, hairline
+      between rows.
+- [ ] A picker dropdown (folders, Habits section filter, calendars) never grows a horizontal
+      scrollbar on a long name — the name wraps; a partner's shared badge stays with the name.
+- [ ] Copy-as-Markdown appears in the Reminders toolbar only on the `sean` account.
 
 **Themes** — one pass per theme worth checking (the harness sees the vars, not the paint)
 
 - [ ] Midnight is pixel-for-pixel the old dark look on every app page.
-- [ ] Sage and Blossom (the light two): text, muted text, section gold and the accent all
+- [ ] Sage (the one cream theme): text, muted text, section gold and the accent all
       read on the cream page; native dropdowns and date fields open light, not black.
 - [ ] The tab bar, day panel, pickers/dropdown menus and every modal (settings, folder
       manager, calendar manager, share) follow the theme — no black slab on a cream page.
@@ -527,13 +552,6 @@ failures only exist in standalone mode.
       menu opens and stays open (over the grid below) while you tick through it.
 - [ ] Habits, month view: each day's pie is drawn in its sections' own colours, and a full
       day reads as a solid circle in one colour when only one section is counted.
-- [ ] Reminders/Notes, All view: a folder's sections sit slightly indented under its
-      heading, including the catch-all group; the permanent global groups don't indent.
-- [ ] Nothing moves until the drop, and the drop line says where it will land.
-- [ ] Collapse a section and a folder; both survive a reload.
-- [ ] A picker dropdown (folders, Habits section filter, calendars) never grows a horizontal
-      scrollbar on a long name — the name wraps; a partner's shared badge stays with the name.
-- [ ] Copy-as-Markdown appears in the Reminders toolbar only on the `sean` account.
 
 **Calendar**
 
@@ -573,7 +591,9 @@ failures only exist in standalone mode.
   and shelves are not — it gates on one username and is its own app.
 - The chat app is only checked for rendering.
 - Nothing tests the live server, TLS, the deploy, or the seeding-over-HTTP procedure.
-- The iOS/watch app in `ios/` is a separate codebase with no tests; build it in Xcode.
+- The iOS/watch and Android apps are separate codebases with their own suites (`swift test`
+  in `ios/`, `./gradlew :core:test` in `android/`), both replaying the shared vectors in
+  `spec/`; nothing here drives them.
 
 ## Adding a test
 

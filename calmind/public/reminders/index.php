@@ -1639,8 +1639,8 @@ $folderDotColor = function (string $f) use ($isShared, $partner, $myColors, $the
       </div>
     </div>
     <?php
-      // The folder picker rides on the right, by the ⋮; "Manage folders" is the last
-      // row of its dropdown rather than a button of its own.
+      // The folder picker rides on the right, by the username; "Manage folders" is the
+      // last row of its dropdown rather than a button of its own.
       ob_start();
       render_folder_pick($folderGroups, $view, 'All', $isShared ? '' : 'Manage folders',
                          array_merge($hidFolders, $sharedHidden), $csrf);

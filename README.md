@@ -26,28 +26,28 @@ iOS + Apple Watch** app lives in `ios/` (SwiftUI, local-only, shares no code wit
 - **Habits** — colour-coded sections (at least one), a week tick-grid and a month of per-day pie charts with a section filter.
 - **Add** — one box that captures a reminder, event or note straight into the folder/section or calendar you choose.
 - **Chat** (public, no login) and **Aki's Bookshelf** (aki only).
-- One login covers the suite; each user has their own encrypted data; sharing is opt-in between paired accounts.
+- One login covers the suite; each user has their own encrypted data; sharing is opt-in, per item, between mutual partners (each side keeps a partner list, and sharing only exists while both lists name each other).
 
 ## Web — run & test
 
 ```sh
 php -S 127.0.0.1:8787 -t public     # apps at /calmind/reminders/, /calmind/calendar/, /calmind/add/, /calmind/notes/, /calmind/habits/, /chat/
 php tools/test.php                  # the test suite (~15s, no framework)
-find public lib tools -name '*.php' -exec php -l {} \;   # lint
+find public calmind lib tools -name '*.php' -exec php -l {} \;   # lint
 ```
 
 Local logins come from `lib/config.php` (copy `lib/config.sample.php`); local data lands in `./data/`, separate from the live site.
 
 ## Web — deploy
 
-Two live instances share one source tree: **production** (`/`) and a **`/test/` sandbox** with its own data.
-`deploy.sh` is one-way (Mac → server), lints first, and never sends `config.php`, never touches the data dirs, never uses `--delete`.
+Three live instances share one source tree — **production** (`/`), a **`/test/` sandbox** and a **`/dev/` sandbox**, each with its own data, accounts and sessions — and two scripts deploy them: `deploy.sh` owns test and production, `deploy-dev.sh` owns `/dev/` and can't reach anything else. Both are one-way (Mac → server), lint first, and never send `config.php`, never touch the data dirs, never use `--delete`.
 
 ```sh
 ./deploy.sh            # → TEST only (the safe default)
 ./deploy.sh promote    # copy the verified TEST tree onto PROD (server-side)
 ./deploy.sh both       # → TEST and PROD at once
 ./deploy.sh --dry-run  # preview, change nothing
+./deploy-dev.sh        # → /dev/ only, from a clean git checkout of HEAD
 ```
 
 The SSH target lives in a gitignored `deploy.conf` (copy `deploy.conf.sample`). Secrets live in

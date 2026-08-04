@@ -175,10 +175,10 @@ function render_user_menu(bool $withEdit = false, string $editId = 'editBtn', st
 }
 
 /**
- * User settings: the "⋮" that sits left of the username, and the window behind it.
- * The only thing in there so far is changing your own password, which posts
- * `change_password` to whatever page you're on — require_login() answers it, so no
- * app has to wire anything up. Pages that don't use chrome_styles()/chrome_script()
+ * User settings: the window behind the username dropdown's Settings row. It changes
+ * your password (`change_password` posts to whatever page you're on — require_login()
+ * answers it, so no app has to wire anything up), picks the theme, and closes with the
+ * Share/Widget/Done icon row. Pages that don't use chrome_styles()/chrome_script()
  * (Aki's Bookshelf) emit the three helpers themselves.
  */
 function settings_modal_html(string $extra = '', bool $showShare = false): string

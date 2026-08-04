@@ -60,7 +60,8 @@ suite you drive from the command line, the way the website's `tools/test.php` ru
 ```sh
 cd ios
 # The logic layer (repeats, the outline sort, folders/groups, calendars, day queries,
-# parsing, the watch list, Copy-as-Markdown, the Habits filter, tolerant decoding):
+# parsing, the watch list, Copy-as-Markdown, the Habits filter, tolerant decoding),
+# including a replay of the shared behaviour vectors in ../spec/ (SpecTests.swift):
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 
 # Compile-check the SwiftUI app — no simulator needed, it builds for a generic device:
