@@ -47,6 +47,7 @@ $tIcon = '<svg class="giticon" viewBox="0 0 16 16" width="20" height="20" aria-h
 <p>I spend most of my time working remotely at Wolfram Research where I get to work on really cool projects with really cool people.</p>
 <h3>Music</h3>
 <p>I probably wish this were my focused project, and something I did more publicly, but for now I'm just trying to practice some drums, studio work, composition, etc. Maybe some day I'll finish a real project.</p>
+<p>I recently got my hands on an unripe flying microtonal banana.. Learning to play eastern scales in primarily western music has been a beautiful mindfuck.</p>
 <h3>Games</h3>
 <p>I hope to play Tears of the Kingdom soon. Haven't played MTG much since Phyrexia, but I hope to get back into that and venture into commander some day.. I'm also hoping to spend a bit more time doing part of the making of games; all of the art and storytelling is authored by my best friend and partner. We've also been working through catching the first 150 pokemon in Red and Blue.</p>
 <h3>Languages</h3>

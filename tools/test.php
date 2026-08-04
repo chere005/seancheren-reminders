@@ -4932,6 +4932,7 @@ t('projects carries the Private categories', function () {
         has('>' . $h . '</h3>', $b, "$h is a Private category");
     }
     has('writing systems', $b, 'Languages carries its text');
+    has('microtonal banana', $b, 'Music carries its second paragraph');
 });
 
 t('the theme picker shows all four themes, read-only, current marked', function () {
