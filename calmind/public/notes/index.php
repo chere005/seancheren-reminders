@@ -130,7 +130,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Nothing destructive happens without the confirmed second press.
     if (in_array($_POST['action'], ['delete', 'delete_section', 'delete_folder'], true)
         && empty($_POST['confirm'])) {
-        header('Location: ' . $listUrl . '&edit=1');
+        header('Location: ' . $listUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
 
@@ -216,7 +216,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         } else {
             folder_color_set($cfg['data_dir'], 'notes', $cname, (string) ($_POST['color'] ?? ''));
         }
-        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . '&edit=1');
+        header('Location: ' . _self_path() . '?folder=' . urlencode((string) ($_POST['view'] ?? 'All')) . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
     if ($_POST['action'] === 'rename_folder') {
@@ -240,7 +240,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         if ($done && $vw === $old) { $vw = $new; }
         // From the manager (fm): reopen it without forcing edit mode. From the list heading
         // (in edit mode): stay in edit, since that's where the field lives.
-        $extra = !empty($_POST['fm']) ? '&fm=1' : '&edit=1';
+        $extra = !empty($_POST['fm']) ? '&fm=1' : (!empty($_POST['edit']) ? '&edit=1' : '');
         header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . $extra);
         exit;
     }
@@ -303,7 +303,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $secFolder = (string) ($_POST['folder'] ?? $viewFolder);
         save_notes($dataFile, section_rename(load_notes($dataFile), (string) ($_POST['name'] ?? ''),
                                              (string) ($_POST['newname'] ?? ''), $secFolder));
-        header('Location: ' . $listUrl . '&edit=1');
+        header('Location: ' . $listUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
     if ($_POST['action'] === 'delete_section') {
@@ -319,7 +319,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             if (is_section($it) && ($it['folder'] ?? '') === $secFolder) { $folderSecNames[] = (string) $it['name']; }
         }
         if (count($folderSecNames) <= 1) {          // it's the folder's only section
-            header('Location: ' . $listUrl . '&edit=1');
+            header('Location: ' . $listUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
             exit;
         }
         $rest   = array_values(array_filter($folderSecNames, fn($n) => $n !== $name));
@@ -333,7 +333,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         }
         unset($n);
         save_notes($dataFile, $notes);
-        header('Location: ' . $listUrl . '&edit=1');
+        header('Location: ' . $listUrl . (!empty($_POST['edit']) ? '&edit=1' : ''));
         exit;
     }
 
@@ -524,14 +524,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 save_notes($dataFile, $notes);
                 break;
             }
-            header('Location: ' . _self_path() . $vq . '&edit=1');   // still editing
+            header('Location: ' . _self_path() . $vq . (!empty($_POST['edit']) ? '&edit=1' : ''));   // echo the posted flag
             exit;
 
         case 'delete':
             $id    = (string) ($_POST['id'] ?? '');
             $notes = array_values(array_filter($notes, fn($n) => is_section($n) || $n['id'] !== $id));
             save_notes($dataFile, $notes);
-            header('Location: ' . _self_path() . $vq . '&edit=1');   // back to the list, still editing
+            header('Location: ' . _self_path() . $vq . (!empty($_POST['edit']) ? '&edit=1' : ''));   // a swiped delete was never in edit mode
             exit;
     }
 

@@ -933,9 +933,11 @@ t('duplicate: the copy lands under the original, subtasks and all', function () 
     foreach (stored('reminders', 'example') as $x) { if (($x['text'] ?? '') === 'Water the ferns') { $row = $x; } }
     req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'add_subtask', 'view' => 'All',
         'parent' => $row['id']], $jar);
+    // The button only renders in edit mode, so the real POST carries the stamped flag —
+    // and the server echoes it back (it no longer originates edit mode; see `editmode`).
     $r = req('POST', '/calmind/reminders/', ['csrf' => $c, 'action' => 'duplicate', 'view' => 'All',
-        'id' => $row['id']], $jar);
-    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+        'id' => $row['id'], 'edit' => '1'], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating from edit mode stays in it');
     $list = array_values(stored('reminders', 'example'));
     $ids  = [];
     foreach ($list as $i => $x) { if (($x['text'] ?? '') === 'Water the ferns') { $ids[] = $i; } }
@@ -1604,9 +1606,10 @@ t('the day panel duplicates an event or a reminder block', function () {
         'date' => '2030-04-04', 'cal' => $cal, 'ym' => '2030-04'], $jar);
     $ev = null;
     foreach (stored('events', 'example') as $x) { if (($x['text'] ?? '') === 'Band practice') { $ev = $x; } }
+    // Real POSTs from the edit-mode-only button carry the stamped flag; echoed, not originated.
     $r = req('POST', '/calmind/calendar/', ['csrf' => $c, 'action' => 'duplicate_item', 'kind' => 'event',
-        'id' => $ev['id'], 'ym' => '2030-04', 'day' => '2030-04-04'], $jar);
-    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+        'id' => $ev['id'], 'ym' => '2030-04', 'day' => '2030-04-04', 'edit' => '1'], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating from edit mode stays in it');
     $twins = array_values(array_filter(stored('events', 'example'), fn($x) => ($x['text'] ?? '') === 'Band practice'));
     eq(2, count($twins), 'two of the event now');
     ok($twins[0]['id'] !== $twins[1]['id'], 'with their own ids');
@@ -1923,6 +1926,96 @@ t('Add reads the date and time out of the line too', function () {
     ok($row !== null, 'text trimmed');
     eq('15:30', $row['time']);
     eq('09-04', substr((string) $row['due'], 5));
+});
+
+// ---------------------------------------------------------------- edit-mode entry
+// ONE rule, suite-wide: edit mode is entered by gesture (long-press / double-click) and
+// nothing else. Server-side that means a handler only ever ECHOES the posted edit flag
+// into its redirect — never originates it — because the flag is stamped by
+// keep_edit_script() onto forms submitted while editing. The bug this pins: handlers
+// that "knew" they were edit-mode-only appended edit=1 unconditionally, and then
+// swipe-delete arrived, reachable from outside edit mode — so deleting dumped you in.
+// Every echo is asserted BOTH ways, per action, per app, on purpose.
+area('editmode');
+
+// One POST, two runs — bare, then with edit=1 — asserting the redirect echoes exactly.
+function edit_echo(string $path, array $post, array &$jar, string $why): void
+{
+    $r = req('POST', $path, $post + ['csrf' => csrf($jar, $path)], $jar);
+    eq(302, $r['status'], "$why: redirects");
+    hasnt('edit=1', (string) $r['location'], "$why: a bare POST lands OUT of edit mode");
+    $r = req('POST', $path, $post + ['csrf' => csrf($jar, $path), 'edit' => '1'], $jar);
+    has('edit=1', (string) $r['location'], "$why: the posted flag rides back in");
+}
+
+t('reminders: no action originates edit mode', function () {
+    $jar = login('example', 'examplepassword');
+    // The swipe-reachable one that started this, on a real row each time.
+    $rows = array_values(array_filter(stored('reminders', 'example'),
+        fn($r) => ($r['type'] ?? '') !== 'section' && (int) ($r['indent'] ?? 0) === 0));
+    edit_echo('/calmind/reminders/', ['action' => 'delete', 'view' => 'All',
+        'id' => $rows[0]['id'], 'confirm' => '1'], $jar, 'delete');
+    edit_echo('/calmind/reminders/', ['action' => 'delete', 'view' => 'All',
+        'id' => $rows[1]['id']], $jar, 'unconfirmed delete bounce');
+    edit_echo('/calmind/reminders/', ['action' => 'duplicate', 'view' => 'All',
+        'id' => $rows[1]['id']], $jar, 'duplicate');
+    edit_echo('/calmind/reminders/', ['action' => 'add_subtask', 'view' => 'All',
+        'id' => $rows[1]['id']], $jar, 'add_subtask');
+    edit_echo('/calmind/reminders/', ['action' => 'add_section', 'view' => 'All',
+        'folder' => FOLDER_REMINDERS, 'name' => 'EchoChk' . rand(100, 999)], $jar, 'add_section');
+    edit_echo('/calmind/reminders/', ['action' => 'rename_section', 'view' => 'All',
+        'folder' => FOLDER_REMINDERS, 'old' => 'NoSuchSection', 'name' => 'StillNo'], $jar, 'rename_section');
+});
+
+t('notes: no action originates edit mode', function () {
+    $jar = login('example', 'examplepassword');
+    $notes = array_values(array_filter(stored('notes', 'example'), fn($n) => ($n['type'] ?? '') !== 'section'));
+    edit_echo('/calmind/notes/', ['action' => 'delete', 'view' => 'All',
+        'id' => $notes[0]['id'], 'confirm' => '1'], $jar, 'delete');
+    edit_echo('/calmind/notes/', ['action' => 'delete', 'view' => 'All',
+        'id' => $notes[1]['id']], $jar, 'unconfirmed delete bounce');
+    edit_echo('/calmind/notes/', ['action' => 'duplicate', 'view' => 'All',
+        'id' => $notes[1]['id']], $jar, 'duplicate');
+    edit_echo('/calmind/notes/', ['action' => 'add_section', 'view' => 'All',
+        'folder' => 'General', 'name' => 'EchoChk' . rand(100, 999)], $jar, 'add_section');
+});
+
+t('calendar: the day panel deletes and duplicates without entering edit mode', function () {
+    $jar = login('example', 'examplepassword');
+    $today = date('Y-m-d');
+    // Make reminders on today so both runs of each action have a real target.
+    foreach (['cal echo a', 'cal echo b'] as $t) {
+        req('POST', '/calmind/calendar/', ['csrf' => csrf($jar, '/calmind/calendar/'),
+            'action' => 'add_reminder', 'text' => $t,
+            'date' => $today, 'ym' => date('Y-m')], $jar);
+    }
+    $ids = [];
+    foreach (stored('reminders', 'example') as $x) {
+        if (str_starts_with((string) ($x['text'] ?? ''), 'cal echo')) { $ids[] = $x['id']; }
+    }
+    ok(count($ids) >= 2, 'the fixture reminders exist — without them every echo check is vacuous');
+    edit_echo('/calmind/calendar/', ['action' => 'delete_item', 'kind' => 'reminder',
+        'id' => array_shift($ids), 'confirm' => '1', 'ym' => date('Y-m')], $jar, 'delete_item');
+    edit_echo('/calmind/calendar/', ['action' => 'duplicate_item', 'kind' => 'reminder',
+        'id' => array_shift($ids), 'ym' => date('Y-m')], $jar, 'duplicate_item');
+});
+
+t('habits: the unconfirmed-delete bounce does not originate edit mode either', function () {
+    $jar = login('example', 'examplepassword');
+    edit_echo('/calmind/habits/', ['action' => 'delete_habit', 'id' => 'nosuchhabit'], $jar,
+        'unconfirmed delete_habit bounce');
+});
+
+t('the edit stamp covers programmatic submits too', function () {
+    // The rename fields commit through form.submit(), which fires no submit event — so
+    // keep_edit_script() must patch the prototype as well as listen. Without that half,
+    // gating the server on the posted flag would kick you out of edit mode on every
+    // rename. Wiring: the patch has to ship on every page that has edit mode.
+    $jar = login('example', 'examplepassword');
+    foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/habits/'] as $p) {
+        $b = req('GET', $p, [], $jar)['body'];
+        has('HTMLFormElement.prototype.submit = function', $b, "$p patches programmatic submit");
+    }
 });
 
 // ---------------------------------------------------------------- 10. sharing
@@ -3089,9 +3182,10 @@ t('a note duplicates in place, body and spot carried over', function () {
     $src = null;
     foreach (stored('notes', 'example') as $x) { if (($x['id'] ?? '') === ($m0[1] ?? '')) { $src = $x; } }
     ok($src !== null && ($src['title'] ?? '') === 'Dup probe note', 'a note to duplicate');
+    // Real POSTs from the edit-mode-only button carry the stamped flag; echoed, not originated.
     $r = req('POST', '/calmind/notes/', ['csrf' => $nc, 'action' => 'duplicate', 'view' => 'All',
-        'id' => $src['id']], $jar);
-    has('edit=1', (string) $r['location'], 'duplicating stays in edit mode');
+        'id' => $src['id'], 'edit' => '1'], $jar);
+    has('edit=1', (string) $r['location'], 'duplicating from edit mode stays in it');
     $list = array_values(stored('notes', 'example'));
     $idx  = [];
     foreach ($list as $i => $x) {

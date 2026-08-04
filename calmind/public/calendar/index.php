@@ -496,7 +496,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             save_json_list($file, $list);
             break;
         }
-        $stay = '&edit=1';   // duplicating is an edit-mode action; stay in it
+        $stay = !empty($_POST['edit']) ? '&edit=1' : '';   // echo, never originate — a swiped quick-delete is not in edit mode
     } elseif ($action === 'delete_item' && ($spec = kind_spec($kind)) && $id !== ''
               && !empty($_POST['confirm'])) {   // only the confirmed second press
         $file = user_data_file($cfg['data_dir'], $spec['base']);
@@ -515,7 +515,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
             unset($it);
         }
         save_json_list($file, $list);
-        $stay = '&edit=1';   // deleting is edit-mode only; hand it back
+        $stay = !empty($_POST['edit']) ? '&edit=1' : '';   // echo, never originate — a swiped quick-delete is not in edit mode
     }
 
     $loc = _self_path() . '?ym=' . $ym;

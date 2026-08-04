@@ -908,19 +908,32 @@ JS;
  * Carry edit mode through a POST. Any form submitted while editing picks up an
  * `edit` field, so the handler's redirect can hand edit mode back and you aren't
  * dropped out of it just for adding something.
+ *
+ * This posted flag is the ONLY thing that may put edit mode in a redirect: the
+ * server echoes it and never originates it, so the sole ways into edit mode are the
+ * gestures (long-press / double-click). A handler that appended edit=1 on its own
+ * meant a swipe-delete — made from outside edit mode on purpose — dumped you into it.
  */
 function keep_edit_script(): string
 {
+    // Both halves are needed: the submit listener covers real submits, and the patched
+    // prototype covers programmatic form.submit() (the rename fields' Enter/blur, the
+    // pencil window's Save), which fires no submit event at all — without it, gating
+    // the server on the posted flag would kick you out of edit mode on every rename.
     return <<<'JS'
-<script>document.addEventListener('submit', function (e) {
-  var f = e.target;
-  if (!f || f.tagName !== 'FORM') { return; }
-  if (!document.body.classList.contains('editing')) { return; }
-  if (f.querySelector('input[name="edit"]')) { return; }
-  var i = document.createElement('input');
-  i.type = 'hidden'; i.name = 'edit'; i.value = '1';
-  f.appendChild(i);
-}, true);</script>
+<script>(function () {
+  function stamp(f) {
+    if (!f || f.tagName !== 'FORM') { return; }
+    if (!document.body.classList.contains('editing')) { return; }
+    if (f.querySelector('input[name="edit"]')) { return; }
+    var i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'edit'; i.value = '1';
+    f.appendChild(i);
+  }
+  document.addEventListener('submit', function (e) { stamp(e.target); }, true);
+  var native = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () { stamp(this); return native.apply(this, arguments); };
+})();</script>
 JS;
 }
 

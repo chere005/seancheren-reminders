@@ -320,7 +320,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
     // Nothing destructive happens without the confirmed second press.
     if (in_array($_POST['action'], ['delete_habit', 'delete_section'], true)
         && empty($_POST['confirm'])) {
-        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . (empty($_POST['mgr']) ? '?edit=1' : ''));
+        header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . ((!empty($_POST['edit']) && empty($_POST['mgr'])) ? '?edit=1' : ''));
         exit;
     }
 

@@ -80,9 +80,12 @@ $backUrl   = _self_path() . '?folder=' . urlencode($view);
 // file it writes) but must land back on All, not jump into the shared view — ret says
 // so, and only 'All' is accepted so it can't carry anything else.
 if (($_POST['ret'] ?? '') === 'All') { $backUrl = _self_path() . '?folder=All'; }
-// Structural changes (folders, sections, deletes) are only reachable from edit mode,
-// so they hand it back on the way through — everything else lands out of edit mode.
-$editBack  = $backUrl . '&edit=1';
+// Edit mode is entered by gesture (long-press / double-click) and nothing else. A
+// handler never *puts* you in it — it only hands back what the POST carried, which
+// keep_edit_script() stamps on any form submitted while editing. "Deleting is an
+// edit-mode action" used to justify an unconditional edit=1 here, and then swipe-delete
+// arrived: a delete made deliberately from outside edit mode dumped you into it.
+$editBack  = $backUrl . (!empty($_POST['edit']) ? '&edit=1' : '');
 
 function e(?string $s): string
 {
@@ -505,8 +508,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         $vw = (string) ($_POST['view'] ?? 'All');
         if ($done && $vw === $old) { $vw = $new; }
         // From the manager (fm): reopen it without forcing edit mode. From the list heading
-        // (in edit mode): stay in edit, since that's where the field lives.
-        $extra = !empty($_POST['fm']) ? '&fm=1' : '&edit=1';
+        // the posted edit flag rides back — echoed, never assumed.
+        $extra = !empty($_POST['fm']) ? '&fm=1' : (!empty($_POST['edit']) ? '&edit=1' : '');
         header('Location: ' . _self_path() . '?folder=' . urlencode($vw) . $extra);
         exit;
     }
@@ -853,7 +856,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
         case 'delete':
             $id = (string) ($_POST['id'] ?? '');
             $list = array_values(array_filter($list, fn($r) => is_section($r) || ($r['id'] ?? '') !== $id));
-            $stay = '&edit=1';   // deleting is an edit-mode action; stay in it
+            // Echo only: a swipe-delete comes from OUTSIDE edit mode and must not enter it.
+            $stay = !empty($_POST['edit']) ? '&edit=1' : '';
             break;
 
         case 'add_subtask':
@@ -882,7 +886,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                 while ($at < count($list) && !is_section($list[$at])
                        && (int) ($list[$at]['indent'] ?? 0) > 0) { $at++; }
                 array_splice($list, $at, 0, [$new]);
-                $stay = '&edit=1&focus=' . $new['id'];
+                $stay = (!empty($_POST['edit']) ? '&edit=1' : '') . '&focus=' . $new['id'];
                 break;
             }
             break;
@@ -1009,7 +1013,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['action']))
                     $copies[] = $row;
                 }
                 array_splice($list, $end, 0, $copies);
-                $stay = '&edit=1';   // duplicating is an edit-mode action; stay in it
+                $stay = !empty($_POST['edit']) ? '&edit=1' : '';   // echo, never originate
                 break;
             }
             break;
