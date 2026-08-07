@@ -276,7 +276,10 @@ must report all-clear), Draft 1 the frozen earlier tiers.
 `reminders_folder_migrate()` is idempotent. Output is escaped.
 
 ### `pages`
-Every page renders for two seeded users with no fatal, warning or notice. The public
+Every page renders for two seeded users with no fatal, warning, notice or deprecation.
+The sweep (`quiet()`) matches PHP's HTML-mode spelling too — `<b>Warning</b>:` — because
+the plain `Warning:` needle never matched a real displayed warning, which is how the
+folder manager's `$fixed[0]` crash reached a phone with the suite green. The public
 pages need no login. **An empty brand-new account is a working empty suite, not a crash** —
 the case that catches "works for me, my account has data".
 

@@ -826,7 +826,12 @@ function render_folder_modal(array $rows, string $csrf, string $view = 'All',
             </select>
           </form>
         <?php endif; ?>
-        <p class="fhint">Deleting a folder keeps its items — they move to <?= htmlspecialchars($fixed[0], ENT_QUOTES) ?>.</p>
+        <?php // Where deleted-folder items actually go: both apps re-resolve the default
+              // after the delete (folder_default_get skips the deleted name), so "the
+              // default for new items" — the dropdown above — is exact even when the
+              // default itself is what's being deleted. Notes has no permanent folder,
+              // so $fixed[0] doesn't exist to name here. ?>
+        <p class="fhint">Deleting a folder keeps its items — they move to the default for new items.</p>
         <div class="frow"><?= $extraButton ?><button type="button" class="fdone" id="folderDone">Done</button></div>
       </div>
     </div>

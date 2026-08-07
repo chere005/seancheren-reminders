@@ -72,6 +72,16 @@ function hasnt(string $needle, string $hay, string $why = ''): void
         throw new RuntimeException(($why !== '' ? $why . ': ' : '') . 'unexpectedly present ' . sv($needle));
     }
 }
+/** No PHP diagnostics in a page body. display_errors in HTML mode bolds the level —
+ *  "<b>Warning</b>:" — so the plain "Warning:" needle never matched a real warning;
+ *  check both spellings, and Deprecated too (which was never checked at all). */
+function quiet(string $body, string $why = ''): void
+{
+    foreach (['Fatal error', 'Warning:', 'Notice:', 'Deprecated:',
+              'Warning</b>', 'Notice</b>', 'Deprecated</b>'] as $l) {
+        hasnt($l, $body, $why);
+    }
+}
 function sv($v): string
 {
     if (is_string($v)) { return '"' . (mb_strlen($v) > 90 ? mb_substr($v, 0, 90) . '…' : $v) . '"'; }
@@ -2488,7 +2498,7 @@ t('the palettes viewer grades every hex label by its contrast', function () {
     $at = strpos($r['body'], 'data-key="suite-midnight"');
     $chunk = substr($r['body'], $at, strpos($r['body'], '</section>', $at) - $at);
     has('all clear 3:1', $chunk, 'the live palette on Midnight is all clear');
-    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    quiet($r['body']);
 });
 
 t('the folder migration is idempotent', function () {
@@ -2526,9 +2536,7 @@ t('every page of the suite renders for a seeded user', function () {
                   '/calmind/habits/?m=' . date('Y-m'), '/calmind/calendar/quick.php'] as $p) {
             $r = req('GET', $p, [], $jar);
             eq(200, $r['status'], "$user $p");
-            hasnt('Fatal error', $r['body'], "$user $p");
-            hasnt('Warning:', $r['body'], "$user $p");
-            hasnt('Notice:', $r['body'], "$user $p");
+            quiet($r['body'], "$user $p");
         }
     }
 });
@@ -2549,8 +2557,7 @@ t('an empty account is a working empty suite, not a crash', function () use ($sc
     foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "empty account $p");
-        hasnt('Fatal error', $r['body'], "empty account $p");
-        hasnt('Warning:', $r['body'], "empty account $p");
+        quiet($r['body'], "empty account $p");
     }
 });
 
@@ -4347,7 +4354,7 @@ t('both instances come up from their own config, with no environment help', func
         $r = hreq($p, 'GET', ($pfx ?: '') . '/calmind/reminders/');
         eq(200, $r['status'], "$what should answer");
         has('Sign in', $r['body'], "$what should show the login form");
-        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$what is quiet"); }
+        quiet($r['body'], "$what is quiet");
     }
 });
 
@@ -4415,7 +4422,7 @@ t('every page under /test/ loads lib-test, not lib', function () {
         $r = hreq($p, 'GET', $path, [], $jar);
         eq(200, $r['status'], "$path renders");
         has('href="/test/calmind/calendar/"', $r['body'], "$path was served by the sandbox instance");
-        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$path is quiet"); }
+        quiet($r['body'], "$path is quiet");
     }
 });
 
@@ -4512,7 +4519,7 @@ t('a brand-new account is an empty working suite, and sees nobody else\'s data',
     foreach (['/calmind/reminders/', '/calmind/notes/', '/calmind/calendar/', '/calmind/habits/', '/calmind/add/'] as $p) {
         $r = req('GET', $p, [], $jar);
         eq(200, $r['status'], "$p renders for a new account");
-        foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body'], "$p is quiet"); }
+        quiet($r['body'], "$p is quiet");
     }
     eq(0, count(rows('fresh')), 'no reminders');
     // A stranger has no partner, so nothing of anyone else's can be reachable.
@@ -4806,7 +4813,7 @@ t('the palette workbench is behind the login and opens with the eight starters',
     // the stylesheet — the JS half (tabindex, readonly) can't be seen from here.
     has('.pal:not(.editing) .role input { pointer-events: none; }', $r['body'],
         'swatches are inert outside their palette\'s edit mode');
-    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    quiet($r['body']);
     // Both of these return bare CSS and must sit INSIDE the style block; emitted after
     // </style> they render as text down the top of the page, which is how this was found.
     $head = substr($r['body'], 0, strpos($r['body'], '</style>'));
@@ -4904,7 +4911,7 @@ t('a signed-in stranger is turned away and sees none of it', function () {
     foreach (['booksgrid', 'bookcard', 'shelf-tile'] as $marker) {
         hasnt($marker, $r['body'], "no bookshelf markup leaks ($marker)");
     }
-    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    quiet($r['body']);
 });
 
 t('aki gets the app itself', function () {
@@ -4916,7 +4923,7 @@ t('aki gets the app itself', function () {
     $r = req('GET', '/akisbookshelf/', [], $jar);
     eq(200, $r['status'], 'it renders');
     hasnt('bookshelf is aki', $r['body'], 'and is not the refusal page');
-    foreach (['Fatal error', 'Warning:', 'Notice:'] as $l) { hasnt($l, $r['body']); }
+    quiet($r['body']);
 });
 
 // The bookshelf has its own themes, which repaint the whole page rather than just the
@@ -5116,9 +5123,8 @@ t('every public page renders for a stranger', function () {
         $r = req('GET', $p);
         eq(200, $r['status'], "$p status");
         hasnt('name="password"', $r['body'], "$p must not ask for a login");
-        foreach (['Fatal error', 'Warning:', 'Notice:', '/home/protected'] as $l) {
-            hasnt($l, $r['body'], "$p leaks \"$l\"");
-        }
+        quiet($r['body'], "$p is quiet");
+        hasnt('/home/protected', $r['body'], "$p leaks the server path");
     }
 });
 

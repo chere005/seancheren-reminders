@@ -115,7 +115,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         // dropdowns and are re-validated the same way a reminder's are.
         $nFolders = folders_load($cfg['data_dir'])['notes'];
         $nFolder  = (string) ($_POST['nfolder'] ?? '');
-        if (!in_array($nFolder, $nFolders, true)) { $nFolder = FOLDER_DEFAULT; }
+        // Notes' "General" is deletable now, so the literal name is no fallback — a stale
+        // posted folder resolves to the real default (validated against the live list).
+        if (!in_array($nFolder, $nFolders, true)) { $nFolder = folder_default_get($cfg['data_dir'], 'notes'); }
         $nSection = (string) ($_POST['nsection'] ?? '');
         $f = user_data_file($cfg['data_dir'], 'notes');
         $l = sections_normalize(store_read($f), $nFolders);
