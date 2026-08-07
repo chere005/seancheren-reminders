@@ -483,7 +483,11 @@ rolls it instead. A POST with no token or a wrong one is a 400 and changes nothi
 Static checks on `deploy.sh`, because a deploy is the one thing here that can destroy data
 and the one thing a test run may never actually perform. It parses; no `rsync` line uses
 `--delete`; every `lib` push excludes `config.php`; nothing names a live data directory; a
-bare deploy is the test instance and production needs saying out loud. Also
+bare deploy is the test instance and production needs saying out loud. **`/test/calmind/`
+belongs to the NEW CalMind monorepo (`~/GIT/CalMind`) as of 2026-08-08**: a suite test
+deploy must exclude the top-level `calmind/`, and `promote` must exclude it from the
+server-side copy — prod's suite is only ever updated by a direct prod deploy, and the
+suite's own pre-promote review now happens on `/dev/`. Also
 `tools/seed-http.php`: the committed copy carries no key, compares in constant time, has
 no default data directory, and is never deployed. The `calmind/` repo split is guarded
 here too: `public/calmind` and the four CalMind-only lib files must be symlinks into the

@@ -5423,6 +5423,17 @@ t('a bare deploy is the test instance, never production', function () use ($root
     ok(strpos($s, 'promote') !== false, 'and promote exists to move test into prod');
 });
 
+t('the test instance and promote both leave /test/calmind/ to the new app', function () use ($root) {
+    // Since 2026-08-08 /test/calmind/ belongs to the NEW CalMind monorepo (~/GIT/CalMind,
+    // its own deploy script). A suite test-deploy must skip it, and promote must never
+    // copy it onto prod — prod's suite is only updated by a direct prod deploy.
+    $s = (string) file_get_contents($root . '/deploy.sh');
+    has("[[ \"\$pub\" == /home/public/test ]] && skip=(--exclude='/calmind')", $s,
+        'the test destination excludes the top-level calmind/');
+    has('--exclude=/calmind /home/public/test/ /home/public/', $s,
+        'promote excludes it from the server-side copy');
+});
+
 t('deploy-dev.sh parses and keeps the same safety rules', function () use ($root) {
     exec('bash -n ' . escapeshellarg($root . '/deploy-dev.sh') . ' 2>&1', $o, $rc);
     eq(0, $rc, 'bash -n: ' . implode("\n", $o));

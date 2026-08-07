@@ -85,9 +85,14 @@ echo "    all PHP OK."
 # layout is unchanged by the repo split.
 push_instance() {   # $1 = public dest   $2 = lib dest   $3 = human label
   local pub="$1" lib="$2" label="$3"
+  # /test/calmind/ belongs to the NEW CalMind app (the ~/GIT/CalMind monorepo, its own
+  # deploy script) as of 2026-08-07 — a test deploy of this suite must not clobber it.
+  # Anchored so only the top-level calmind/ is skipped. Prod still gets the suite.
+  local skip=()
+  [[ "$pub" == /home/public/test ]] && skip=(--exclude='/calmind')
   echo "==> [$label] public/ -> $pub/"
   rsync -rLptzv $DRY -e "$SSH" \
-    --exclude='.DS_Store' --exclude='*.swp' \
+    --exclude='.DS_Store' --exclude='*.swp' "${skip[@]}" \
     public/ "$HOST:$pub/"
   echo "==> [$label] lib/    -> $lib/   (config.php protected)"
   rsync -rLptzv $DRY -e "$SSH" \
@@ -155,9 +160,11 @@ case "$MODE" in
       echo "    Data dirs and both config.php files untouched; no --delete."
     else
       echo "==> [promote] /home/public/test/ -> /home/public/  and  lib-test -> lib (server-side)…"
+      # /test/calmind/ is the NEW CalMind app, never promoted — prod's suite is only
+      # ever updated by a direct prod deploy from the Mac.
       $SSH "$HOST" '
         set -e
-        rsync -rlpt --exclude=.DS_Store /home/public/test/ /home/public/
+        rsync -rlpt --exclude=.DS_Store --exclude=/calmind /home/public/test/ /home/public/
         rsync -rlpt --exclude=config.php --exclude=.DS_Store /home/protected/lib-test/ /home/protected/lib/
         chmod -R a+rX /home/public
         find /home/protected/lib -type d -exec chmod a+rx {} +
