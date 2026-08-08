@@ -34,3 +34,4 @@ ios/.build/
 
 # The in-app browser preview's local launch config — machine-specific paths, never shared
 .claude/launch.json
+.claude/ralph-loop.local.md
